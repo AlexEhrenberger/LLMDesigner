@@ -1,0 +1,154 @@
+import Foundation
+
+/// A document written in Writer Studio. It lives in the sidebar next to the chats and is stored as Markdown.
+struct WriterDocument: Identifiable, Hashable, Sendable {
+    var id = UUID()
+    var title = ""
+    /// Set once the user renames the document; otherwise the title follows the first line of the text.
+    var hasCustomTitle = false
+    var createdAt = Date()
+    var updatedAt = Date()
+    var folderID: Folder.ID?
+    var font: WriterFont = .serif
+    var markdown = ""
+
+    var displayTitle: String {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "Unbenanntes Dokument" : trimmed
+    }
+
+    var isEmpty: Bool { markdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+    func matches(_ query: String) -> Bool {
+        query.isEmpty || displayTitle.localizedStandardContains(query) || markdown.localizedStandardContains(query)
+    }
+
+    /// The first line of the text without Markdown marks, as the automatic title.
+    static func makeTitle(from markdown: String) -> String {
+        let line = markdown.split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .first { !$0.isEmpty && !$0.hasPrefix("```") && !$0.allSatisfy { "-*_ ".contains($0) } } ?? ""
+        var text = line.drop { "#>-*+ ".contains($0) }
+        if let digits = text.firstIndex(where: { !$0.isNumber }), digits != text.startIndex,
+           text[digits] == ".", text[text.index(after: digits)...].first == " " {
+            text = text[text.index(digits, offsetBy: 2)...]
+        }
+        let plain = String(text)
+            .replacingOccurrences(of: "**", with: "")
+            .replacingOccurrences(of: "~~", with: "")
+            .replacingOccurrences(of: "<u>", with: "")
+            .replacingOccurrences(of: "</u>", with: "")
+            .replacingOccurrences(of: "`", with: "")
+            .replacingOccurrences(of: "\\", with: "")
+            .split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        guard plain.count > 60 else { return plain }
+        return String(plain.prefix(60)).trimmingCharacters(in: .whitespaces) + "…"
+    }
+}
+
+/// The typeface of a whole document. Markdown has no fonts per passage, so the choice belongs to the document.
+enum WriterFont: String, CaseIterable, Identifiable, Sendable {
+    case serif, sans, rounded, mono
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .serif: "New York (Serifen)"
+        case .sans: "SF Pro"
+        case .rounded: "SF Pro Rounded"
+        case .mono: "SF Mono"
+        }
+    }
+}
+
+/// Every document is a Markdown file with a short header (front matter) under Application Support.
+struct WriterDocumentStore {
+    let directory: URL
+
+    init() {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        directory = base.appendingPathComponent("LLMDesigner/Documents", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    }
+
+    func loadAll() -> [WriterDocument] {
+        let files = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
+        return files
+            .filter { $0.pathExtension == "md" }
+            .compactMap { url -> WriterDocument? in
+                guard let text = try? String(contentsOf: url, encoding: .utf8) else {
+                    print("LLMDesigner: Dokument \(url.lastPathComponent) konnte nicht gelesen werden")
+                    return nil
+                }
+                return Self.decode(text, fallbackID: UUID(uuidString: url.deletingPathExtension().lastPathComponent))
+            }
+            .sorted { $0.updatedAt > $1.updatedAt }
+    }
+
+    func save(_ document: WriterDocument) {
+        do {
+            try Self.encode(document).write(to: url(for: document.id), atomically: true, encoding: .utf8)
+        } catch {
+            print("LLMDesigner: Dokument \(document.id) konnte nicht gespeichert werden: \(error)")
+        }
+    }
+
+    func delete(_ id: UUID) {
+        try? FileManager.default.removeItem(at: url(for: id))
+    }
+
+    private func url(for id: UUID) -> URL {
+        directory.appendingPathComponent("\(id.uuidString).md")
+    }
+
+    // MARK: Front matter
+
+    private static let dateFormat = Date.ISO8601FormatStyle()
+
+    static func encode(_ document: WriterDocument) -> String {
+        var header = [
+            "id: \(document.id.uuidString)",
+            "title: \(document.title.replacingOccurrences(of: "\n", with: " "))",
+            "customTitle: \(document.hasCustomTitle)",
+            "created: \(document.createdAt.formatted(dateFormat))",
+            "updated: \(document.updatedAt.formatted(dateFormat))",
+            "font: \(document.font.rawValue)",
+        ]
+        if let folderID = document.folderID { header.append("folder: \(folderID.uuidString)") }
+        return "---\n" + header.joined(separator: "\n") + "\n---\n\n" + document.markdown
+    }
+
+    static func decode(_ text: String, fallbackID: UUID?) -> WriterDocument? {
+        var document = WriterDocument()
+        var body = Substring(text)
+        if text.hasPrefix("---\n"), let end = text.range(of: "\n---\n", range: text.index(text.startIndex, offsetBy: 4)..<text.endIndex) {
+            let header = text[text.index(text.startIndex, offsetBy: 4)..<end.lowerBound]
+            for line in header.split(separator: "\n") {
+                guard let colon = line.firstIndex(of: ":") else { continue }
+                let key = line[..<colon].trimmingCharacters(in: .whitespaces)
+                let value = line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
+                switch key {
+                case "id": document.id = UUID(uuidString: value) ?? document.id
+                case "title": document.title = value
+                case "customTitle": document.hasCustomTitle = value == "true"
+                case "created": document.createdAt = (try? dateFormat.parse(value)) ?? document.createdAt
+                case "updated": document.updatedAt = (try? dateFormat.parse(value)) ?? document.updatedAt
+                case "font": document.font = WriterFont(rawValue: value) ?? .serif
+                case "folder": document.folderID = UUID(uuidString: value)
+                default: break
+                }
+            }
+            body = text[end.upperBound...]
+            if body.hasPrefix("\n") { body = body.dropFirst() }
+        } else if let fallbackID {
+            // A plain Markdown file someone put into the folder.
+            document.id = fallbackID
+        } else {
+            return nil
+        }
+        document.markdown = String(body)
+        if document.title.isEmpty { document.title = WriterDocument.makeTitle(from: document.markdown) }
+        return document
+    }
+}

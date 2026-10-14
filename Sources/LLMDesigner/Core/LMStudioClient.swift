@@ -1,0 +1,438 @@
+import Foundation
+
+struct LMModel: Identifiable, Hashable, Decodable, Sendable {
+    let id: String
+    var type: String?
+    var publisher: String?
+    var arch: String?
+    var compatibilityType: String?
+    var quantization: String?
+    var state: String?
+    var maxContextLength: Int?
+    var loadedContextLength: Int?
+    var capabilities: [String]?
+
+    /// Servers without LM Studio's REST API don't report a state; treat their models as ready.
+    var isLoaded: Bool { state == nil || state == "loaded" }
+    var isChatCapable: Bool { type != "embeddings" }
+    var isVision: Bool { type == "vlm" }
+    var supportsTools: Bool { capabilities?.contains("tool_use") ?? false }
+    /// Whether to offer tools such as the web search: LM Studio reports support per model,
+    /// other servers don't say, so the app tries.
+    var acceptsTools: Bool { supportsTools || state == nil }
+    /// Gemma 4 only thinks when the system prompt starts with its `<|think|>` token. LM Studio doesn't pass
+    /// `enable_thinking` through to the chat template, so the app sets the token itself.
+    var thinksOnThinkToken: Bool {
+        arch == "gemma4" || id.lowercased().contains("gemma-4") || id.lowercased().contains("gemma4")
+    }
+    var displayName: String { id.split(separator: "/").last.map(String.init) ?? id }
+
+    static func formatTokens(_ count: Int) -> String {
+        count >= 1024 ? "\(count / 1024)K" : "\(count)"
+    }
+}
+
+struct ChatPayloadMessage: Encodable, Sendable {
+    let role: String
+    let content: String
+    /// Pictures as `data:` URLs (role "user"). With pictures, `content` is sent as a list of parts.
+    var images: [String]? = nil
+    /// Functions the assistant called in this turn (role "assistant").
+    var toolCalls: [ToolCall]? = nil
+    /// The call this message answers (role "tool").
+    var toolCallID: String? = nil
+
+    private enum CodingKeys: String, CodingKey {
+        case role, content
+        case toolCalls = "tool_calls"
+        case toolCallID = "tool_call_id"
+    }
+
+    /// One entry of a multi-part `content`, in the OpenAI format.
+    private struct Part: Encodable {
+        struct ImageURL: Encodable { let url: String }
+        let type: String
+        var text: String? = nil
+        var image_url: ImageURL? = nil
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(role, forKey: .role)
+        if let images, !images.isEmpty {
+            var parts = images.map { Part(type: "image_url", image_url: .init(url: $0)) }
+            if !content.isEmpty { parts.append(Part(type: "text", text: content)) }
+            try container.encode(parts, forKey: .content)
+        } else {
+            try container.encode(content, forKey: .content)
+        }
+        try container.encodeIfPresent(toolCalls, forKey: .toolCalls)
+        try container.encodeIfPresent(toolCallID, forKey: .toolCallID)
+    }
+}
+
+/// A function call the model asked for, in the OpenAI format. `arguments` is a JSON string.
+struct ToolCall: Codable, Hashable, Sendable {
+    struct Function: Codable, Hashable, Sendable {
+        var name: String
+        var arguments: String
+    }
+    var id: String
+    var type = "function"
+    var function: Function
+}
+
+/// A function the model may call, described in the OpenAI `tools` format.
+struct ToolDefinition: Encodable, Sendable {
+    struct Parameter: Encodable, Sendable {
+        let type: String
+        let description: String
+    }
+    struct Parameters: Encodable, Sendable {
+        let type = "object"
+        let properties: [String: Parameter]
+        let required: [String]
+    }
+    struct Function: Encodable, Sendable {
+        let name: String
+        let description: String
+        let parameters: Parameters
+    }
+    let type = "function"
+    let function: Function
+
+    /// Without `required`, every parameter is required.
+    init(name: String, description: String, parameters: [String: Parameter], required: [String]? = nil) {
+        function = Function(
+            name: name,
+            description: description,
+            parameters: Parameters(properties: parameters, required: required ?? parameters.keys.sorted())
+        )
+    }
+}
+
+enum StreamEvent: Sendable {
+    case content(String)
+    case reasoning(String)
+    case usage(prompt: Int?, completion: Int?)
+    /// The model that actually answered; LM Studio may silently fall back to a loaded one.
+    case model(String)
+    /// Functions the model wants to call; sent once, after the last chunk.
+    case toolCalls([ToolCall])
+}
+
+enum LMStudioError: LocalizedError {
+    case invalidEndpoint(String)
+    case http(Int, String?)
+    case server(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidEndpoint(let value):
+            return "Ungültiger Endpoint: \(value)"
+        case .http(let status, let message):
+            return message.map { "LM Studio (\(status)): \($0)" } ?? "LM Studio antwortet mit Status \(status)."
+        case .server(let message):
+            return message
+        }
+    }
+}
+
+/// Talks to LM Studio's local server: the REST API for model state and the
+/// OpenAI-compatible endpoint for streaming chat completions.
+struct LMStudioClient: Sendable {
+    let baseURL: URL
+    let apiKey: String?
+
+    init(endpoint: String, apiKey: String?) throws {
+        var value = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !value.contains("://") { value = "http://" + value }
+        while value.hasSuffix("/") { value.removeLast() }
+        if value.hasSuffix("/v1") { value.removeLast(3) }
+        guard let url = URL(string: value), url.host != nil else {
+            throw LMStudioError.invalidEndpoint(endpoint)
+        }
+        baseURL = url
+        self.apiKey = (apiKey?.isEmpty ?? true) ? nil : apiKey
+    }
+
+    var hostDescription: String {
+        guard let host = baseURL.host else { return baseURL.absoluteString }
+        return baseURL.port.map { "\(host):\($0)" } ?? host
+    }
+
+    func fetchModels() async throws -> [LMModel] {
+        do {
+            return try await fetchModelList(path: "api/v0/models")
+        } catch LMStudioError.http(let status, _) where status == 404 {
+            // Plain OpenAI-compatible servers only offer /v1/models.
+            return try await fetchModelList(path: "v1/models")
+        }
+    }
+
+    func streamChat(
+        model: String,
+        messages: [ChatPayloadMessage],
+        temperature: Double?,
+        tools: [ToolDefinition]? = nil
+    ) -> AsyncThrowingStream<StreamEvent, Error> {
+        struct StreamOptions: Encodable { let include_usage = true }
+        struct Body: Encodable {
+            let model: String
+            let messages: [ChatPayloadMessage]
+            let temperature: Double?
+            let tools: [ToolDefinition]?
+            let stream = true
+            let stream_options = StreamOptions()
+        }
+
+        return AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    let body = try JSONEncoder().encode(Body(model: model, messages: messages, temperature: temperature, tools: tools))
+                    // Long idle timeout: LM Studio may load the model just-in-time before the first token.
+                    let request = makeRequest("v1/chat/completions", method: "POST", body: body, timeout: 600)
+                    let (bytes, response) = try await URLSession.shared.bytes(for: request)
+
+                    if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+                        var data = Data()
+                        for try await byte in bytes {
+                            data.append(byte)
+                            if data.count > 64_000 { break }
+                        }
+                        throw LMStudioError.http(http.statusCode, Self.errorMessage(from: data))
+                    }
+
+                    let decoder = JSONDecoder()
+                    decoder.keyDecodingStrategy = .convertFromSnakeCase
+                    var reportedModel = false
+                    // Tool calls arrive in pieces: the name first, then the arguments in fragments.
+                    var pendingCalls: [Int: (id: String?, name: String, arguments: String)] = [:]
+                    for try await line in bytes.lines {
+                        guard line.hasPrefix("data:") else { continue }
+                        let payload = line.dropFirst(5).trimmingCharacters(in: .whitespaces)
+                        if payload == "[DONE]" { break }
+                        guard let data = payload.data(using: .utf8),
+                              let chunk = try? decoder.decode(StreamChunk.self, from: data) else { continue }
+
+                        if let error = chunk.error { throw LMStudioError.server(error.message) }
+                        if !reportedModel, let answering = chunk.model {
+                            reportedModel = true
+                            continuation.yield(.model(answering))
+                        }
+                        for choice in chunk.choices ?? [] {
+                            if let reasoning = choice.delta?.reasoningContent ?? choice.delta?.reasoning, !reasoning.isEmpty {
+                                continuation.yield(.reasoning(reasoning))
+                            }
+                            if let content = choice.delta?.content, !content.isEmpty {
+                                continuation.yield(.content(content))
+                            }
+                            for call in choice.delta?.toolCalls ?? [] {
+                                let index = call.index ?? 0
+                                var pending = pendingCalls[index] ?? (nil, "", "")
+                                if let id = call.id, !id.isEmpty { pending.id = id }
+                                if pending.name.isEmpty { pending.name = call.function?.name ?? "" }
+                                pending.arguments += call.function?.arguments ?? ""
+                                pendingCalls[index] = pending
+                            }
+                        }
+                        if let usage = chunk.usage {
+                            continuation.yield(.usage(prompt: usage.promptTokens, completion: usage.completionTokens))
+                        }
+                    }
+                    if !pendingCalls.isEmpty {
+                        let calls = pendingCalls.sorted { $0.key < $1.key }.map { index, call in
+                            ToolCall(id: call.id ?? "call_\(index)", function: .init(name: call.name, arguments: call.arguments))
+                        }
+                        continuation.yield(.toolCalls(calls))
+                    }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    /// Single, non-streamed completion. With `jsonSchema`, LM Studio constrains the answer to that schema.
+    func complete(
+        model: String,
+        messages: [ChatPayloadMessage],
+        temperature: Double,
+        maxTokens: Int,
+        jsonSchema: (name: String, schema: [String: Any])? = nil
+    ) async throws -> String {
+        var body: [String: Any] = [
+            "model": model,
+            "messages": messages.map { ["role": $0.role, "content": $0.content] },
+            "temperature": temperature,
+            "max_tokens": maxTokens,
+            "stream": false,
+        ]
+        if let jsonSchema {
+            body["response_format"] = [
+                "type": "json_schema",
+                "json_schema": ["name": jsonSchema.name, "strict": true, "schema": jsonSchema.schema],
+            ]
+        }
+        let request = makeRequest(
+            "v1/chat/completions", method: "POST",
+            body: try JSONSerialization.data(withJSONObject: body), timeout: 300
+        )
+        let (data, response) = try await URLSession.shared.data(for: request)
+        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            throw LMStudioError.http(http.statusCode, Self.errorMessage(from: data))
+        }
+
+        struct Completion: Decodable {
+            struct Choice: Decodable {
+                struct Message: Decodable { let content: String? }
+                let message: Message
+            }
+            let choices: [Choice]
+        }
+        guard let content = try JSONDecoder().decode(Completion.self, from: data).choices.first?.message.content,
+              !content.isEmpty else {
+            throw LMStudioError.server("LM Studio hat eine leere Antwort geliefert.")
+        }
+        return content
+    }
+
+    // MARK: - Loading with a context length
+
+    /// A loaded copy of a model, as LM Studio's REST API reports it.
+    struct LoadedInstance: Sendable {
+        let id: String
+        let contextLength: Int?
+        let flashAttention: Bool?
+    }
+
+    /// The loaded instances of a model (usually one).
+    func loadedInstances(of model: String) async throws -> [LoadedInstance] {
+        struct Reply: Decodable {
+            struct Model: Decodable {
+                struct Instance: Decodable {
+                    struct Config: Decodable {
+                        let contextLength: Int?
+                        let flashAttention: Bool?
+                    }
+                    let id: String
+                    let config: Config?
+                }
+                let key: String
+                let loadedInstances: [Instance]?
+            }
+            let models: [Model]
+        }
+        let (data, response) = try await URLSession.shared.data(for: makeRequest("api/v1/models", timeout: 5))
+        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            throw LMStudioError.http(http.statusCode, Self.errorMessage(from: data))
+        }
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        let instances = try decoder.decode(Reply.self, from: data).models.first { $0.key == model }?.loadedInstances ?? []
+        return instances.map { LoadedInstance(id: $0.id, contextLength: $0.config?.contextLength, flashAttention: $0.config?.flashAttention) }
+    }
+
+    func unload(instanceID: String) async throws {
+        try await post("api/v1/models/unload", ["instance_id": instanceID], timeout: 30)
+    }
+
+    /// Loads a model with this context length; LM Studio's other settings for the model stay as they are.
+    func load(model: String, contextLength: Int, flashAttention: Bool?) async throws {
+        var body: [String: Any] = ["model": model, "context_length": contextLength]
+        if let flashAttention { body["flash_attention"] = flashAttention }
+        try await post("api/v1/models/load", body, timeout: 300)
+    }
+
+    private func post(_ path: String, _ body: [String: Any], timeout: TimeInterval) async throws {
+        let request = makeRequest(path, method: "POST", body: try JSONSerialization.data(withJSONObject: body), timeout: timeout)
+        let (data, response) = try await URLSession.shared.data(for: request)
+        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            throw LMStudioError.http(http.statusCode, Self.errorMessage(from: data))
+        }
+    }
+
+    // MARK: - Private
+
+    private func fetchModelList(path: String) async throws -> [LMModel] {
+        struct ListResponse: Decodable { let data: [LMModel] }
+        let (data, response) = try await URLSession.shared.data(for: makeRequest(path, timeout: 5))
+        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            throw LMStudioError.http(http.statusCode, Self.errorMessage(from: data))
+        }
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        return try decoder.decode(ListResponse.self, from: data).data
+    }
+
+    private func makeRequest(_ path: String, method: String = "GET", body: Data? = nil, timeout: TimeInterval) -> URLRequest {
+        var request = URLRequest(url: baseURL.appendingPathComponent(path))
+        request.httpMethod = method
+        request.timeoutInterval = timeout
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let body {
+            request.httpBody = body
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
+        if let apiKey {
+            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        }
+        return request
+    }
+
+    private static func errorMessage(from data: Data) -> String? {
+        struct Envelope: Decodable { let error: FlexibleError }
+        if let envelope = try? JSONDecoder().decode(Envelope.self, from: data) {
+            return envelope.error.message
+        }
+        let text = String(decoding: data.prefix(400), as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty ? nil : text
+    }
+}
+
+private struct StreamChunk: Decodable {
+    struct Choice: Decodable {
+        struct Delta: Decodable {
+            let content: String?
+            let reasoningContent: String?
+            let reasoning: String?
+            let toolCalls: [ToolCallDelta]?
+        }
+        struct ToolCallDelta: Decodable {
+            struct Function: Decodable {
+                let name: String?
+                let arguments: String?
+            }
+            let index: Int?
+            let id: String?
+            let function: Function?
+        }
+        let delta: Delta?
+    }
+    struct Usage: Decodable {
+        let promptTokens: Int?
+        let completionTokens: Int?
+    }
+    let model: String?
+    let choices: [Choice]?
+    let usage: Usage?
+    let error: FlexibleError?
+}
+
+/// LM Studio reports errors either as a plain string or as `{ "message": … }`.
+private struct FlexibleError: Decodable {
+    let message: String
+
+    private enum CodingKeys: String, CodingKey { case message }
+
+    init(from decoder: Decoder) throws {
+        if let text = try? decoder.singleValueContainer().decode(String.self) {
+            message = text
+        } else {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            message = (try? container.decode(String.self, forKey: .message)) ?? "Unbekannter Fehler"
+        }
+    }
+}
