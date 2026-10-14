@@ -287,7 +287,7 @@ final class AppModel {
     @ObservationIgnored private var messageViewport: CGRect = .zero
 
     /// Message or chat IDs whose PDF is currently being typeset.
-    private(set) var exportingIDs: Set<UUID> = []
+    var exportingIDs: Set<UUID> = []
     var exportError: String?
 
     // MARK: Models
@@ -1294,7 +1294,7 @@ final class AppModel {
             do {
                 let pdf = try await engine.makePDF(parts: parts, outline: outline, paper: paper)
                 exportingIDs.remove(id)
-                guard let url = await askForPDFDestination(fileName: fileName) else { return }
+                guard let url = await askForDestination(fileName: fileName, type: .pdf) else { return }
                 try pdf.write(to: url, options: .atomic)
                 if pdfOpenAfterExport { NSWorkspace.shared.open(url) }
             } catch {
@@ -1304,16 +1304,17 @@ final class AppModel {
         }
     }
 
-    private func askForPDFDestination(fileName: String) async -> URL? {
+    /// Asks where to save an export; the name is cleaned of characters a file name can't have.
+    func askForDestination(fileName: String, type: UTType) async -> URL? {
         let panel = NSSavePanel()
-        panel.allowedContentTypes = [.pdf]
+        panel.allowedContentTypes = [type]
         panel.canCreateDirectories = true
         panel.isExtensionHidden = false
         let cleaned = fileName
             .components(separatedBy: CharacterSet(charactersIn: "/:\\?%*|\"<>"))
             .joined(separator: "-")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        panel.nameFieldStringValue = String((cleaned.isEmpty ? "Export" : cleaned).prefix(80)) + ".pdf"
+        panel.nameFieldStringValue = String((cleaned.isEmpty ? "Export" : cleaned).prefix(80)) + "." + (type.preferredFilenameExtension ?? "pdf")
 
         if let window = NSApp.keyWindow ?? NSApp.mainWindow {
             return await panel.beginSheetModal(for: window) == .OK ? panel.url : nil

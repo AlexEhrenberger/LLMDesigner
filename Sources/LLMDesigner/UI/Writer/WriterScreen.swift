@@ -254,6 +254,7 @@ private struct WriterTopBar: View {
             Spacer(minLength: 12)
             // The assistant writes with this model.
             ModelPickerButton()
+            ExportMenu(document: document)
             Text(wordCount)
                 .font(.system(size: 11.5).monospacedDigit())
                 .foregroundStyle(Theme.textTertiary)
@@ -273,6 +274,47 @@ private struct WriterTopBar: View {
         let words = document.markdown.split { $0.isWhitespace || $0.isNewline }
             .filter { $0.contains { $0.isLetter || $0.isNumber } }.count
         return words == 1 ? "1 Wort" : "\(words) Wörter"
+    }
+}
+
+/// PDF, LaTeX source or Markdown.
+private struct ExportMenu: View {
+    @Environment(AppModel.self) private var app
+    let document: WriterDocument
+    @State private var hovering = false
+
+    var body: some View {
+        let isExporting = app.exportingIDs.contains(document.id)
+        Menu {
+            Section("Dokument exportieren") {
+                ForEach(WriterExportFormat.allCases) { format in
+                    Button(format.title, systemImage: format.symbol) { app.exportDocument(as: format) }
+                }
+            }
+        } label: {
+            HStack(spacing: 5) {
+                if isExporting {
+                    ProgressView().controlSize(.mini)
+                    Text("Erstelle PDF …")
+                        .font(.system(size: 12, weight: .medium))
+                } else {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.system(size: 12.5, weight: .medium))
+                }
+            }
+            .foregroundStyle(hovering ? Theme.textPrimary : Theme.textSecondary)
+            .padding(.horizontal, 7)
+            .frame(height: Theme.titleBarControlSize)
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(hovering ? Theme.hover : .clear))
+            .contentShape(Rectangle())
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .onHover { hovering = $0 }
+        .disabled(isExporting || document.isEmpty)
+        .help("Exportieren als PDF, LaTeX oder Markdown")
     }
 }
 

@@ -320,6 +320,9 @@ enum LaTeXWriter {
     private static func inline(_ source: String, math: MathMode) -> String {
         var markdown = ""
         var formulas: [String] = []
+        // Writer Studio stores underline as <u>…</u>. Placeholders made of letters carry it through the Markdown
+        // parser and the escaping (it drops private-use characters).
+        let source = source.replacingOccurrences(of: "<u>", with: Self.underlineOpen).replacingOccurrences(of: "</u>", with: Self.underlineClose)
         for segment in MathTokenizer.segments(source.trimmingCharacters(in: .whitespacesAndNewlines)) {
             switch segment {
             case .text(let text): markdown += text
@@ -353,6 +356,7 @@ enum LaTeXWriter {
                     formulaIndex += 1
                 }
                 piece += escape(fragment).replacingOccurrences(of: "\n", with: "\\newline\n")
+                    .replacingOccurrences(of: Self.underlineOpen, with: "\\uline{").replacingOccurrences(of: Self.underlineClose, with: "}")
             }
             if intent.contains(.stronglyEmphasized) { piece = "\\textbf{\(piece)}" }
             if intent.contains(.emphasized) { piece = "\\emph{\(piece)}" }
@@ -362,6 +366,9 @@ enum LaTeXWriter {
         }
         return output
     }
+
+    private static let underlineOpen = "LLMDULINEOPENX"
+    private static let underlineClose = "LLMDULINECLOSEX"
 
     /// Characters the Latin Modern text font lacks, mapped to their math equivalents.
     private static let symbolReplacements: [Character: String] = [

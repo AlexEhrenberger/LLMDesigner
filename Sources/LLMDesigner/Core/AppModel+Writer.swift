@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// What the dictation hands the open document.
 enum WriterDictationEvent {
@@ -152,7 +153,80 @@ extension AppModel {
     }
 }
 
+/// The formats a Writer Studio document can be saved as.
+enum WriterExportFormat: CaseIterable, Identifiable {
+    case pdf, latex, markdown
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .pdf: "Als PDF …"
+        case .latex: "Als LaTeX (.tex) …"
+        case .markdown: "Als Markdown (.md) …"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .pdf: "doc.richtext"
+        case .latex: "function"
+        case .markdown: "number"
+        }
+    }
+
+    var type: UTType {
+        switch self {
+        case .pdf: .pdf
+        case .latex: UTType(filenameExtension: "tex") ?? .plainText
+        case .markdown: UTType(filenameExtension: "md") ?? .plainText
+        }
+    }
+}
+
 extension AppModel {
+    /// Saves the open document as PDF (typeset with LaTeX), as LaTeX source or as Markdown.
+    func exportDocument(as format: WriterExportFormat) {
+        writerFlush?()
+        guard let document = selectedDocument, !exportingIDs.contains(document.id) else { return }
+        let markdown = document.markdown.trimmingCharacters(in: .whitespacesAndNewlines) + "\n"
+        let part = LaTeXWriter.Part(text: markdown)
+        let paper = pdfPaperSize
+
+        switch format {
+        case .markdown, .latex:
+            Task {
+                guard let url = await askForDestination(fileName: document.displayTitle, type: format.type) else { return }
+                let text = format == .markdown
+                    ? markdown
+                    : LaTeXWriter.document(parts: [part], paper: paper, math: .native)
+                do {
+                    try text.write(to: url, atomically: true, encoding: .utf8)
+                } catch {
+                    exportError = error.localizedDescription
+                }
+            }
+        case .pdf:
+            guard let engine = LaTeXEngine.locate() else {
+                exportError = PDFExportError.noEngine.localizedDescription
+                return
+            }
+            exportingIDs.insert(document.id)
+            Task {
+                do {
+                    let pdf = try await engine.makePDF(parts: [part], paper: paper)
+                    exportingIDs.remove(document.id)
+                    guard let url = await askForDestination(fileName: document.displayTitle, type: .pdf) else { return }
+                    try pdf.write(to: url, options: .atomic)
+                    if pdfOpenAfterExport { NSWorkspace.shared.open(url) }
+                } catch {
+                    exportingIDs.remove(document.id)
+                    exportError = error.localizedDescription
+                }
+            }
+        }
+    }
+
     /// A chat or document dragged onto a folder (nil: out of its folder).
     func moveSidebarItem(_ id: UUID, to folderID: Folder.ID?) {
         if document(id) != nil {

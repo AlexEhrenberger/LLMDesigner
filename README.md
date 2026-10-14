@@ -211,7 +211,8 @@ Die erste der Applikationen (Menü „Applikationen“ rechts unter dem Eingabef
   - Das Mikrofon an der Leiste (oder ⌘D, wenn die Leiste den Fokus hat) diktiert die Anweisung; Senden während des Diktats wartet auf die letzten Worte.
 - **Schnellaktionen** (über der Leiste und per Rechtsklick): Mit Markierung Umformulieren (neu, kürzer, länger, lockerer, formeller, einfacher), Ausformulieren (Stichpunkte → Fließtext), Prüfen und „Frage zur Markierung“. Ohne Markierung Weiterschreiben am KI-Cursor und das ganze Dokument prüfen.
 - **Prüfen**: „Rechtschreibung & Grammatik“ oder „Plausibilität“ (falsche Fakten, Widersprüche, unlogische Schlüsse) für die Markierung oder das ganze Dokument. Das Modell bekommt den Text in Abschnitten (für Rechtschreibung kürzer, weil kleine Modelle in langen Stücken mehr übersehen) und antwortet per JSON-Schema. Die Fundstellen erscheinen in einem Panel rechts: Art, Original durchgestrichen, Korrektur, Erklärung, „Übernehmen“ oder „Ignorieren“, oben „Alle übernehmen“. Darüberfahren markiert die Stelle im Text. Fundstellen, die so nicht im Text stehen, verwirft die App.
-- **Geplant**: Bilder, Tabellen, Export als Markdown, LaTeX und PDF.
+- **Exportieren** (Teilen-Symbol oben rechts): als PDF (mit LaTeX gesetzt, wie der Chat-Export, Papierformat aus den Einstellungen), als LaTeX-Quelltext (.tex) oder als Markdown (.md, ohne den Kopf mit Titel und Schrift). Unterstrichen wird in LaTeX zu `\uline{…}`.
+- **Geplant**: Bilder und Tabellen im Editor, danach Citations Studio, Inhaltsverzeichnis, visueller Formeleditor mit Plots.
 
 ## Aufbau
 
