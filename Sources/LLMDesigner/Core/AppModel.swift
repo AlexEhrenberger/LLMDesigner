@@ -356,6 +356,8 @@ final class AppModel {
     @ObservationIgnored let analysisStore = ContentAnalysisStore()
     /// Pictures made with Draw Things, one after the other in the background.
     @ObservationIgnored let imageGeneration = ImageGenerationCenter(settings: AppLibrary.current.settings)
+    /// Citation Studio: sources and quotes of the library (read when first needed).
+    @ObservationIgnored let citations = CitationLibrary(store: .library())
     /// The instruction being written in Writer Studio's assistant bar.
     var writerInstruction = ""
     /// The assistant bar has the keyboard focus (⌘D then dictates into it).
@@ -425,6 +427,7 @@ final class AppModel {
         stopReadingDocument()
         speechReader.stop()
         imageGeneration.cancelAll()
+        citations.saveAll()
         writerFlush?()
         if skillSaveTask != nil { saveSkillLibrary() }
         savePendingPersonas()
