@@ -276,6 +276,9 @@ extension WriterTextView {
             formula.image = NSImage(systemSymbolName: "x.squareroot", accessibilityDescription: nil)
             items.append(formula)
         }
+        let picture = ClosureMenuItem(title: "Bild hier generieren …") { [weak self] in self?.generateImageAtCaret() }
+        picture.image = NSImage(systemSymbolName: "wand.and.stars", accessibilityDescription: nil)
+        items.append(picture)
         items.append(.separator())
         return items
     }

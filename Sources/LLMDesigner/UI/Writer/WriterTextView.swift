@@ -55,6 +55,13 @@ final class WriterTextView: NSTextView {
     var onBookmarkAdded: ((String) -> Void)?
     /// Opens the formula editor (see WriterTextView+Math.swift).
     var onFormula: ((WriterFormulaRequest) -> Void)?
+    /// Pictures made with Draw Things (see WriterTextView+Generation.swift): opens the sheet, starts and cancels
+    /// a picture, and gives the choices of the last picture and the document's title.
+    var onImageGeneration: ((WriterImageGenerationRequest) -> Void)?
+    var onGenerateImage: ((String, GeneratedImageInfo) -> Void)?
+    var onCancelImageGeneration: ((String) -> Void)?
+    var onImageDefaults: (() -> GeneratedImageInfo)?
+    var onDocumentTitle: (() -> String)?
     /// The model's table of contents of the document; a dynamic table of contents block shows it.
     var dynamicOutline: DocumentOutline? {
         didSet { if oldValue != dynamicOutline { relayoutTablesOfContents() } }
@@ -620,6 +627,9 @@ final class WriterTextView: NSTextView {
             return true
         case [.command, .option] where event.keyCode == 14:   // E
             editFormulaAtCaret()
+            return true
+        case [.command, .option] where event.keyCode == 5:    // G
+            generateImageAtCaret()
             return true
         case [.command, .option] where event.keyCode == 11:   // B
             if let bookmark = bookmarkAtCaret, selectedRange().length == 0 { removeBookmark(bookmark.id) } else { addBookmark() }

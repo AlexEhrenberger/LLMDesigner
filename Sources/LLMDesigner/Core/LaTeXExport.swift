@@ -312,6 +312,12 @@ enum LaTeXWriter {
     private static func figure(_ image: WriterImageReference, file: URL?, folder: String?, math: MathMode) -> String {
         let caption = image.caption.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let file else {
+            if image.generated {
+                // A placeholder for a picture still to be made: a framed note with what it will show.
+                let info = WriterImageStore.generationInfo(for: image.source)
+                let what = (info?.description.isEmpty == false ? info?.description : caption.isEmpty ? nil : caption) ?? ""
+                return "\\begin{center}\\fbox{\\parbox{0.8\\linewidth}{\\centering\\emph{Bild folgt\(what.isEmpty ? "" : ": " + escape(what))}}}\\end{center}"
+            }
             return "\\begin{center}\\emph{[Bild fehlt\(caption.isEmpty ? "" : ": " + escape(caption))]}\\end{center}"
         }
         let width = image.width.map { CGFloat($0) / 100 } ?? WriterImageStore.naturalWidthFraction(of: file)

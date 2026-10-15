@@ -12,13 +12,20 @@ struct WriterImageReference: Equatable, Sendable {
     var width: Int?
     /// Set for a plot of the formula above it (`.plot` and its settings in the attributes).
     var plot: PlotSpec?
+    /// Made with Draw Things (`.generated`); its recipe is in a JSON file next to it. Until the file exists, the
+    /// picture is a placeholder that says what will be there.
+    var generated = false
 
-    init(source: String, caption: String, width: Int?, plot: PlotSpec? = nil) {
+    init(source: String, caption: String, width: Int?, plot: PlotSpec? = nil, generated: Bool = false) {
         self.source = source
         self.caption = caption
         self.width = width
         self.plot = plot
+        self.generated = generated
     }
+
+    /// A generated picture whose file isn't there (yet).
+    var isPlaceholder: Bool { generated && WriterImageStore.url(for: source) == nil }
 
     /// The sizes the editor offers, in percent of the column.
     static let presetWidths = [33, 50, 75, 100]
@@ -75,11 +82,13 @@ struct WriterImageReference: Equatable, Sendable {
 
         var width: Int?
         var plot: PlotSpec?
+        var generated = false
         let rest = String(characters[index...]).trimmingCharacters(in: .whitespaces)
         if !rest.isEmpty {
             guard rest.hasPrefix("{"), rest.hasSuffix("}") else { return nil }
             let attributes = rest.dropFirst().dropLast().split(separator: " ")
             if attributes.contains(".plot") { plot = PlotSpec() }
+            generated = attributes.contains(".generated")
             for attribute in attributes {
                 let pair = attribute.split(separator: "=", maxSplits: 1).map(String.init)
                 guard pair.count == 2 else { continue }
@@ -90,7 +99,7 @@ struct WriterImageReference: Equatable, Sendable {
                 }
             }
         }
-        return WriterImageReference(source: source, caption: caption, width: width, plot: plot)
+        return WriterImageReference(source: source, caption: caption, width: width, plot: plot, generated: generated)
     }
 
     var markdown: String {
@@ -103,6 +112,7 @@ struct WriterImageReference: Equatable, Sendable {
         let destination = source.contains(where: { $0 == " " || $0 == "(" || $0 == ")" }) ? "<\(source)>" : source
         var attributes = width.map { ["width=\($0)%"] } ?? []
         attributes += plot?.markdownAttributes ?? []
+        if generated { attributes.append(".generated") }
         return "![\(caption)](\(destination))" + (attributes.isEmpty ? "" : "{" + attributes.joined(separator: " ") + "}")
     }
 }
@@ -246,7 +256,7 @@ enum WriterImageStore {
     static func removeUnused(_ sources: [String], stillUsedIn documents: [String]) {
         let used = Set(documents.flatMap(Self.sources(in:)))
         for source in Set(sources) where source.hasPrefix(folderName + "/") && !used.contains(source) {
-            for variant in [source, darkVariant(of: source), pdfVariant(of: source)] {
+            for variant in [source, darkVariant(of: source), pdfVariant(of: source), infoVariant(of: source)] {
                 if let url = url(for: variant) { try? FileManager.default.removeItem(at: url) }
             }
         }

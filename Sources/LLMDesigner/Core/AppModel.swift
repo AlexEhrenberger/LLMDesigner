@@ -354,6 +354,8 @@ final class AppModel {
     @ObservationIgnored var analysisTasks: [WriterDocument.ID: Task<Void, Never>] = [:]
     @ObservationIgnored var loadedAnalysisIDs: Set<WriterDocument.ID> = []
     @ObservationIgnored let analysisStore = ContentAnalysisStore()
+    /// Pictures made with Draw Things, one after the other in the background.
+    @ObservationIgnored let imageGeneration = ImageGenerationCenter(settings: AppLibrary.current.settings)
     /// The instruction being written in Writer Studio's assistant bar.
     var writerInstruction = ""
     /// The assistant bar has the keyboard focus (⌘D then dictates into it).
@@ -422,6 +424,7 @@ final class AppModel {
         if isDictating { await stopDictation() }
         stopReadingDocument()
         speechReader.stop()
+        imageGeneration.cancelAll()
         writerFlush?()
         if skillSaveTask != nil { saveSkillLibrary() }
         savePendingPersonas()

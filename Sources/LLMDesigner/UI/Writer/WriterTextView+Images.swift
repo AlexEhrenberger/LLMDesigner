@@ -189,13 +189,26 @@ extension WriterTextView {
             return
         }
         let location = image.location
+        let generation: WriterImageBar.Generation?
+        if image.reference.generated {
+            switch ImageGenerationCenter.phases[image.reference.source] {
+            case .queued, .running: generation = .running
+            default: generation = image.reference.isPlaceholder ? .placeholder : .finished
+            }
+        } else {
+            generation = nil
+        }
         let bar = WriterImageBar(
             width: image.reference.width,
             hasCaption: !image.reference.caption.isEmpty,
             isPlot: image.reference.plot != nil,
+            generation: generation,
             onWidth: { [weak self] in self?.setImageWidth($0) },
             onCaption: { [weak self] in self?.editImageCaption() },
             onPlot: { [weak self] in self?.editPlot(at: location) },
+            onEditGeneration: { [weak self] in self?.editGeneratedImage(at: location) },
+            onRegenerate: { [weak self] in self?.regenerateImage(at: location) },
+            onCancelGeneration: { [weak self] in self?.cancelImageGeneration(at: location) },
             onDelete: { [weak self] in self?.deleteImage() }
         )
         let host: NSHostingView<WriterImageBar>
@@ -234,7 +247,7 @@ extension WriterTextView {
             self?.editImageCaption(at: location)
         }
         caption.image = NSImage(systemSymbolName: "text.below.photo", accessibilityDescription: nil)
-        var plotItems: [NSMenuItem] = []
+        var plotItems: [NSMenuItem] = generationMenuItems(at: location)
         if reference.plot != nil {
             let plot = ClosureMenuItem(title: "Plot bearbeiten …") { [weak self] in self?.editPlot(at: location) }
             plot.image = NSImage(systemSymbolName: "chart.xyaxis.line", accessibilityDescription: nil)
@@ -251,12 +264,20 @@ extension WriterTextView {
 
 /// The bar on a selected picture.
 struct WriterImageBar: View {
+    enum Generation {
+        case placeholder, running, finished
+    }
+
     let width: Int?
     let hasCaption: Bool
     var isPlot = false
+    var generation: Generation?
     let onWidth: (Int?) -> Void
     let onCaption: () -> Void
     var onPlot: () -> Void = {}
+    var onEditGeneration: () -> Void = {}
+    var onRegenerate: () -> Void = {}
+    var onCancelGeneration: () -> Void = {}
     let onDelete: () -> Void
 
     /// nil: the picture's own size, at most the column.
@@ -277,6 +298,29 @@ struct WriterImageBar: View {
                 .buttonStyle(.plain)
                 .focusable(false)
                 .help("Formel und Plot bearbeiten")
+                Rectangle().fill(Color.white.opacity(0.14)).frame(width: 1, height: 16).padding(.horizontal, 4)
+            }
+            if let generation {
+                Button(action: onEditGeneration) {
+                    Label(generation == .placeholder ? "Beschreiben & generieren" : "Bearbeiten", systemImage: "wand.and.stars")
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(Theme.accent)
+                        .padding(.horizontal, 9)
+                        .frame(height: 24)
+                        .background(Capsule().fill(Theme.accent.opacity(0.16)))
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .focusable(false)
+                .help("Beschreibung, Prompt und Format bearbeiten (Doppelklick)")
+                switch generation {
+                case .running:
+                    icon("xmark.circle", help: "Generieren abbrechen", action: onCancelGeneration)
+                case .placeholder:
+                    icon("play.circle", help: "Jetzt mit dem gespeicherten Prompt generieren", action: onRegenerate)
+                case .finished:
+                    icon("arrow.clockwise", help: "Neu generieren – gleicher Prompt, anderer Seed", action: onRegenerate)
+                }
                 Rectangle().fill(Color.white.opacity(0.14)).frame(width: 1, height: 16).padding(.horizontal, 4)
             }
             ForEach(Self.sizes, id: \.0) { title, value in
@@ -361,6 +405,8 @@ final class WriterImageCell: NSTextAttachmentCell {
             if imageSize.height > Self.maxHeight {
                 imageSize = NSSize(width: imageSize.width * Self.maxHeight / imageSize.height, height: Self.maxHeight)
             }
+        } else if reference.generated {
+            imageSize = placeholderSize(available: available)
         } else {
             imageSize = NSSize(width: min(available, 320), height: 120)
         }
@@ -423,6 +469,8 @@ final class WriterImageCell: NSTextAttachmentCell {
             shape.addClip()
             image.draw(in: imageRect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: [.interpolation: NSImageInterpolation.high.rawValue])
             NSGraphicsContext.restoreGraphicsState()
+        } else if reference.generated {
+            drawPlaceholder(in: imageRect, shape: shape, palette: palette)
         } else {
             palette.codeBlock.setFill()
             shape.fill()
@@ -457,6 +505,113 @@ final class WriterImageCell: NSTextAttachmentCell {
         }
     }
 
+    // MARK: Generated pictures
+
+    /// A placeholder has the proportions of the picture it will be (or of the one it replaces).
+    @MainActor
+    private func placeholderSize(available: CGFloat) -> NSSize {
+        let info = WriterImageStore.generationInfo(for: reference.source)
+        var width = reference.width.map { available * CGFloat($0) / 100 } ?? min(available, 520)
+        width = min(available, max(width, min(available, 300)))
+        var aspect = CGFloat(info?.format.aspect ?? 1.5)
+        if let previous = info?.previous, let image = WriterImageStore.displayImage(for: previous), image.size.height > 0 {
+            aspect = image.size.width / image.size.height
+        }
+        return NSSize(width: width, height: max(170, min(Self.maxHeight, width / aspect)))
+    }
+
+    /// The placeholder: the old picture dimmed (when one is replaced), what the picture will show, and how far
+    /// Draw Things is.
+    @MainActor
+    private func drawPlaceholder(in rect: NSRect, shape: NSBezierPath, palette: WriterPalette) {
+        let info = WriterImageStore.generationInfo(for: reference.source)
+        let phase = ImageGenerationCenter.phases[reference.source]
+        palette.codeBlock.setFill()
+        shape.fill()
+        if let previous = info?.previous, let image = WriterImageStore.displayImage(for: previous) {
+            NSGraphicsContext.saveGraphicsState()
+            shape.addClip()
+            image.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 0.22, respectFlipped: true, hints: nil)
+            NSGraphicsContext.restoreGraphicsState()
+        }
+        let failed: String?
+        if case .failed(let message) = phase { failed = message } else { failed = nil }
+        let tint = failed != nil ? NSColor(hex: 0xF2B14C) : palette.accent
+        tint.withAlphaComponent(0.65).setStroke()
+        shape.lineWidth = 1.5
+        shape.setLineDash([6, 4], count: 2, phase: 0)
+        shape.stroke()
+
+        let title: String
+        let hint: String
+        switch phase {
+        case .queued:
+            title = "Wartet auf Draw Things …"
+            hint = "Du kannst weiterschreiben – das Bild erscheint hier."
+        case .running(let started):
+            let seconds = Int(Date().timeIntervalSince(started))
+            title = String(format: "Draw Things malt …  %d:%02d", seconds / 60, seconds % 60)
+            hint = "Du kannst weiterschreiben – das Bild erscheint hier."
+        case .failed:
+            title = "Nicht generiert"
+            hint = "Doppelklick: Prompt prüfen und erneut generieren"
+        case nil:
+            title = "Bild mit Draw Things"
+            hint = info?.prompt.isEmpty == false ? "▶ in der Leiste generiert es · Doppelklick: bearbeiten" : "Doppelklick: beschreiben und generieren"
+        }
+        let centered = NSMutableParagraphStyle()
+        centered.alignment = .center
+        centered.lineBreakMode = .byTruncatingTail
+        let wrapping = NSMutableParagraphStyle()
+        wrapping.alignment = .center
+        wrapping.lineBreakMode = .byWordWrapping
+        let titleText = NSAttributedString(string: title, attributes: [
+            .font: NSFont.systemFont(ofSize: 13.5, weight: .semibold), .foregroundColor: tint, .paragraphStyle: centered,
+        ])
+        var body = failed ?? info?.description ?? ""
+        if body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { body = info?.prompt ?? "" }
+        if body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { body = "Noch keine Beschreibung" }
+        if body.count > 240 { body = String(body.prefix(240)) + " …" }
+        let bodyText = NSAttributedString(string: body, attributes: [
+            .font: NSFont.systemFont(ofSize: 12), .foregroundColor: failed != nil ? palette.text : palette.secondaryText, .paragraphStyle: wrapping,
+        ])
+        let hintText = NSAttributedString(string: hint, attributes: [
+            .font: NSFont.systemFont(ofSize: 11), .foregroundColor: palette.tertiaryText, .paragraphStyle: centered,
+        ])
+
+        let inner = rect.insetBy(dx: 24, dy: 16)
+        let symbol = NSImage(systemSymbolName: failed != nil ? "exclamationmark.triangle" : "wand.and.stars", accessibilityDescription: nil)?
+            .withSymbolConfiguration(.init(pointSize: 22, weight: .regular).applying(.init(paletteColors: [tint])))
+        let symbolHeight: CGFloat = symbol == nil ? 0 : 28
+        let bodyHeight = min(ceil(bodyText.boundingRect(with: NSSize(width: inner.width, height: 200), options: [.usesLineFragmentOrigin]).height),
+                             max(16, inner.height - symbolHeight - 60))
+        var progressHeight: CGFloat = 0
+        if case .running = phase { progressHeight = 12 }
+        let total = symbolHeight + 22 + 6 + bodyHeight + 8 + 16 + progressHeight
+        var y = rect.midY - total / 2
+        if let symbol {
+            symbol.draw(in: NSRect(x: rect.midX - symbol.size.width / 2, y: y + (symbolHeight - symbol.size.height) / 2, width: symbol.size.width, height: symbol.size.height),
+                        from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+            y += symbolHeight
+        }
+        titleText.draw(with: NSRect(x: inner.minX, y: y + 2, width: inner.width, height: 20), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+        y += 28
+        bodyText.draw(with: NSRect(x: inner.minX, y: y, width: inner.width, height: bodyHeight), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+        y += bodyHeight + 8
+        if case .running(let started) = phase {
+            // A light runs along a thin track while Draw Things works.
+            let track = NSRect(x: rect.midX - 90, y: y + 2, width: 180, height: 3)
+            palette.rule.setFill()
+            NSBezierPath(roundedRect: track, xRadius: 1.5, yRadius: 1.5).fill()
+            let position = CGFloat(Date().timeIntervalSince(started).truncatingRemainder(dividingBy: 2.4) / 2.4)
+            let light = NSRect(x: track.minX + (track.width - 50) * position, y: track.minY, width: 50, height: track.height)
+            tint.setFill()
+            NSBezierPath(roundedRect: light, xRadius: 1.5, yRadius: 1.5).fill()
+            y += progressHeight
+        }
+        hintText.draw(with: NSRect(x: inner.minX, y: y, width: inner.width, height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+    }
+
     // A click selects the picture, a double click edits its caption.
     override func wantsToTrackMouse() -> Bool { true }
 
@@ -466,7 +621,13 @@ final class WriterImageCell: NSTextAttachmentCell {
         guard let view = controlView as? WriterTextView else { return false }
         view.selectImage(at: charIndex)
         if theEvent.clickCount >= 2 {
-            if reference.plot != nil { view.editPlot(at: charIndex) } else { view.editImageCaption(at: charIndex) }
+            if reference.generated {
+                view.editGeneratedImage(at: charIndex)
+            } else if reference.plot != nil {
+                view.editPlot(at: charIndex)
+            } else {
+                view.editImageCaption(at: charIndex)
+            }
         }
         return true
     }

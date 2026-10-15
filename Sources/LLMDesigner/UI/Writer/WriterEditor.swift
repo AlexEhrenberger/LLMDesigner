@@ -7,6 +7,8 @@ final class WriterEditorController {
     var state = WriterTextView.State()
     /// The formula editor is open for this.
     var formulaRequest: WriterFormulaRequest?
+    /// The Draw Things sheet is open for this.
+    var imageRequest: WriterImageGenerationRequest?
     /// The heading the reader is in (for the side panel).
     var currentHeading: Int?
     /// A bookmark that was just made; the side panel shows it highlighted for a moment.
@@ -24,6 +26,7 @@ final class WriterEditorController {
     func insertTableOfContents(dynamic: Bool = false) { perform { $0.insertTableOfContents(dynamic: dynamic) } }
     func setTableOfContents(dynamic: Bool) { perform { $0.setTableOfContents(dynamic: dynamic) } }
     func editFormula() { perform { $0.editFormulaAtCaret() } }
+    func generateImage() { perform { $0.generateImageAtCaret() } }
     func toggleBookmark() {
         perform { textView in
             if let bookmark = textView.bookmarkAtCaret, textView.selectedRange().length == 0 {
@@ -44,6 +47,19 @@ final class WriterEditorController {
     func cancelFormula() {
         formulaRequest = nil
         textView?.trackedRanges[WriterTextView.formulaKey] = nil
+        focus()
+    }
+
+    // MARK: Draw Things
+
+    func applyGeneratedImage(info: GeneratedImageInfo, caption: String, generate: Bool, isExisting: Bool) {
+        imageRequest = nil
+        perform { $0.applyGeneratedImage(info: info, caption: caption, generate: generate, isExisting: isExisting) }
+    }
+
+    func cancelImageGeneration() {
+        imageRequest = nil
+        textView?.trackedRanges[WriterTextView.generationKey] = nil
         focus()
     }
 
@@ -162,6 +178,14 @@ struct WriterEditor: NSViewRepresentable {
         textView.onStopReading = { [weak app] in app?.stopReadingDocument() }
         textView.onNotice = { [weak app] in app?.showNotice($0) }
         textView.onFormula = { [weak controller] request in controller?.formulaRequest = request }
+        textView.onImageGeneration = { [weak controller] request in controller?.imageRequest = request }
+        textView.onGenerateImage = { [weak app] source, info in app?.imageGeneration.generate(source: source, info: info) }
+        textView.onCancelImageGeneration = { [weak app] source in app?.imageGeneration.cancel(source) }
+        textView.onImageDefaults = { [weak app] in app?.imageGeneration.defaults ?? GeneratedImageInfo() }
+        textView.onDocumentTitle = { [weak app, weak coordinator] in
+            coordinator?.documentID.flatMap { app?.document($0)?.title } ?? ""
+        }
+        coordinator.observeImageGeneration()
         // A dynamic table of contents put into the text: the model makes the topics if there are none yet.
         textView.onDynamicTOCNeeded = { [weak app, weak coordinator] in
             guard let app, let id = coordinator?.documentID, let document = app.document(id) else { return }
@@ -219,6 +243,8 @@ struct WriterEditor: NSViewRepresentable {
         private var resizeObserver: NSObjectProtocol?
         private var scrollObserver: NSObjectProtocol?
         private var scrollUpdatePending = false
+        private var generationObserver: NSObjectProtocol?
+        private var generationTimer: Timer?
 
         func load(_ document: WriterDocument, palette: WriterPalette) {
             guard let textView else { return }
@@ -227,6 +253,7 @@ struct WriterEditor: NSViewRepresentable {
             textView.dynamicOutline = document.outline
             textView.load(markdown: document.markdown, family: document.font, palette: palette)
             controller?.state = textView.state
+            updateGenerationTimer()
             DispatchQueue.main.async { [weak textView] in
                 guard let textView else { return }
                 textView.window?.makeFirstResponder(textView)
@@ -292,9 +319,37 @@ struct WriterEditor: NSViewRepresentable {
             }
         }
 
+        /// A picture made with Draw Things changed its phase or is done: its place is drawn anew; while pictures
+        /// are being made, their placeholders tick every second.
+        func observeImageGeneration() {
+            generationObserver = NotificationCenter.default.addObserver(
+                forName: ImageGenerationCenter.didChange, object: nil, queue: .main
+            ) { [weak self] notification in
+                guard let source = notification.object as? String else { return }
+                MainActor.assumeIsolated {
+                    self?.textView?.refreshGeneratedImage(source)
+                    self?.updateGenerationTimer()
+                }
+            }
+        }
+
+        private func updateGenerationTimer() {
+            let running = !(textView?.generatingSources.isEmpty ?? true)
+            if running, generationTimer == nil {
+                generationTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.textView?.redrawGeneratingImages() }
+                }
+            } else if !running {
+                generationTimer?.invalidate()
+                generationTimer = nil
+            }
+        }
+
         deinit {
             if let resizeObserver { NotificationCenter.default.removeObserver(resizeObserver) }
             if let scrollObserver { NotificationCenter.default.removeObserver(scrollObserver) }
+            if let generationObserver { NotificationCenter.default.removeObserver(generationObserver) }
+            generationTimer?.invalidate()
         }
     }
 }

@@ -45,6 +45,14 @@ struct WriterScreen: View {
                     controller.cancelFormula()
                 }
             }
+            .sheet(item: Binding(get: { controller.imageRequest }, set: { if $0 == nil, controller.imageRequest != nil { controller.cancelImageGeneration() } })) { request in
+                ImageGeneratorSheet(request: request) { info, caption, generate in
+                    controller.applyGeneratedImage(info: info, caption: caption, generate: generate, isExisting: request.isExisting)
+                } onCancel: {
+                    controller.cancelImageGeneration()
+                }
+                .environment(app)
+            }
         }
     }
 
@@ -480,8 +488,13 @@ private struct WriterToolbar: View {
                 ToolbarButton(symbol: "minus", help: "Trennlinie / Abschnittsmarke", isActive: false) { controller.insertRule() }
             }
             group(19) {
-                ToolbarButton(symbol: "photo", help: "Bild einfügen … – Bilder lassen sich auch hineinziehen oder einfügen", isActive: state.image != nil) {
-                    controller.chooseImages()
+                HStack(spacing: 0) {
+                    ToolbarButton(symbol: "photo", help: "Bild einfügen … – Bilder lassen sich auch hineinziehen oder einfügen", isActive: state.image != nil) {
+                        controller.chooseImages()
+                    }
+                    ToolbarButton(symbol: "wand.and.stars", help: "Bild mit Draw Things generieren (⌥⌘G) – beschreiben, die KI schreibt den Prompt für Qwen Image", isActive: false) {
+                        controller.generateImage()
+                    }
                 }
             }
             group(20) { TableButton(controller: controller, isInTable: state.table != nil) }

@@ -24,12 +24,16 @@ final class FormulaEditorModel {
     var plot: PlotSpec
     var plotCaption: String
     var plotWidth: Int?
-    private(set) var parameters: [String] = []
+    /// What the formula means as a plot; nil while it can't be drawn.
+    private(set) var program: PlotProgram?
+    var parameters: [String] { program?.parameters ?? [] }
     private(set) var plotPreview: NSImage?
     private(set) var plotError: String?
     private(set) var isRendering = false
     private var output: (key: String, value: PlotRenderer.Output)?
     private var plotTask: Task<Void, Never>?
+    private var isQuickRendering = false
+    private var quickPending = false
     private let initialLatex: String
     private let initialPlot: WriterImageReference?
 
@@ -207,14 +211,53 @@ final class FormulaEditorModel {
     // MARK: Plot
 
     private func updatePlotProgram() {
-        guard display else { parameters = []; return }
+        guard display else { program = nil; return }
         do {
             let program = try PlotTranslator.program(for: editing.latex)
-            parameters = program.parameters
+            if program != self.program { self.program = program }
             if plotEnabled { plotError = nil }
         } catch {
-            parameters = []
+            program = nil
             if plotEnabled { plotError = error.localizedDescription }
+        }
+    }
+
+    var isThreeD: Bool { program?.isThreeD(style: plot.style) ?? false }
+
+    /// Turning the view: while dragging only a small dark preview is drawn, one at a time; the full plot follows
+    /// when the drag ends.
+    func setView(elevation: Double, azimuth: Double, live: Bool) {
+        plot.elevation = max(-90, min(90, elevation.rounded()))
+        var turned = azimuth.rounded().truncatingRemainder(dividingBy: 360)
+        if turned > 180 { turned -= 360 }
+        if turned < -180 { turned += 360 }
+        plot.azimuth = turned
+        guard plotEnabled else { return }
+        if live {
+            plotTask?.cancel()
+            requestQuickPreview()
+        } else {
+            schedulePlot(immediately: true)
+        }
+    }
+
+    private func requestQuickPreview() {
+        if isQuickRendering {
+            quickPending = true
+            return
+        }
+        isQuickRendering = true
+        Task { [weak self] in
+            guard let self else { return }
+            repeat {
+                self.quickPending = false
+                if let program = try? PlotTranslator.program(for: self.editing.latex),
+                   let result = try? await PlotRenderer.shared.render(program, spec: self.plot, quick: true) {
+                    self.plotPreview = NSImage(contentsOf: result.dark)
+                    try? FileManager.default.removeItem(at: result.directory)
+                }
+            } while self.quickPending
+            self.isQuickRendering = false
         }
     }
 
@@ -548,57 +591,140 @@ struct FormulaEditorSheet: View {
     }
 
     private var plotSettings: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            rangeRow("x von", value: Binding(get: { model.plot.xMin }, set: { model.plot.xMin = $0; model.plotSettingsChanged() }),
-                     "bis", value: Binding(get: { model.plot.xMax }, set: { model.plot.xMax = $0; model.plotSettingsChanged() }))
-            HStack(spacing: 8) {
-                Toggle("y automatisch", isOn: Binding(get: { model.plot.yMin == nil }, set: { automatic in
-                    if automatic { model.plot.yMin = nil; model.plot.yMax = nil } else { model.plot.yMin = -5; model.plot.yMax = 5 }
-                    model.plotSettingsChanged()
-                }))
-                .toggleStyle(.checkbox)
-                Toggle("Gitter", isOn: Binding(get: { model.plot.grid }, set: { model.plot.grid = $0; model.plotSettingsChanged() }))
-                    .toggleStyle(.checkbox)
-            }
-            .font(.system(size: 12))
-            if model.plot.yMin != nil {
-                rangeRow("y von", value: Binding(get: { model.plot.yMin ?? -5 }, set: { model.plot.yMin = $0; model.plotSettingsChanged() }),
-                         "bis", value: Binding(get: { model.plot.yMax ?? 5 }, set: { model.plot.yMax = $0; model.plotSettingsChanged() }))
-            }
-            if !model.parameters.isEmpty {
-                Text("Parameter")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Theme.textTertiary)
-                    .padding(.top, 2)
-                ForEach(model.parameters, id: \.self) { name in
-                    ParameterRow(name: name, value: Binding(
-                        get: { model.plot.parameters[name] ?? 1 },
-                        set: { model.plot.parameters[name] = $0; model.plotSettingsChanged() }
+        let program = model.program
+        let x = program?.curveVariable ?? program?.planeVariables?.first ?? "x"
+        let y = program?.planeVariables?.dropFirst().first ?? "y"
+        let z = program?.spaceVariables?.last ?? "z"
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 8) {
+                if program == nil || program?.curveVariable != nil || program?.planeVariables != nil {
+                    rangeRow(PlotProgram.displayName(x), value: Binding(get: { model.plot.x }, set: { model.plot.x = $0; model.plotSettingsChanged() }))
+                }
+                if let program, program.hasCurves || program.planeVariables != nil {
+                    let isValueAxis = program.hasCurves
+                    optionalRangeRow(
+                        isValueAxis ? "y automatisch" : "\(PlotProgram.displayName(y)) wie \(PlotProgram.displayName(x))",
+                        name: isValueAxis ? "y" : PlotProgram.displayName(y),
+                        value: Binding(get: { model.plot.y }, set: { model.plot.y = $0; model.plotSettingsChanged() }),
+                        fallback: isValueAxis ? PlotRange(-5, 5) : model.plot.x
+                    )
+                }
+                if let program, program.hasSurfaces || program.spaceVariables != nil {
+                    let isValueAxis = program.spaceVariables == nil
+                    optionalRangeRow(
+                        isValueAxis ? "z automatisch" : "\(PlotProgram.displayName(z)) wie \(PlotProgram.displayName(x))",
+                        name: isValueAxis ? "z" : PlotProgram.displayName(z),
+                        value: Binding(get: { model.plot.z }, set: { model.plot.z = $0; model.plotSettingsChanged() }),
+                        fallback: isValueAxis ? PlotRange(-5, 5) : model.plot.x
+                    )
+                }
+                if let parameter = program?.parameterVariable {
+                    rangeRow(PlotProgram.displayName(parameter), value: Binding(
+                        get: { model.plot.t ?? .fullTurn }, set: { model.plot.t = $0; model.plotSettingsChanged() }
                     ))
                 }
-            }
-            HStack(spacing: 8) {
-                Text("Breite").font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
-                Picker("", selection: Binding(get: { model.plotWidth ?? 70 }, set: { model.plotWidth = $0 })) {
-                    ForEach([50, 70, 85, 100], id: \.self) { Text("\($0) %").tag($0) }
+                if let parameters = program?.surfaceParameters, parameters.count == 2 {
+                    rangeRow(PlotProgram.displayName(parameters[0]), value: Binding(
+                        get: { model.plot.u ?? .fullTurn }, set: { model.plot.u = $0; model.plotSettingsChanged() }
+                    ))
+                    rangeRow(PlotProgram.displayName(parameters[1]), value: Binding(
+                        get: { model.plot.v ?? .fullTurn }, set: { model.plot.v = $0; model.plotSettingsChanged() }
+                    ))
                 }
-                .labelsHidden()
-                .frame(width: 90)
-            }
-            TextField("Bildunterschrift (optional)", text: Binding(get: { model.plotCaption }, set: { model.plotCaption = $0 }))
-                .textFieldStyle(.roundedBorder)
+                if let program, program.hasSurfaces || program.hasVectorField {
+                    let styles = program.hasSurfaces ? PlotStyle.surfaceStyles : PlotStyle.vectorStyles
+                    Picker("", selection: Binding(
+                        get: { model.plot.style.flatMap { styles.contains($0) ? $0 : nil } ?? styles[0] },
+                        set: { model.plot.style = $0 == styles[0] ? nil : $0; model.plotSettingsChanged() }
+                    )) {
+                        ForEach(styles, id: \.self) { Text($0.label).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .controlSize(.small)
+                }
+                if model.isThreeD {
+                    viewRow("Neigung", value: model.plot.elevation, range: -90...90) { model.setView(elevation: $0, azimuth: model.plot.azimuth, live: false) }
+                    viewRow("Drehung", value: model.plot.azimuth, range: -180...180) { model.setView(elevation: model.plot.elevation, azimuth: $0, live: false) }
+                }
+                HStack(spacing: 12) {
+                    Toggle("Gitter", isOn: Binding(get: { model.plot.grid }, set: { model.plot.grid = $0; model.plotSettingsChanged() }))
+                    if program?.hasCurves == true {
+                        Toggle("Nullstellen & Extrema", isOn: Binding(get: { model.plot.marks }, set: { model.plot.marks = $0; model.plotSettingsChanged() }))
+                            .help("Markiert Nullstellen, Hoch- und Tiefpunkte mit ihren Koordinaten")
+                    }
+                }
+                .toggleStyle(.checkbox)
                 .font(.system(size: 12))
+                if !model.parameters.isEmpty {
+                    Text("Parameter")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Theme.textTertiary)
+                        .padding(.top, 2)
+                    ForEach(model.parameters, id: \.self) { name in
+                        ParameterRow(name: name, value: Binding(
+                            get: { model.plot.parameters[name] ?? 1 },
+                            set: { model.plot.parameters[name] = $0; model.plotSettingsChanged() }
+                        ))
+                    }
+                }
+                HStack(spacing: 8) {
+                    Text("Breite").font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
+                    Picker("", selection: Binding(get: { model.plotWidth ?? 70 }, set: { model.plotWidth = $0 })) {
+                        ForEach([50, 70, 85, 100], id: \.self) { Text("\($0) %").tag($0) }
+                    }
+                    .labelsHidden()
+                    .frame(width: 90)
+                }
+                TextField("Bildunterschrift (optional)", text: Binding(get: { model.plotCaption }, set: { model.plotCaption = $0 }))
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 12))
+            }
+            .padding(.trailing, 8)
+        }
+        .scrollIndicators(.automatic)
+        .frame(height: 262)
+    }
+
+    private func rangeRow(_ name: String, value: Binding<PlotRange>) -> some View {
+        HStack(spacing: 6) {
+            Text("\(name) von").font(.system(size: 12)).foregroundStyle(Theme.textSecondary).frame(width: 46, alignment: .leading)
+            NumberField(value: Binding(get: { value.wrappedValue.low }, set: { low in
+                if low < value.wrappedValue.high { value.wrappedValue = PlotRange(low, value.wrappedValue.high) }
+            }))
+            Text("bis").font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
+            NumberField(value: Binding(get: { value.wrappedValue.high }, set: { high in
+                if high > value.wrappedValue.low { value.wrappedValue = PlotRange(value.wrappedValue.low, high) }
+            }))
         }
     }
 
-    private func rangeRow(_ first: String, value low: Binding<Double>, _ second: String, value high: Binding<Double>) -> some View {
-        HStack(spacing: 6) {
-            Text(first).font(.system(size: 12)).foregroundStyle(Theme.textSecondary).frame(width: 40, alignment: .leading)
-            NumberField(value: low)
-            Text(second).font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
-            NumberField(value: high)
+    /// A range that is chosen automatically (or follows x) until it is switched off.
+    @ViewBuilder
+    private func optionalRangeRow(_ title: String, name: String, value: Binding<PlotRange?>, fallback: PlotRange) -> some View {
+        Toggle(title, isOn: Binding(get: { value.wrappedValue == nil }, set: { automatic in
+            value.wrappedValue = automatic ? nil : fallback
+        }))
+        .toggleStyle(.checkbox)
+        .font(.system(size: 12))
+        if value.wrappedValue != nil {
+            rangeRow(name, value: Binding(get: { value.wrappedValue ?? fallback }, set: { value.wrappedValue = $0 }))
         }
     }
+
+    private func viewRow(_ title: String, value: Double, range: ClosedRange<Double>, set: @escaping (Double) -> Void) -> some View {
+        HStack(spacing: 8) {
+            Text(title).font(.system(size: 12)).foregroundStyle(Theme.textSecondary).frame(width: 52, alignment: .leading)
+            Slider(value: Binding(get: { value }, set: { set($0) }), in: range)
+                .controlSize(.small)
+            Text("\(Int(value))°")
+                .font(.system(size: 11.5).monospacedDigit())
+                .foregroundStyle(Theme.textTertiary)
+                .frame(width: 38, alignment: .trailing)
+        }
+    }
+
+    @State private var dragStart: (elevation: Double, azimuth: Double)?
 
     private var plotPreview: some View {
         ZStack {
@@ -628,10 +754,41 @@ struct FormulaEditorSheet: View {
                     .font(.system(size: 11.5))
                     .foregroundStyle(Theme.textTertiary)
             }
+            if model.isThreeD, model.plotError == nil {
+                Label("Ziehen dreht die Ansicht", systemImage: "rotate.3d")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(Theme.textTertiary)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(Capsule().fill(Color.black.opacity(0.45)))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                    .padding(8)
+                    .allowsHitTesting(false)
+            }
         }
-        .frame(height: 210)
+        .frame(height: 262)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Theme.border))
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 3)
+                .onChanged { drag in
+                    guard model.isThreeD else { return }
+                    let start = dragStart ?? (model.plot.elevation, model.plot.azimuth)
+                    if dragStart == nil { dragStart = start }
+                    model.setView(elevation: start.elevation + drag.translation.height * 0.4,
+                                  azimuth: start.azimuth - drag.translation.width * 0.5, live: true)
+                }
+                .onEnded { _ in
+                    guard model.isThreeD, dragStart != nil else { return }
+                    dragStart = nil
+                    model.setView(elevation: model.plot.elevation, azimuth: model.plot.azimuth, live: false)
+                }
+        )
+        .onHover { inside in
+            guard model.isThreeD else { return }
+            if inside { NSCursor.openHand.push() } else { NSCursor.pop() }
+        }
     }
 
     private var footer: some View {
@@ -728,6 +885,7 @@ private struct PaletteButton: View {
     }
 }
 
+/// A number; takes "1,5", "-2", "2π" or "pi/2" and shows multiples of π as such.
 private struct NumberField: View {
     @Binding var value: Double
     @State private var text = ""
@@ -736,17 +894,20 @@ private struct NumberField: View {
         TextField("", text: $text)
             .textFieldStyle(.roundedBorder)
             .font(.system(size: 12).monospacedDigit())
-            .frame(width: 70)
-            .onAppear { text = PlotSpec.format(value) }
+            .frame(width: 66)
+            .onAppear { text = PlotSpec.display(value) }
             .onChange(of: value) { _, newValue in
-                if Double(text.replacingOccurrences(of: ",", with: ".")) != newValue { text = PlotSpec.format(newValue) }
+                if PlotSpec.parseNumber(text) != newValue { text = PlotSpec.display(newValue) }
             }
-            .onSubmit(apply)
+            .onSubmit {
+                apply()
+                text = PlotSpec.display(value)
+            }
             .onChange(of: text) { _, _ in apply() }
     }
 
     private func apply() {
-        guard let number = Double(text.replacingOccurrences(of: ",", with: ".")), number.isFinite, number != value else { return }
+        guard let number = PlotSpec.parseNumber(text), number != value else { return }
         value = number
     }
 }

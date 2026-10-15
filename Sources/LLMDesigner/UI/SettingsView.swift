@@ -52,6 +52,8 @@ struct SettingsView: View {
                     .foregroundStyle(Theme.textTertiary)
             }
 
+            DrawThingsSettings(center: app.imageGeneration)
+
             Section {
                 Picker("Papierformat", selection: $app.pdfPaperSize) {
                     ForEach(PaperSize.allCases) { size in
@@ -185,6 +187,62 @@ struct SettingsView: View {
         case .connecting: "Verbinde…"
         case .connected: "Verbunden · \(app.chatModels.count) Modelle, \(app.loadedModels.count) geladen"
         case .failed(let message): message
+        }
+    }
+}
+
+
+/// Where Draw Things listens; pictures in Writer Studio are made there.
+private struct DrawThingsSettings: View {
+    let center: ImageGenerationCenter
+    @State private var address = ""
+    @State private var status: String?
+    @State private var reachable: Bool?
+
+    var body: some View {
+        Section {
+            TextField("Adresse", text: $address, prompt: Text(DrawThingsClient.defaultAddress))
+                .onSubmit(save)
+                .onChange(of: address) { _, _ in save() }
+            LabeledContent("Status") {
+                HStack(spacing: 8) {
+                    StatusDot(color: reachable == nil ? Theme.textTertiary : (reachable == true ? Theme.success : Theme.danger), size: 6)
+                    Text(status ?? "nicht geprüft")
+                        .foregroundStyle(Theme.textSecondary)
+                        .lineLimit(2)
+                    Button("Prüfen") { Task { await check() } }
+                }
+            }
+        } header: {
+            Text("Draw Things")
+        } footer: {
+            Text("Writer Studio generiert Bilder mit Draw Things. In Draw Things unter Einstellungen den „API-Server“ (HTTP, Port 7860) einschalten. Die Voreinstellung „Qwen Image 1.0 · Lightning“ braucht die Modelldatei \(DrawThingsProfile.qwenModel) und die Lightning-LoRA; ist dieses Modell auch in Draw Things gewählt, entfällt das Umladen und das Bild kommt schneller.")
+                .foregroundStyle(Theme.textTertiary)
+        }
+        .onAppear {
+            address = center.address
+            Task { await check() }
+        }
+    }
+
+    private func save() {
+        let trimmed = address.trimmingCharacters(in: .whitespacesAndNewlines)
+        center.address = trimmed.isEmpty ? DrawThingsClient.defaultAddress : trimmed
+    }
+
+    private func check() async {
+        guard let client = center.client else {
+            reachable = false
+            status = "Ungültige Adresse"
+            return
+        }
+        do {
+            let reply = try await client.status()
+            reachable = true
+            status = "Verbunden" + (reply.model.map { " · gewählt: \($0)" } ?? "")
+        } catch {
+            reachable = false
+            status = "Nicht erreichbar – API-Server in Draw Things einschalten"
         }
     }
 }
