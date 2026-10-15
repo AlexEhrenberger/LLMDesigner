@@ -7,8 +7,8 @@ struct WriterTabSwitch: View {
 
     var body: some View {
         HStack(spacing: 2) {
-            ForEach(WriterTab.allCases) { tab in
-                TabButton(tab: tab, isSelected: app.writerTab == tab, badge: badge(for: tab)) {
+            ForEach(document.isPresentation ? WriterTab.presenterTabs : WriterTab.writerTabs) { tab in
+                TabButton(tab: tab, isPresentation: document.isPresentation, isSelected: app.writerTab == tab, badge: badge(for: tab)) {
                     withAnimation(.easeInOut(duration: 0.2)) { app.showWriterTab(tab) }
                 }
             }
@@ -18,7 +18,7 @@ struct WriterTabSwitch: View {
         .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(Theme.border))
         .background {
             Button("") {
-                withAnimation(.easeInOut(duration: 0.2)) { app.showWriterTab(app.writerTab == .document ? .analysis : .document) }
+                withAnimation(.easeInOut(duration: 0.2)) { app.showWriterTab(app.writerTab == .analysis ? .document : .analysis) }
             }
             .keyboardShortcut("a", modifiers: [.command, .option])
             .opacity(0)
@@ -38,6 +38,7 @@ struct WriterTabSwitch: View {
         enum Badge { case running, outdated }
 
         let tab: WriterTab
+        let isPresentation: Bool
         let isSelected: Bool
         let badge: Badge?
         let action: () -> Void
@@ -46,9 +47,9 @@ struct WriterTabSwitch: View {
         var body: some View {
             Button(action: action) {
                 HStack(spacing: 5) {
-                    Image(systemName: tab.symbol)
+                    Image(systemName: tab.symbol(presentation: isPresentation))
                         .font(.system(size: 11, weight: .medium))
-                    Text(tab.label)
+                    Text(tab.label(presentation: isPresentation))
                         .font(.system(size: 12, weight: .medium))
                     switch badge {
                     case .running: ProgressView().controlSize(.mini)
@@ -70,7 +71,8 @@ struct WriterTabSwitch: View {
 
         private var help: String {
             switch tab {
-            case .document: "Das Dokument bearbeiten (⌥⌘A wechselt)"
+            case .document: isPresentation ? "Die Folien bearbeiten (⌥⌘A wechselt zur Inhaltsanalyse)" : "Das Dokument bearbeiten (⌥⌘A wechselt)"
+            case .play: "Die Präsentation abspielen – selbst oder von der KI vorgetragen"
             case .analysis:
                 switch badge {
                 case .running: "Inhaltsanalyse – wird gerade erstellt (⌥⌘A wechselt)"

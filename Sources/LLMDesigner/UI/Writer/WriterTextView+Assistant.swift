@@ -110,6 +110,11 @@ extension WriterTextView {
     func updateAICursorIndicator() {
         let indicator = aiCursorIndicator
         if indicator.superview !== self { addSubview(indicator) }
+        // A slide shown in the presentation or the slide list has no assistant.
+        guard isEditable else {
+            indicator.isHidden = true
+            return
+        }
         let rect = caretRect(at: aiCursorLocation)
         guard !rect.isEmpty, textStorage != nil else {
             indicator.isHidden = true

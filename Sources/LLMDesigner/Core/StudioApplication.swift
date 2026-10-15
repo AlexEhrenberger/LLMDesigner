@@ -25,8 +25,8 @@ enum StudioApplication: String, CaseIterable, Identifiable {
         }
     }
 
-    /// Writer Studio and Citation Studio are built so far.
-    var isAvailable: Bool { self == .writer || self == .citation }
+    /// Notes is not built yet.
+    var isAvailable: Bool { self != .notes }
 
     var summary: String {
         switch self {

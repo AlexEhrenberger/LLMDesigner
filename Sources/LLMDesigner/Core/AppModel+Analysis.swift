@@ -1,21 +1,26 @@
 import Foundation
 
-/// Writer Studio's two views of a document.
+/// Writer Studio's two views of a document; a presentation also has the view that plays it.
 enum WriterTab: String, CaseIterable, Identifiable {
-    case document, analysis
+    case document, play, analysis
 
     var id: String { rawValue }
 
-    var label: String {
+    static let writerTabs: [WriterTab] = [.document, .analysis]
+    static let presenterTabs: [WriterTab] = [.document, .play, .analysis]
+
+    func label(presentation: Bool) -> String {
         switch self {
-        case .document: "Dokument"
+        case .document: presentation ? "Folien" : "Dokument"
+        case .play: "Abspielen"
         case .analysis: "Inhaltsanalyse"
         }
     }
 
-    var symbol: String {
+    func symbol(presentation: Bool) -> String {
         switch self {
-        case .document: "doc.text"
+        case .document: presentation ? "rectangle.stack" : "doc.text"
+        case .play: "play.rectangle"
         case .analysis: "chart.bar.doc.horizontal"
         }
     }

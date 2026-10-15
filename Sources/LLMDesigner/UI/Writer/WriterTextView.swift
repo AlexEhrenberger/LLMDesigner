@@ -98,6 +98,38 @@ final class WriterTextView: NSTextView {
     private let pageTop: CGFloat = 28
     private let textTop: CGFloat = 92
 
+    /// Presenter Studio: the view shows one slide on a canvas of fixed size (the scroll view magnifies it to fit)
+    /// instead of a page; nothing but the text is drawn, the slide's background lies behind.
+    struct SlideLayout: Equatable {
+        /// The canvas in points: 16:9, small enough that the document fonts have slide proportions.
+        static let canvas = CGSize(width: 720, height: 405)
+        static let margin = CGSize(width: 46, height: 34)
+
+        var centersVertically = false
+        /// What an empty slide shows where its first line goes, and in which block.
+        var placeholder = ""
+        var firstBlock: WriterBlock = .heading1
+
+        init(role: SlideRole) {
+            centersVertically = role != .content
+            placeholder = role.placeholder
+            firstBlock = role.firstBlock
+        }
+    }
+
+    var slideLayout: SlideLayout? {
+        didSet {
+            guard oldValue != slideLayout else { return }
+            textContainerInset = slideLayout == nil ? NSSize(width: 0, height: 170) : NSSize(width: 0, height: SlideLayout.margin.height)
+            updateSlideCentering()
+        }
+    }
+    /// How far a centred slide's text sits below the top margin.
+    private var slideCenterOffset: CGFloat = 0
+    /// The slide's text is longer than the slide (reported to the screen as a hint).
+    var onSlideOverflow: ((Bool) -> Void)?
+    private var slideOverflows = false
+
     private let restyler = WriterRestyler()
 
     static func make() -> WriterTextView {
@@ -139,6 +171,7 @@ final class WriterTextView: NSTextView {
     }
 
     private func applyPalette() {
+        drawsBackground = !palette.isSlide
         backgroundColor = palette.windowBackground
         insertionPointColor = palette.accent
         selectedTextAttributes = [.backgroundColor: palette.selection]
@@ -154,7 +187,8 @@ final class WriterTextView: NSTextView {
     // MARK: Page
 
     var columnWidth: CGFloat {
-        min(Self.maxColumnWidth, max(260, bounds.width - 120))
+        if slideLayout != nil { return SlideLayout.canvas.width - 2 * SlideLayout.margin.width }
+        return min(Self.maxColumnWidth, max(260, bounds.width - 120))
     }
 
     private var pagePadding: CGFloat {
@@ -162,13 +196,59 @@ final class WriterTextView: NSTextView {
     }
 
     override var textContainerOrigin: NSPoint {
-        NSPoint(x: floor((bounds.width - columnWidth) / 2), y: textTop)
+        if slideLayout != nil { return NSPoint(x: SlideLayout.margin.width, y: SlideLayout.margin.height + slideCenterOffset) }
+        return NSPoint(x: floor((bounds.width - columnWidth) / 2), y: textTop)
+    }
+
+    /// A title or chapter slide keeps its text in the middle of the canvas; any slide reports when its text runs over.
+    func updateSlideCentering() {
+        guard let layout = slideLayout, let layoutManager, let container = textContainer else {
+            if slideCenterOffset != 0 {
+                slideCenterOffset = 0
+                invalidateTextContainerOrigin()
+            }
+            return
+        }
+        layoutManager.ensureLayout(for: container)
+        let used = layoutManager.usedRect(for: container).height
+        let room = SlideLayout.canvas.height - 2 * SlideLayout.margin.height
+        let offset = layout.centersVertically ? max(0, floor((room - used) / 2)) : 0
+        if abs(offset - slideCenterOffset) > 0.5 {
+            slideCenterOffset = offset
+            invalidateTextContainerOrigin()
+            needsDisplay = true
+            updateAICursorIndicator()
+            updateImageControls()
+        }
+        let overflows = used > room + 1
+        if overflows != slideOverflows {
+            slideOverflows = overflows
+            onSlideOverflow?(overflows)
+        }
+        setFrameSize(frame.size)
+        // A slide that fits never stays scrolled.
+        if !overflows, visibleRect.minY != 0 { scroll(.zero) }
+    }
+
+    override func didChangeText() {
+        super.didChangeText()
+        guard slideLayout != nil else { return }
+        DispatchQueue.main.async { [weak self] in self?.updateSlideCentering() }
     }
 
     override func setFrameSize(_ newSize: NSSize) {
         var newSize = newSize
-        // At least as tall as the visible area, so the sheet reaches the bottom of the window.
-        if let visible = enclosingScrollView?.contentSize.height { newSize.height = max(newSize.height, visible) }
+        if slideLayout != nil {
+            // The canvas keeps its width; the scroll view magnifies it to the space there is. Its height is the
+            // slide's (what AppKit computes ignores the centring), more only when the text runs over.
+            newSize.width = SlideLayout.canvas.width
+            let used = layoutManager.flatMap { manager in textContainer.map { manager.usedRect(for: $0).height } } ?? 0
+            let visible = floor(enclosingScrollView?.contentView.bounds.height ?? SlideLayout.canvas.height)
+            newSize.height = max(ceil(used) + 2 * SlideLayout.margin.height, min(visible, SlideLayout.canvas.height))
+        } else if let visible = enclosingScrollView?.contentSize.height {
+            // At least as tall as the visible area, so the sheet reaches the bottom of the window.
+            newSize.height = max(newSize.height, visible)
+        }
         super.setFrameSize(newSize)
         let width = columnWidth
         if let container = textContainer, abs(container.size.width - width) > 0.5 {
@@ -181,6 +261,7 @@ final class WriterTextView: NSTextView {
     }
 
     override func drawBackground(in rect: NSRect) {
+        if slideLayout != nil { return drawSlideBackground(in: rect) }
         palette.windowBackground.setFill()
         rect.fill()
         let origin = textContainerOrigin
@@ -212,6 +293,30 @@ final class WriterTextView: NSTextView {
         }
     }
 
+    /// A slide draws only its bookmark marks and, while it is empty, where its first line goes.
+    private func drawSlideBackground(in rect: NSRect) {
+        let origin = textContainerOrigin
+        guard let storage = textStorage else { return }
+        if storage.length == 0, let layout = slideLayout, !layout.placeholder.isEmpty {
+            let style = NSMutableParagraphStyle()
+            style.alignment = palette.alignment == .center ? .center : .natural
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font: WriterStyler.blockFont(layout.firstBlock, family: family),
+                .foregroundColor: palette.tertiaryText.withAlphaComponent(palette.isLight ? 0.38 : 0.42),
+                .paragraphStyle: style,
+            ]
+            (layout.placeholder as NSString).draw(
+                in: NSRect(x: origin.x, y: origin.y, width: columnWidth, height: 80), withAttributes: attributes
+            )
+        }
+        if let layoutManager, let container = textContainer, storage.length > 0, storage.editedMask.isEmpty {
+            let inContainer = rect.offsetBy(dx: -origin.x, dy: -origin.y)
+            let glyphs = layoutManager.glyphRange(forBoundingRect: NSRect(x: 0, y: inContainer.minY - 40, width: container.size.width, height: inContainer.height + 80), in: container)
+            let characters = layoutManager.characterRange(forGlyphRange: glyphs, actualGlyphRange: nil)
+            drawOutlineMarks(in: characters, origin: origin)
+        }
+    }
+
     // MARK: Loading
 
     func load(markdown: String, family: WriterFont, palette: WriterPalette) {
@@ -235,6 +340,11 @@ final class WriterTextView: NSTextView {
         setSelectedRange(NSRange(location: end, length: 0))
         resetTypingAttributes()
         scroll(.zero)
+        if let layout = slideLayout, storage.length == 0 {
+            // An empty slide begins with its heading.
+            typingAttributes = WriterStyler.typingAttributes(block: layout.firstBlock, level: 0, semantic: [:], family: family, palette: palette)
+        }
+        updateSlideCentering()
         updateAICursorIndicator()
         onStateChange?()
     }
@@ -247,6 +357,10 @@ final class WriterTextView: NSTextView {
         outlineCache = nil
         layoutManager?.invalidateLayout(forCharacterRange: NSRange(location: 0, length: storage.length), actualCharacterRange: nil)
         resetTypingAttributes()
+        if let layout = slideLayout, storage.length == 0 {
+            typingAttributes = WriterStyler.typingAttributes(block: layout.firstBlock, level: 0, semantic: [:], family: family, palette: palette)
+        }
+        updateSlideCentering()
         needsDisplay = true
         updateAICursorIndicator()
     }

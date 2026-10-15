@@ -24,7 +24,8 @@ extension AppModel {
     /// The application in the main area; nil while the chat is shown.
     var activeApplication: StudioApplication? {
         if citationStudioOpen { return .citation }
-        return selectedDocumentID != nil ? .writer : nil
+        guard let document = selectedDocument else { return nil }
+        return document.isPresentation ? .presenter : .writer
     }
 
     /// From the applications menu under the composer.
@@ -32,7 +33,8 @@ extension AppModel {
         switch application {
         case .writer: newDocument()
         case .citation: openCitationStudio()
-        case .presenter, .notes: break
+        case .presenter: newPresentation()
+        case .notes: break
         }
     }
 
@@ -83,6 +85,11 @@ extension AppModel {
         if dictationIntoDocument { Task { await stopDictation() } }
         stopReadingDocument()
         writerFlush?()
+        if document(id)?.isPresentation == true {
+            presentationPlayer.stop()
+            presentationPlayer.exitFullScreen()
+            selectedSlideID = nil
+        }
         selectedDocumentID = nil
         if let document = document(id), document.isEmpty, !document.hasCustomTitle {
             deleteDocument(id)

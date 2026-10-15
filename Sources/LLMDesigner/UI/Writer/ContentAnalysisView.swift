@@ -174,7 +174,7 @@ private struct AnalysisStart: View {
         let words = DocumentOutlineBuilder.wordCount(document.markdown)
         let isLongEnough = words >= ContentAnalysisBuilder.minimumWords
         VStack(spacing: 18) {
-            Image(systemName: WriterTab.analysis.symbol)
+            Image(systemName: WriterTab.analysis.symbol(presentation: document.isPresentation))
                 .font(.system(size: 34, weight: .light))
                 .foregroundStyle(colors.accent)
                 .padding(.top, 30)

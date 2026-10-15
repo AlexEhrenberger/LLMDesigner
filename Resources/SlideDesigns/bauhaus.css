@@ -1,0 +1,94 @@
+/*
+ * @name Bauhaus
+ * @beschreibung Klare Formen in Rot, Blau und Gelb auf Creme
+ * @text dunkel
+ * @akzent #C8281E
+ */
+
+body {
+  background: #efe7d6;
+}
+
+/* Ein Hauch Druckkorn. */
+.e6 {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='260' height='260'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.2 0 0 0 0 0.15 0 0 0 0 0.1 0 0 0 0.8 -0.3'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  opacity: 0.22;
+}
+
+/* Blauer Viertelkreis aus der Ecke oben links. */
+.e1 {
+  inset: auto;
+  left: -34vh;
+  top: -34vh;
+  width: 68vh;
+  height: 68vh;
+  border-radius: 50%;
+  background: #1f4e9c;
+}
+
+/* Roter Kreis unten rechts, angeschnitten. */
+.e2 {
+  inset: auto;
+  right: -10vh;
+  bottom: -14vh;
+  width: 52vh;
+  height: 52vh;
+  border-radius: 50%;
+  background: #c8281e;
+}
+
+/* Gelber Balken und ein schwarzer Strich. */
+.e3 {
+  inset: auto;
+  left: 6.4%;
+  bottom: 9%;
+  width: 20vw;
+  height: 3.2vh;
+  background: #f2b51d;
+}
+.e3::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: -3.6vh;
+  width: 34vw;
+  height: 0.5vh;
+  background: #1c1c1c;
+}
+
+/* Ein schwarzer Halbkreis oben rechts und ein kleiner Punkt. */
+.e4 {
+  inset: auto;
+  right: 9%;
+  top: 0;
+  width: 15vh;
+  height: 7.5vh;
+  border-radius: 0 0 7.5vh 7.5vh;
+  background: #1c1c1c;
+}
+.e4::after {
+  content: "";
+  position: absolute;
+  left: -7vw;
+  top: 14vh;
+  width: 3vh;
+  height: 3vh;
+  border-radius: 50%;
+  background: #f2b51d;
+}
+
+/* Kapitel: ein großer roter Halbkreis rechts mit blauem Quadrat. */
+.kapitel .e1 { left: auto; right: -44vh; top: 6vh; width: 88vh; height: 88vh; background: #c8281e; }
+.kapitel .e2 { right: 18vh; bottom: 10vh; width: 22vh; height: 22vh; border-radius: 0; background: #1f4e9c; }
+.kapitel .e3 { left: 6.4%; bottom: 12%; width: 9vw; }
+.kapitel .e3::after { width: 22vw; }
+.kapitel .e4 { right: auto; left: 6.4%; top: 12%; width: 4vh; height: 4vh; border-radius: 50%; background: #f2b51d; }
+.kapitel .e4::after { display: none; }
+
+/* Inhaltsfolien: eine kleine Komposition unten rechts, links eine schwarze Linie. */
+.folie .e1 { left: auto; top: auto; right: 6vh; bottom: -9vh; width: 18vh; height: 18vh; }
+.folie .e2 { right: -6vh; bottom: -6vh; width: 20vh; height: 20vh; }
+.folie .e3 { left: auto; right: 15vh; bottom: 6vh; width: 9vw; height: 1.6vh; }
+.folie .e3::after { display: none; }
+.folie .e4 { right: auto; left: 2.6%; top: 8.4%; width: 0.6vh; height: 30vh; border-radius: 0; }
+.folie .e4::after { display: none; }

@@ -1,0 +1,128 @@
+/*
+ * @name Blaupause
+ * @beschreibung Technische Zeichnung auf tiefem Blau mit feinem Raster
+ * @text hell
+ * @akzent #8FD3FF
+ */
+
+body {
+  background: radial-gradient(120% 110% at 45% 40%, #134383 0%, #0c2c5a 55%, #071c3c 100%);
+}
+
+/* Das Raster: fein und grob. */
+.e1 {
+  background-image:
+    linear-gradient(rgba(170, 210, 255, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(170, 210, 255, 0.07) 1px, transparent 1px),
+    linear-gradient(rgba(170, 210, 255, 0.15) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(170, 210, 255, 0.15) 1px, transparent 1px);
+  background-size: 2.5vw 2.5vw, 2.5vw 2.5vw, 12.5vw 12.5vw, 12.5vw 12.5vw;
+  background-position: -1px -1px;
+}
+
+/* Ein gezeichnetes Bauteil: Kreise, gestrichelter Teilkreis, Mittellinien. */
+.e2 {
+  inset: auto;
+  left: 66%;
+  top: 16%;
+  width: 62vh;
+  height: 62vh;
+  border: 0.18vmin solid rgba(200, 230, 255, 0.55);
+  border-radius: 50%;
+  box-shadow: 0 0 0 4vh rgba(200, 230, 255, 0.04), inset 0 0 0 9vh rgba(200, 230, 255, 0.03);
+}
+.e2::before {
+  content: "";
+  position: absolute;
+  inset: 16%;
+  border: 0.16vmin dashed rgba(200, 230, 255, 0.5);
+  border-radius: 50%;
+  animation: blaupause-turn 80s linear infinite;
+}
+.e2::after {
+  content: "";
+  position: absolute;
+  inset: -12%;
+  background:
+    linear-gradient(90deg, transparent calc(50% - 0.08vmin), rgba(200, 230, 255, 0.45) calc(50% - 0.08vmin), rgba(200, 230, 255, 0.45) calc(50% + 0.08vmin), transparent calc(50% + 0.08vmin)),
+    linear-gradient(0deg, transparent calc(50% - 0.08vmin), rgba(200, 230, 255, 0.45) calc(50% - 0.08vmin), rgba(200, 230, 255, 0.45) calc(50% + 0.08vmin), transparent calc(50% + 0.08vmin));
+  -webkit-mask-image: repeating-linear-gradient(90deg, #000 0 2.4vmin, transparent 2.4vmin 3vmin), repeating-linear-gradient(0deg, #000 0 2.4vmin, transparent 2.4vmin 3vmin);
+}
+
+/* Eine Maßlinie mit Pfeilen. */
+.e3 {
+  inset: auto;
+  left: 66%;
+  top: 84%;
+  width: 62vh;
+  height: 0.16vmin;
+  background: rgba(200, 230, 255, 0.55);
+}
+.e3::before, .e3::after {
+  content: "";
+  position: absolute;
+  top: -0.9vmin;
+  width: 0;
+  height: 0;
+  border-top: 0.9vmin solid transparent;
+  border-bottom: 0.9vmin solid transparent;
+}
+.e3::before { left: 0; border-right: 1.8vmin solid rgba(200, 230, 255, 0.55); }
+.e3::after { right: 0; border-left: 1.8vmin solid rgba(200, 230, 255, 0.55); }
+
+/* Passermarken in den Ecken. */
+.e4 {
+  --c: rgba(200, 230, 255, 0.6);
+  background:
+    linear-gradient(var(--c), var(--c)) left 2.4% top 4% / 3vw 0.16vmin no-repeat,
+    linear-gradient(var(--c), var(--c)) left 2.4% top 4% / 0.16vmin 3vw no-repeat,
+    linear-gradient(var(--c), var(--c)) right 2.4% top 4% / 3vw 0.16vmin no-repeat,
+    linear-gradient(var(--c), var(--c)) right 2.4% top 4% / 0.16vmin 3vw no-repeat,
+    linear-gradient(var(--c), var(--c)) left 2.4% bottom 4% / 3vw 0.16vmin no-repeat,
+    linear-gradient(var(--c), var(--c)) left 2.4% bottom 4% / 0.16vmin 3vw no-repeat,
+    linear-gradient(var(--c), var(--c)) right 2.4% bottom 4% / 3vw 0.16vmin no-repeat,
+    linear-gradient(var(--c), var(--c)) right 2.4% bottom 4% / 0.16vmin 3vw no-repeat;
+}
+
+/* Das Schriftfeld unten rechts. */
+.e5 {
+  inset: auto;
+  right: 2.4%;
+  bottom: 4%;
+  width: 17vw;
+  height: 6.4vh;
+  border: 0.16vmin solid rgba(200, 230, 255, 0.5);
+  background:
+    linear-gradient(90deg, transparent 62%, rgba(200, 230, 255, 0.5) 62%, rgba(200, 230, 255, 0.5) calc(62% + 0.16vmin), transparent calc(62% + 0.16vmin)),
+    linear-gradient(0deg, transparent 50%, rgba(200, 230, 255, 0.5) 50%, rgba(200, 230, 255, 0.5) calc(50% + 0.16vmin), transparent calc(50% + 0.16vmin));
+}
+
+/* Eine Abtastlinie, die langsam über das Blatt wandert (nur in der Präsentation). */
+.e6 {
+  background: linear-gradient(180deg, transparent 0%, rgba(143, 211, 255, 0.0) 46%, rgba(143, 211, 255, 0.14) 50%, rgba(143, 211, 255, 0) 54%, transparent 100%);
+  background-size: 100% 300%;
+  animation: blaupause-scan 12s linear infinite;
+  opacity: 0;
+}
+html.live .e6 { opacity: 1; }
+
+/* Kapitel: das Bauteil groß rechts. */
+.kapitel .e2 { left: 70%; top: 10%; width: 80vh; height: 80vh; }
+.kapitel .e3 { left: 70%; top: 94%; width: 80vh; }
+.kapitel .e5 { display: none; }
+
+/* Inhaltsfolien: das Bauteil klein in der Ecke, das Raster leiser. */
+.folie .e1 { opacity: 0.6; }
+.folie .e2 { left: 84%; top: 60%; width: 44vh; height: 44vh; opacity: 0.55; }
+.folie .e3 { display: none; }
+.titel .e5 { display: none; }
+.titel .e2 { left: 76%; top: 34%; }
+.titel .e3 { left: 76%; top: 92%; }
+
+@keyframes blaupause-turn {
+  to { transform: rotate(360deg); }
+}
+@keyframes blaupause-scan {
+  from { background-position: 0 100%; }
+  to { background-position: 0 0%; }
+}

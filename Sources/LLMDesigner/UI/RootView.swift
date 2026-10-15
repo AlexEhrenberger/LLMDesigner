@@ -50,6 +50,9 @@ struct RootView: View {
                     if app.citationStudioOpen {
                         CitationStudioScreen()
                             .transition(.opacity)
+                    } else if app.selectedPresentation != nil {
+                        PresenterScreen()
+                            .transition(.asymmetric(insertion: .opacity, removal: .opacity))
                     } else if app.selectedDocumentID != nil {
                         WriterScreen()
                             .transition(.asymmetric(insertion: .identity, removal: .opacity))

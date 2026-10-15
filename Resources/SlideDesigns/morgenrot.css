@@ -1,0 +1,96 @@
+/*
+ * @name Morgenrot
+ * @beschreibung Sonnenaufgang über Hügeln; helle, warme Inhaltsfolien
+ * @text-titel hell
+ * @text-kapitel hell
+ * @text-folie dunkel
+ * @akzent #D9480F
+ */
+
+.titel, .kapitel {
+  background: linear-gradient(180deg, #1b1745 0%, #44207e 26%, #9a2a8c 46%, #e8576a 64%, #f9a04b 82%, #fcd581 100%);
+}
+.folie {
+  background:
+    radial-gradient(70% 90% at 100% 0%, rgba(253, 186, 116, 0.42) 0%, rgba(253, 186, 116, 0) 70%),
+    radial-gradient(60% 60% at 0% 100%, rgba(244, 114, 182, 0.12) 0%, rgba(244, 114, 182, 0) 70%),
+    linear-gradient(165deg, #fffaf2 0%, #fff3e3 62%, #ffe9d2 100%);
+}
+
+/* Die Sonne mit ihrem Schein. */
+.e1 {
+  background:
+    radial-gradient(circle at 50% 84%, #fff6d8 0 9vmin, rgba(255, 236, 170, 0.9) 9.4vmin, rgba(255, 196, 120, 0.45) 16vmin, rgba(255, 160, 100, 0) 46vmin);
+  animation: morgenrot-glow 7s ease-in-out infinite alternate;
+}
+.kapitel .e1 {
+  background:
+    radial-gradient(circle at 80% 76%, #fff6d8 0 8vmin, rgba(255, 236, 170, 0.9) 8.4vmin, rgba(255, 196, 120, 0.45) 15vmin, rgba(255, 160, 100, 0) 42vmin);
+}
+
+/* Sonnenstrahlen. */
+.e2 {
+  background: repeating-conic-gradient(from 0deg at 50% 84%, rgba(255, 240, 200, 0.13) 0deg 4deg, rgba(255, 240, 200, 0) 4deg 12deg);
+  -webkit-mask-image: radial-gradient(circle at 50% 84%, #000 0, rgba(0, 0, 0, 0.6) 30vmin, transparent 75vmin);
+  animation: morgenrot-turn 120s linear infinite;
+}
+.kapitel .e2 {
+  background: repeating-conic-gradient(from 0deg at 80% 76%, rgba(255, 240, 200, 0.12) 0deg 4deg, rgba(255, 240, 200, 0) 4deg 12deg);
+  -webkit-mask-image: radial-gradient(circle at 80% 76%, #000 0, rgba(0, 0, 0, 0.6) 26vmin, transparent 70vmin);
+}
+
+/* Hügel in drei Schichten. */
+.e3, .e4, .e5 {
+  top: auto;
+}
+.e3 {
+  height: 30%;
+  background: #6d2a73;
+  clip-path: ellipse(70% 60% at 22% 100%);
+  opacity: 0.9;
+}
+.e4 {
+  height: 24%;
+  background: #4a1d5e;
+  clip-path: ellipse(64% 62% at 86% 100%);
+}
+.e5 {
+  height: 15%;
+  background: #2b1240;
+  clip-path: ellipse(90% 70% at 40% 100%);
+}
+
+/* Ein Hauch Dunst über dem Horizont und eine leichte Abdunklung für die Schrift. */
+.e6 {
+  background:
+    linear-gradient(180deg, rgba(20, 10, 50, 0.32) 0%, rgba(20, 10, 50, 0.12) 50%, rgba(20, 10, 50, 0) 70%),
+    linear-gradient(0deg, rgba(255, 210, 160, 0.18) 0%, rgba(255, 210, 160, 0) 30%);
+}
+
+/* Inhaltsfolien: hell und ruhig, nur ein Sonnenbogen unten rechts und eine warme Linie. */
+.folie .e1 {
+  background: radial-gradient(circle at 96% 104%, #ffc078 0 13vmin, rgba(255, 192, 120, 0.35) 13.3vmin, rgba(255, 192, 120, 0) 30vmin);
+}
+.folie .e2 {
+  background: repeating-conic-gradient(from 0deg at 96% 104%, rgba(249, 115, 22, 0.1) 0deg 4deg, rgba(249, 115, 22, 0) 4deg 12deg);
+  -webkit-mask-image: radial-gradient(circle at 96% 104%, transparent 0 14vmin, #000 14.5vmin, transparent 40vmin);
+}
+.folie .e3 {
+  top: auto;
+  bottom: 5.4%;
+  left: 6.4%;
+  right: 26%;
+  height: 0.35vmin;
+  clip-path: none;
+  background: linear-gradient(90deg, #d9480f, rgba(217, 72, 15, 0));
+  opacity: 0.55;
+}
+.folie .e4, .folie .e5, .folie .e6 { display: none; }
+
+@keyframes morgenrot-glow {
+  from { opacity: 0.9; }
+  to { opacity: 1; }
+}
+@keyframes morgenrot-turn {
+  to { transform: rotate(8deg); }
+}

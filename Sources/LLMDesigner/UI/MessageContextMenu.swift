@@ -14,7 +14,9 @@ enum MessageContextMenu {
         // Local monitors are called on the main thread.
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.rightMouseDown, .leftMouseDown]) { event in
             let isContextClick = event.type == .rightMouseDown || event.modifierFlags.contains(.control)
-            guard isContextClick, let app = currentApp, let view = event.window?.contentView else { return event }
+            // Only the main window shows messages; sheets, popovers and the presentation window have their own menus.
+            guard isContextClick, let app = currentApp, let window = event.window, window === MainWindow.window,
+                  let view = window.contentView else { return event }
             // AppKit measures from the bottom left, SwiftUI's global space from the top left.
             let point = CGPoint(x: event.locationInWindow.x, y: view.bounds.height - event.locationInWindow.y)
             guard let messageID = app.messageID(at: point), let message = app.message(messageID),

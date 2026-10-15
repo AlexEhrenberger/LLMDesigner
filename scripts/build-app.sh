@@ -32,6 +32,8 @@ cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 # mermaid.js draws the diagrams of the content analysis (offline, in a hidden web view).
 cp Resources/Mermaid/mermaid.min.js Resources/Mermaid/LICENSE "$APP/Contents/Resources/"
 mv "$APP/Contents/Resources/LICENSE" "$APP/Contents/Resources/mermaid-LICENSE.txt"
+# Presenter Studio's slide backgrounds (CSS), see Resources/SlideDesigns/LIESMICH.md.
+cp -R Resources/SlideDesigns "$APP/Contents/Resources/SlideDesigns"
 # SwiftPM resource bundles (math fonts) go into Contents/Resources; see Vendor/SwiftMath/README.md.
 for bundle in "$BIN_DIR"/*.bundle; do
     [ -d "$bundle" ] && cp -R "$bundle" "$APP/Contents/Resources/"

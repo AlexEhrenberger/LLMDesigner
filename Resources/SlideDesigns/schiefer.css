@@ -1,0 +1,90 @@
+/*
+ * @name Schiefer
+ * @beschreibung Schultafel mit Kreidestaub, Holzrahmen und kleinen Skizzen
+ * @text hell
+ * @akzent #F6E27A
+ */
+
+body {
+  background: radial-gradient(130% 110% at 50% 45%, #33433f 0%, #26332f 55%, #1a2321 100%);
+}
+
+/* Kreidestaub. */
+.e1 {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='360' height='360'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.9 -0.35'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  opacity: 0.22;
+}
+
+/* Wischspuren eines Schwamms. */
+.e2 {
+  background:
+    radial-gradient(38% 16% at 30% 28%, rgba(255, 255, 255, 0.06), transparent 70%),
+    radial-gradient(34% 14% at 68% 62%, rgba(255, 255, 255, 0.05), transparent 70%),
+    radial-gradient(26% 12% at 50% 84%, rgba(255, 255, 255, 0.045), transparent 70%),
+    radial-gradient(30% 14% at 78% 18%, rgba(255, 255, 255, 0.04), transparent 70%);
+  transform: rotate(-4deg) scale(1.1);
+}
+
+/* Der Holzrahmen. */
+.e3 {
+  box-shadow:
+    inset 0 0 0 1.5vmin #7a5638,
+    inset 0 0 0 1.9vmin #4d3422,
+    inset 0 0 0 2.1vmin rgba(0, 0, 0, 0.45),
+    inset 0 0 7vmin 2vmin rgba(0, 0, 0, 0.55);
+}
+.e3::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  box-shadow: inset 0 0 0 1.5vmin transparent;
+  background:
+    repeating-linear-gradient(90deg, rgba(255, 220, 170, 0.07) 0 0.4vw, rgba(0, 0, 0, 0.06) 0.4vw 1.1vw);
+  -webkit-mask-image: linear-gradient(#000, #000), linear-gradient(#000, #000);
+  -webkit-mask-size: 100% 1.5vmin, 100% 1.5vmin;
+  -webkit-mask-position: top, bottom;
+  -webkit-mask-repeat: no-repeat;
+}
+
+/* Kreideskizzen: Kringel, Sternchen, ein Pfeil. */
+.e4 {
+  background-repeat: no-repeat;
+  opacity: 0.8;
+}
+.titel .e4 {
+  background-image:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 600 60'><filter id='r'><feTurbulence baseFrequency='0.9' numOctaves='2'/><feDisplacementMap in='SourceGraphic' scale='4'/></filter><path filter='url(%23r)' d='M8 38 C 120 18, 260 14, 380 22 S 560 34, 592 26' fill='none' stroke='%23F6E27A' stroke-width='5' stroke-linecap='round' opacity='0.85'/></svg>"),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><filter id='r'><feTurbulence baseFrequency='0.9' numOctaves='2'/><feDisplacementMap in='SourceGraphic' scale='3'/></filter><path filter='url(%23r)' d='M50 8 L60 40 L94 40 L66 60 L76 92 L50 72 L24 92 L34 60 L6 40 L40 40 Z' fill='none' stroke='white' stroke-width='3.5' stroke-linejoin='round' opacity='0.8'/></svg>"),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><filter id='r'><feTurbulence baseFrequency='0.9' numOctaves='2'/><feDisplacementMap in='SourceGraphic' scale='3'/></filter><path filter='url(%23r)' d='M50 12 L58 42 L88 50 L58 58 L50 88 L42 58 L12 50 L42 42 Z' fill='none' stroke='white' stroke-width='3.5' stroke-linejoin='round' opacity='0.7'/></svg>");
+  background-size: 46vw 4.6vw, 7vmin 7vmin, 5vmin 5vmin;
+  background-position: 50% 69%, 88% 14%, 9% 82%;
+}
+.kapitel .e4 {
+  background-image:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 300'><filter id='r'><feTurbulence baseFrequency='0.9' numOctaves='2'/><feDisplacementMap in='SourceGraphic' scale='5'/></filter><path filter='url(%23r)' d='M150 30 C 230 26, 276 90, 268 160 C 260 236, 190 276, 132 268 C 62 258, 24 196, 34 128 C 44 66, 104 34, 168 40 C 210 46, 246 70, 262 104' fill='none' stroke='white' stroke-width='5' stroke-linecap='round' opacity='0.75'/></svg>"),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 80'><filter id='r'><feTurbulence baseFrequency='0.9' numOctaves='2'/><feDisplacementMap in='SourceGraphic' scale='3'/></filter><path filter='url(%23r)' d='M10 52 C 60 30, 120 30, 182 40 M160 22 L184 40 L158 58' fill='none' stroke='%23F6E27A' stroke-width='4.5' stroke-linecap='round' stroke-linejoin='round' opacity='0.85'/></svg>");
+  background-size: 44vh 44vh, 14vw 5.6vw;
+  background-position: 86% 50%, 64% 72%;
+}
+.folie .e4 {
+  background-image:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><filter id='r'><feTurbulence baseFrequency='0.9' numOctaves='2'/><feDisplacementMap in='SourceGraphic' scale='3'/></filter><path filter='url(%23r)' d='M50 8 L60 40 L94 40 L66 60 L76 92 L50 72 L24 92 L34 60 L6 40 L40 40 Z' fill='none' stroke='%23F6E27A' stroke-width='3.5' stroke-linejoin='round' opacity='0.75'/></svg>"),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><filter id='r'><feTurbulence baseFrequency='0.9' numOctaves='2'/><feDisplacementMap in='SourceGraphic' scale='3'/></filter><path filter='url(%23r)' d='M50 12 L58 42 L88 50 L58 58 L50 88 L42 58 L12 50 L42 42 Z' fill='none' stroke='white' stroke-width='3.5' stroke-linejoin='round' opacity='0.55'/></svg>");
+  background-size: 6vmin 6vmin, 4vmin 4vmin;
+  background-position: 93% 86%, 88% 92%;
+  opacity: 0.6;
+}
+
+/* Die Kreideablage unten mit zwei Stücken Kreide. */
+.e5 {
+  inset: auto;
+  left: 54%;
+  bottom: 2.1vmin;
+  width: 7vw;
+  height: 1.1vmin;
+  border-radius: 0.5vmin;
+  background: #efeee6;
+  box-shadow: 9vw 0.2vmin 0 -0.1vmin #f2d66b, 0 0.2vmin 0.4vmin rgba(0, 0, 0, 0.4);
+  opacity: 0.85;
+}
+.folie .e5 { left: 72%; width: 5vw; }

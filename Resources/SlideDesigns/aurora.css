@@ -1,0 +1,104 @@
+/*
+ * @name Aurora
+ * @beschreibung Polarlicht über einem stillen Nachthimmel
+ * @text hell
+ * @akzent #7CF0D0
+ */
+
+body {
+  background:
+    radial-gradient(110% 70% at 80% -5%, #142a55 0%, rgba(20, 42, 85, 0) 62%),
+    radial-gradient(80% 70% at 0% 105%, #221044 0%, rgba(34, 16, 68, 0) 70%),
+    linear-gradient(180deg, #040714 0%, #070e26 52%, #0a071d 100%);
+}
+
+/* Sterne: zwei Ebenen, die versetzt funkeln. */
+.e1, .e1::after {
+  background-image:
+    radial-gradient(0.16vmin 0.16vmin at 7% 12%, #fff 60%, transparent 100%),
+    radial-gradient(0.12vmin 0.12vmin at 18% 34%, #fff 60%, transparent 100%),
+    radial-gradient(0.2vmin 0.2vmin at 29% 8%, #fff 60%, transparent 100%),
+    radial-gradient(0.12vmin 0.12vmin at 41% 22%, #fff 60%, transparent 100%),
+    radial-gradient(0.16vmin 0.16vmin at 53% 6%, #fff 60%, transparent 100%),
+    radial-gradient(0.12vmin 0.12vmin at 64% 31%, #fff 60%, transparent 100%),
+    radial-gradient(0.2vmin 0.2vmin at 76% 14%, #fff 60%, transparent 100%),
+    radial-gradient(0.12vmin 0.12vmin at 88% 27%, #fff 60%, transparent 100%),
+    radial-gradient(0.16vmin 0.16vmin at 95% 9%, #fff 60%, transparent 100%),
+    radial-gradient(0.12vmin 0.12vmin at 12% 58%, #fff 60%, transparent 100%),
+    radial-gradient(0.16vmin 0.16vmin at 84% 52%, #fff 60%, transparent 100%),
+    radial-gradient(0.12vmin 0.12vmin at 92% 71%, #fff 60%, transparent 100%),
+    radial-gradient(0.12vmin 0.12vmin at 4% 80%, #fff 60%, transparent 100%);
+  opacity: 0.7;
+}
+.e1::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translate(3.7vw, 6.1vh) scaleX(-1);
+  opacity: 0.55;
+  animation: aurora-twinkle 5.5s ease-in-out infinite alternate;
+}
+
+/* Die Vorhänge des Polarlichts: weite, weiche Bögen, kaum sichtbare senkrechte Strahlen. */
+.e2, .e3 {
+  inset: -25%;
+  mix-blend-mode: screen;
+  -webkit-mask-image: repeating-linear-gradient(90deg, #000 0, rgba(0, 0, 0, 0.8) 0.6vw, #000 1.2vw);
+  filter: blur(1.4vmin);
+}
+.e2 {
+  background:
+    radial-gradient(28% 17.3% at 36.7% 40.7%, rgba(124, 240, 208, 0.9), rgba(124, 240, 208, 0) 100%),
+    radial-gradient(20% 14.7% at 51.3% 34%, rgba(96, 214, 255, 0.55), rgba(96, 214, 255, 0) 100%),
+    radial-gradient(17.3% 12% at 26% 48.7%, rgba(124, 240, 208, 0.55), rgba(124, 240, 208, 0) 100%);
+  transform: skewY(-9deg);
+  animation: aurora-drift 22s ease-in-out infinite alternate;
+}
+.e3 {
+  background:
+    radial-gradient(22.7% 16% at 64.7% 32.7%, rgba(167, 139, 250, 0.8), rgba(167, 139, 250, 0) 100%),
+    radial-gradient(14.7% 10.7% at 75.3% 40.7%, rgba(236, 110, 190, 0.45), rgba(236, 110, 190, 0) 100%);
+  transform: skewY(7deg);
+  animation: aurora-drift 28s ease-in-out -9s infinite alternate-reverse;
+}
+
+/* Ein weiches Leuchten über allem. */
+.e4 {
+  background:
+    radial-gradient(60% 45% at 35% 22%, rgba(124, 240, 208, 0.16), transparent 70%),
+    radial-gradient(50% 40% at 78% 16%, rgba(167, 139, 250, 0.16), transparent 70%);
+  animation: aurora-breathe 9s ease-in-out infinite alternate;
+}
+
+/* Ein dunkler Horizont mit Bergen. */
+.e5 {
+  top: auto;
+  height: 20%;
+  background: linear-gradient(180deg, #080b1a 0%, #03040b 100%);
+  clip-path: polygon(0 62%, 9% 40%, 17% 55%, 27% 24%, 36% 48%, 44% 36%, 55% 60%, 66% 30%, 74% 46%, 83% 20%, 92% 44%, 100% 34%, 100% 100%, 0 100%);
+}
+
+/* Kapitel: das Licht rechts, links Ruhe für die Überschrift. */
+.kapitel .e2 { translate: 34vw -4vh; opacity: 0.8; }
+.kapitel .e3 { translate: 8vw -2vh; }
+.kapitel .e5 { height: 14%; }
+
+/* Inhaltsfolien: das Licht nur als Schimmer am oberen Rand, kein Horizont, viel Ruhe für Text. */
+.folie .e2 { translate: 0 -30vh; opacity: 0.42; }
+.folie .e3 { translate: 0 -24vh; opacity: 0.38; }
+.folie .e4 { opacity: 0.4; }
+.folie .e5 { display: none; }
+.folie .e1 { opacity: 0.35; }
+
+@keyframes aurora-drift {
+  from { margin-left: -3vw; }
+  to { margin-left: 4vw; }
+}
+@keyframes aurora-breathe {
+  from { opacity: 0.7; }
+  to { opacity: 1; }
+}
+@keyframes aurora-twinkle {
+  from { opacity: 0.2; }
+  to { opacity: 0.8; }
+}

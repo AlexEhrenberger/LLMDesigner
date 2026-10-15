@@ -207,7 +207,7 @@ private struct UnfoldingFrame: View {
 
 /// A pill at the bottom of the sheet while the document is dictated into or read aloud, and for notices
 /// such as Qwen TTS not being reachable.
-private struct WriterAudioStatus: View {
+struct WriterAudioStatus: View {
     @Environment(AppModel.self) private var app
     let controller: WriterEditorController
 
@@ -593,7 +593,7 @@ private struct TableOfContentsMenu: View {
 }
 
 /// Citations from Citation Studio: the search at the caret (⌘⇧K), the reference list, the sources panel.
-private struct CitationMenu: View {
+struct CitationMenu: View {
     @Environment(AppModel.self) private var app
     let controller: WriterEditorController
     @State private var hovering = false
@@ -626,7 +626,7 @@ private struct CitationMenu: View {
 }
 
 /// Inserts a table (a grid to pick its size) or, with the caret in a table, changes it.
-private struct TableButton: View {
+struct TableButton: View {
     let controller: WriterEditorController
     let isInTable: Bool
     @State private var showsPopover = false
@@ -769,7 +769,7 @@ private struct TableSizePicker: View {
     }
 }
 
-private struct ToolbarButton: View {
+struct ToolbarButton: View {
     let symbol: String
     let help: String
     let isActive: Bool
@@ -804,7 +804,7 @@ private struct ToolbarButton: View {
     }
 }
 
-private struct FontMenu: View {
+struct FontMenu: View {
     @Environment(AppModel.self) private var app
     let document: WriterDocument
     @State private var hovering = false
@@ -839,7 +839,7 @@ private struct FontMenu: View {
     }
 }
 
-private struct BlockMenu: View {
+struct BlockMenu: View {
     let controller: WriterEditorController
     let current: WriterBlock
     @State private var hovering = false
@@ -878,7 +878,7 @@ private struct BlockMenu: View {
     }
 }
 
-private struct MenuLabel: View {
+struct MenuLabel: View {
     let symbol: String
     let title: String
     let hovering: Bool

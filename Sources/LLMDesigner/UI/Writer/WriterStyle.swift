@@ -18,6 +18,10 @@ struct WriterPalette: Equatable {
     let rule: NSColor
     let tableBorder: NSColor
     let tableHeader: NSColor
+    /// Slides: title slides centre their text; documents keep it natural.
+    var alignment: NSTextAlignment = .natural
+    /// A slide's text over its background: nothing of the page is drawn.
+    var isSlide = false
 
     static let dark = WriterPalette(
         isLight: false,
@@ -56,6 +60,36 @@ struct WriterPalette: Equatable {
         tableBorder: NSColor.black.withAlphaComponent(0.16),
         tableHeader: NSColor(hex: 0xF4F3F8)
     )
+}
+
+extension WriterPalette {
+    /// The text of a slide over its background: light text on a dark background or dark text on a light one, with the
+    /// background design's accent.
+    static func slide(tone: SlideTone, accent: UInt32?, alignment: NSTextAlignment = .natural) -> WriterPalette {
+        let isLight = tone == .dark
+        let ink: NSColor = isLight ? NSColor(hex: 0x17171B) : NSColor(hex: 0xF7F7FA)
+        let accentColor = accent.map { NSColor(hex: $0) } ?? (isLight ? NSColor(hex: 0x5B43D6) : NSColor(hex: 0xB9A9FF))
+        return WriterPalette(
+            isLight: isLight,
+            windowBackground: .clear,
+            page: .clear,
+            pageBorder: .clear,
+            text: ink,
+            secondaryText: ink.withAlphaComponent(isLight ? 0.74 : 0.78),
+            tertiaryText: ink.withAlphaComponent(isLight ? 0.45 : 0.5),
+            accent: accentColor,
+            codeBlock: ink.withAlphaComponent(0.07),
+            inlineCodeText: ink,
+            inlineCodeBackground: ink.withAlphaComponent(0.1),
+            quoteBar: accentColor.withAlphaComponent(0.8),
+            selection: accentColor.withAlphaComponent(isLight ? 0.28 : 0.38),
+            rule: ink.withAlphaComponent(0.3),
+            tableBorder: ink.withAlphaComponent(0.28),
+            tableHeader: ink.withAlphaComponent(0.08),
+            alignment: alignment,
+            isSlide: true
+        )
+    }
 }
 
 extension NSColor {
@@ -169,6 +203,10 @@ enum WriterStyler {
         }
         // AppKit leaves no room below a table; the paragraph after it keeps its distance.
         if block != .table, previous == .table { style.paragraphSpacingBefore = max(style.paragraphSpacingBefore, 16) }
+        // A centred slide centres its text; lists, quotes, code and objects keep their own alignment.
+        if palette.alignment != .natural, cell == nil, [.paragraph, .chapter, .heading1, .heading2, .heading3].contains(block) {
+            style.alignment = palette.alignment
+        }
         return style
     }
 

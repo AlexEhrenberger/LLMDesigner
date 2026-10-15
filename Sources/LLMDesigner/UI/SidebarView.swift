@@ -156,6 +156,9 @@ private struct ChatList: View {
                                 Button("Neues Dokument in diesem Ordner", systemImage: StudioApplication.writer.symbol) {
                                     app.newDocument(inFolder: section.folder.id)
                                 }
+                                Button("Neue Präsentation in diesem Ordner", systemImage: StudioApplication.presenter.symbol) {
+                                    app.newPresentation(inFolder: section.folder.id)
+                                }
                                 Divider()
                                 FolderColorMenu(folder: section.folder)
                                 Button("Umbenennen", systemImage: "pencil") { app.renamingID = section.folder.id }
@@ -199,7 +202,7 @@ private struct ChatList: View {
         } message: { chat in
             Text("„\(chat.title)“ wird dauerhaft gelöscht.")
         }
-        .alert("Dokument löschen?", isPresented: isPresent($pendingDocumentDelete), presenting: pendingDocumentDelete) { document in
+        .alert(pendingDocumentDelete?.isPresentation == true ? "Präsentation löschen?" : "Dokument löschen?", isPresented: isPresent($pendingDocumentDelete), presenting: pendingDocumentDelete) { document in
             Button("Löschen", role: .destructive) { app.deleteDocument(document.id) }
             Button("Abbrechen", role: .cancel) {}
         } message: { document in
@@ -243,11 +246,11 @@ private struct ChatList: View {
             onSelect: { app.selectDocument(document.id) },
             onRename: { app.renameDocument(document.id, to: $0) },
             leading: {
-                Image(systemName: StudioApplication.writer.symbol)
+                Image(systemName: document.isPresentation ? StudioApplication.presenter.symbol : StudioApplication.writer.symbol)
                     .font(.system(size: 12))
                     .foregroundStyle(folder?.color?.color ?? Theme.accent.opacity(0.85))
                     .frame(width: 18)
-                    .help("Dokument (Writer Studio)")
+                    .help(document.isPresentation ? "Präsentation (Presenter Studio)" : "Dokument (Writer Studio)")
             },
             trailing: { EmptyView() },
             menu: {

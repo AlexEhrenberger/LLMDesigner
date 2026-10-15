@@ -94,6 +94,7 @@ final class AppModel {
         static let contextDefault = "contextDefault"
         static let writerLightPaper = "writerLightPaper"
         static let writerReadsAnswers = "writerReadsAnswers"
+        static let presenterNotesVisible = "presenterNotesVisible"
     }
 
     static let defaultSpeakerTemplate = "{Modell} sagt:"
@@ -375,6 +376,24 @@ final class AppModel {
         didSet { settings.set(writerReadsAnswers, forKey: Keys.writerReadsAnswers) }
     }
 
+    // MARK: Presenter Studio (see AppModel+Presenter.swift)
+
+    /// The slide open in the editor of the open presentation.
+    var selectedSlideID: PresentationSlide.ID?
+    /// A slide that was just deleted and can still be brought back.
+    var deletedSlide: DeletedSlide?
+    @ObservationIgnored var deletedSlideTask: Task<Void, Never>?
+    /// Slides whose speaker notes the model is writing, and why it failed.
+    var notesWriting: Set<PresentationSlide.ID> = []
+    var notesErrors: [PresentationSlide.ID: String] = [:]
+    @ObservationIgnored var notesTask: Task<Void, Never>?
+    /// The speaker notes show below the slide.
+    var presenterNotesVisible: Bool {
+        didSet { settings.set(presenterNotesVisible, forKey: Keys.presenterNotesVisible) }
+    }
+    /// Plays the open presentation (tab "Abspielen" and full screen).
+    @ObservationIgnored let presentationPlayer = PresentationPlayer()
+
     init() {
         let defaults = settings
         endpoint = defaults.string(forKey: Keys.endpoint) ?? Self.defaultEndpoint
@@ -402,6 +421,7 @@ final class AppModel {
             ?? ContextChoice.defaultLength
         writerLightPaper = defaults.bool(forKey: Keys.writerLightPaper)
         writerReadsAnswers = defaults.bool(forKey: Keys.writerReadsAnswers)
+        presenterNotesVisible = defaults.object(forKey: Keys.presenterNotesVisible) as? Bool ?? true
         chats = store.loadAll()
         documents = documentStore.loadAll()
         chatFolders = library.loadChatFolders()
@@ -1228,8 +1248,10 @@ final class AppModel {
 
     /// The message of the selected chat at `point`, if the point lies in the visible part of the message list.
     func messageID(at point: CGPoint) -> ChatMessage.ID? {
-        // The skill library replaces the message list; its last frames are stale then.
-        guard sidebarMode == .chats, messageViewport.contains(point), let chat = selectedChat else { return nil }
+        // The skill library and the studios replace the message list; its last frames are stale then, and a
+        // right-click into a document must open the document's menu, not the chat's.
+        guard sidebarMode == .chats, activeApplication == nil, conversation == nil,
+              messageViewport.contains(point), let chat = selectedChat else { return nil }
         return chat.messages.first { message in
             message.hasContent && messageFrames[message.id]?.contains(point) == true
         }?.id

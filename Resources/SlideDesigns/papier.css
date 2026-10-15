@@ -1,0 +1,127 @@
+/*
+ * @name Papier
+ * @beschreibung Warmes Büttenpapier, feine Linien und ein Hauch Terrakotta
+ * @text dunkel
+ * @akzent #B4532A
+ */
+
+body {
+  background:
+    radial-gradient(120% 120% at 50% 40%, rgba(255, 255, 255, 0) 55%, rgba(120, 90, 50, 0.16) 100%),
+    #f3ede1;
+}
+
+/* Die Faser des Papiers. */
+.e1 {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='320' height='320'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.7' numOctaves='4' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.35 0 0 0 0 0.27 0 0 0 0 0.18 0 0 0 0.9 -0.3'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  opacity: 0.32;
+}
+
+/* Ein feiner Doppelrahmen. */
+.e2 {
+  inset: 3.6% 2.8%;
+  border: 0.14vmin solid rgba(70, 50, 35, 0.42);
+}
+.e2::before {
+  content: "";
+  position: absolute;
+  inset: 0.7vmin;
+  border: 0.1vmin solid rgba(70, 50, 35, 0.22);
+}
+
+/* Terrakotta: eine große Scheibe, angeschnitten, und ein kleines Gegengewicht. */
+.e3 {
+  inset: auto;
+  left: 74%;
+  top: 56%;
+  width: 62vh;
+  height: 62vh;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #c8653b, #a8461f);
+  box-shadow: inset 0 0 6vmin rgba(80, 30, 10, 0.25);
+  opacity: 0.92;
+}
+.e3::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 0.9 0 0 0 0 0.8 0 0 0 0.6 -0.2'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  opacity: 0.35;
+  mix-blend-mode: soft-light;
+}
+.e4 {
+  inset: auto;
+  left: 7%;
+  top: 11%;
+  width: 7vh;
+  height: 7vh;
+  border-radius: 50%;
+  border: 0.16vmin solid #b4532a;
+}
+
+/* Ein kleines Ornament über dem Titel. */
+.e5 {
+  inset: auto;
+  left: calc(50% - 5vw);
+  top: 26%;
+  width: 10vw;
+  height: 0.16vmin;
+  background: linear-gradient(90deg, transparent, #b4532a 30%, #b4532a 70%, transparent);
+}
+.e5::after {
+  content: "";
+  position: absolute;
+  left: calc(50% - 0.7vmin);
+  top: -0.7vmin;
+  width: 1.4vmin;
+  height: 1.4vmin;
+  background: #f3ede1;
+  border: 0.16vmin solid #b4532a;
+  transform: rotate(45deg);
+}
+
+/* Kapitel: ein Terrakotta-Band links, die Scheibe rechts als Linie. */
+.kapitel .e3 {
+  left: 70%;
+  top: 14%;
+  width: 72vh;
+  height: 72vh;
+  background: none;
+  border: 0.22vmin solid rgba(180, 83, 42, 0.7);
+  box-shadow: 0 0 0 2vmin rgba(180, 83, 42, 0.08);
+}
+.kapitel .e3::after { display: none; }
+.kapitel .e4 {
+  left: 0;
+  top: 0;
+  width: 2.2vw;
+  height: 100%;
+  border: none;
+  border-radius: 0;
+  background: #b4532a;
+}
+.kapitel .e5 { display: none; }
+.kapitel .e2 { left: 4.6%; }
+
+/* Inhaltsfolien: nur der Rahmen, eine Fußlinie und ein kleines Quadrat. */
+.folie .e3 {
+  left: auto;
+  right: 4.4%;
+  top: 7%;
+  width: 1.8vmin;
+  height: 1.8vmin;
+  border-radius: 0;
+  box-shadow: none;
+  background: #b4532a;
+}
+.folie .e3::after { display: none; }
+.folie .e4 { display: none; }
+.folie .e5 {
+  left: 6.4%;
+  top: auto;
+  bottom: 7.4%;
+  width: 87.2%;
+  background: linear-gradient(90deg, rgba(70, 50, 35, 0.35), rgba(70, 50, 35, 0.12));
+}
+.folie .e5::after { display: none; }

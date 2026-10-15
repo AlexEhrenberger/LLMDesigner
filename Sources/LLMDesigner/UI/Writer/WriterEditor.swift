@@ -13,6 +13,8 @@ final class WriterEditorController {
     var currentHeading: Int?
     /// A bookmark that was just made; the side panel shows it highlighted for a moment.
     var recentBookmarkID: String?
+    /// Presenter Studio: the slide's text is longer than the slide.
+    var slideOverflows = false
     @ObservationIgnored weak var textView: WriterTextView?
     @ObservationIgnored weak var app: AppModel?
 
@@ -146,8 +148,15 @@ final class WriterEditorController {
     }
 }
 
-/// The text view in its scroll view. Loads a document when its ID changes and reports the text as Markdown
-/// shortly after every edit.
+/// Presenter Studio: the editor shows one slide of a presentation instead of a document's text.
+struct WriterSlideContent: Equatable {
+    let id: PresentationSlide.ID
+    let markdown: String
+    let layout: WriterTextView.SlideLayout
+}
+
+/// The text view in its scroll view. Loads a document (or a slide) when its ID changes and reports the text as
+/// Markdown shortly after every edit.
 struct WriterEditor: NSViewRepresentable {
     let app: AppModel
     let document: WriterDocument
@@ -156,28 +165,37 @@ struct WriterEditor: NSViewRepresentable {
     let assistant: WriterAssistant
     let isReadingAloud: Bool
     let isDictating: Bool
+    var slide: WriterSlideContent?
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeNSView(context: Context) -> NSScrollView {
-        let scrollView = NSScrollView()
+        let scrollView: NSScrollView = slide == nil ? NSScrollView() : SlideScrollView()
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
         scrollView.borderType = .noBorder
-        scrollView.drawsBackground = true
+        scrollView.drawsBackground = slide == nil
         scrollView.backgroundColor = palette.windowBackground
+        scrollView.contentView.drawsBackground = slide == nil
         scrollView.contentView.postsFrameChangedNotifications = true
 
         let textView = WriterTextView.make()
         textView.minSize = .zero
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude)
         textView.delegate = context.coordinator
+        textView.slideLayout = slide?.layout
         scrollView.documentView = textView
 
         let coordinator = context.coordinator
         coordinator.textView = textView
         coordinator.controller = controller
-        coordinator.onChange = { [weak app] id, markdown in app?.updateDocument(id, markdown: markdown) }
+        coordinator.onChange = { [weak app, weak coordinator] id, markdown in
+            if let slideID = coordinator?.slideID {
+                app?.updateSlide(id, slideID, markdown: markdown)
+            } else {
+                app?.updateDocument(id, markdown: markdown)
+            }
+        }
         controller.textView = textView
         controller.app = app
         textView.onStateChange = { [weak controller, weak textView] in
@@ -185,6 +203,7 @@ struct WriterEditor: NSViewRepresentable {
             controller.state = textView.state
         }
         textView.onReadAloud = { [weak controller] in controller?.readAloud() }
+        textView.onSlideOverflow = { [weak controller] overflows in controller?.slideOverflows = overflows }
         textView.onDictate = { [weak controller] in controller?.toggleDictation() }
         textView.onStopReading = { [weak app] in app?.stopReadingDocument() }
         textView.onNotice = { [weak app] in app?.showNotice($0) }
@@ -217,7 +236,7 @@ struct WriterEditor: NSViewRepresentable {
         app.writerDictation = { [weak coordinator] event, id in coordinator?.dictation(event, for: id) }
         coordinator.observeResize(of: scrollView)
         coordinator.observeScrolling(of: scrollView)
-        coordinator.load(document, palette: palette)
+        coordinator.load(document, slide: slide, palette: palette)
         return scrollView
     }
 
@@ -225,14 +244,19 @@ struct WriterEditor: NSViewRepresentable {
         let coordinator = context.coordinator
         coordinator.textView?.isReadingAloud = isReadingAloud
         coordinator.textView?.isDictating = isDictating
-        if coordinator.documentID != document.id {
+        if coordinator.documentID != document.id || coordinator.slideID != slide?.id {
             assistant.reset()
             coordinator.flush()
-            coordinator.load(document, palette: palette)
+            coordinator.textView?.slideLayout = slide?.layout
+            coordinator.load(document, slide: slide, palette: palette)
             return
         }
         guard let textView = coordinator.textView else { return }
         textView.dynamicOutline = document.outline
+        if let slide, textView.slideLayout != slide.layout {
+            textView.slideLayout = slide.layout
+            if textView.palette == palette { textView.restyleAll() }
+        }
         if textView.palette != palette || textView.family != document.font {
             textView.family = document.font
             textView.palette = palette
@@ -251,6 +275,8 @@ struct WriterEditor: NSViewRepresentable {
         weak var controller: WriterEditorController?
         var onChange: ((WriterDocument.ID, String) -> Void)?
         private(set) var documentID: WriterDocument.ID?
+        /// The slide shown, in Presenter Studio.
+        private(set) var slideID: PresentationSlide.ID?
         private var isDirty = false
         private var pending: Task<Void, Never>?
         private var resizeObserver: NSObjectProtocol?
@@ -259,16 +285,17 @@ struct WriterEditor: NSViewRepresentable {
         private var generationObserver: NSObjectProtocol?
         private var generationTimer: Timer?
 
-        func load(_ document: WriterDocument, palette: WriterPalette) {
+        func load(_ document: WriterDocument, slide: WriterSlideContent?, palette: WriterPalette) {
             guard let textView else { return }
             documentID = document.id
+            slideID = slide?.id
             isDirty = false
             textView.dynamicOutline = document.outline
             // Citations are drawn in the style of this document's sources.
             textView.citations?.loadIfNeeded()
             textView.citationStyleCache = nil
             textView.lastCitedKeys = []
-            textView.load(markdown: document.markdown, family: document.font, palette: palette)
+            textView.load(markdown: slide?.markdown ?? document.markdown, family: document.font, palette: palette)
             controller?.state = textView.state
             updateGenerationTimer()
             DispatchQueue.main.async { [weak textView] in
@@ -370,5 +397,35 @@ struct WriterEditor: NSViewRepresentable {
             if let generationObserver { NotificationCenter.default.removeObserver(generationObserver) }
             generationTimer?.invalidate()
         }
+    }
+}
+
+/// The scroll view of a slide: the canvas keeps its size in points and is magnified to the width there is, so the
+/// slide looks the same in the editor, the slide list and the presentation. Pinching doesn't change it.
+class SlideScrollView: NSScrollView {
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        allowsMagnification = true
+        minMagnification = 0.05
+        maxMagnification = 40
+        hasHorizontalScroller = false
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not supported")
+    }
+
+    override func magnify(with event: NSEvent) {}
+    override func smartMagnify(with event: NSEvent) {}
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        fitCanvas()
+    }
+
+    func fitCanvas() {
+        guard bounds.width > 1 else { return }
+        let target = bounds.width / WriterTextView.SlideLayout.canvas.width
+        if abs(magnification - target) > 0.0005 { magnification = target }
     }
 }

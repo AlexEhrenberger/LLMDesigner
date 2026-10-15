@@ -15,6 +15,20 @@ struct WriterDocument: Identifiable, Hashable, Sendable {
     var tocMode: WriterTOCMode?
     /// The model's table of contents (dynamic mode).
     var outline: DocumentOutline?
+    /// Set for a presentation (Presenter Studio): its slides. `markdown` then holds the slides' text one after the
+    /// other (see `PresentationDeck.plainMarkdown`), so search, citations and the content analysis work on it.
+    var deck: PresentationDeck? {
+        didSet { if let deck { markdown = deck.plainMarkdown } }
+    }
+
+    var isPresentation: Bool { deck != nil }
+
+    static func newPresentation() -> WriterDocument {
+        var document = WriterDocument()
+        document.deck = .new()
+        document.font = .sans
+        return document
+    }
 
     var effectiveTOCMode: WriterTOCMode {
         tocMode ?? (markdown.contains("\n#") || markdown.hasPrefix("#") ? .headings : .dynamic)
@@ -22,13 +36,17 @@ struct WriterDocument: Identifiable, Hashable, Sendable {
 
     var displayTitle: String {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? "Unbenanntes Dokument" : trimmed
+        return trimmed.isEmpty ? (isPresentation ? "Unbenannte Präsentation" : "Unbenanntes Dokument") : trimmed
     }
 
-    var isEmpty: Bool { markdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    var isEmpty: Bool {
+        if let deck { return deck.slides.allSatisfy(\.isEmpty) && deck.slides.count <= 1 }
+        return markdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 
     func matches(_ query: String) -> Bool {
         query.isEmpty || displayTitle.localizedStandardContains(query) || markdown.localizedStandardContains(query)
+            || deck?.slides.contains { $0.notes.localizedStandardContains(query) } == true
     }
 
     /// The first line of the text without Markdown marks, as the automatic title.
@@ -131,17 +149,23 @@ struct WriterDocumentStore {
             "font: \(document.font.rawValue)",
         ]
         if let folderID = document.folderID { header.append("folder: \(folderID.uuidString)") }
+        if let deck = document.deck {
+            header.append("kind: presentation")
+            header.append("backgrounds: \(deck.backgroundsLine)")
+        }
         if let mode = document.tocMode { header.append("toc: \(mode.rawValue)") }
         // One line of JSON, which is also valid YAML.
         if let outline = document.outline, let data = try? JSONEncoder.outline.encode(outline), let json = String(data: data, encoding: .utf8) {
             header.append("outline: \(json)")
         }
-        return "---\n" + header.joined(separator: "\n") + "\n---\n\n" + document.markdown
+        return "---\n" + header.joined(separator: "\n") + "\n---\n\n" + (document.deck?.serialized ?? document.markdown)
     }
 
     static func decode(_ text: String, fallbackID: UUID?) -> WriterDocument? {
         var document = WriterDocument()
         var body = Substring(text)
+        var isPresentation = false
+        var backgrounds: RoleBackgrounds?
         if text.hasPrefix("---\n"), let end = text.range(of: "\n---\n", range: text.index(text.startIndex, offsetBy: 4)..<text.endIndex) {
             let header = text[text.index(text.startIndex, offsetBy: 4)..<end.lowerBound]
             for line in header.split(separator: "\n") {
@@ -158,6 +182,8 @@ struct WriterDocumentStore {
                 case "folder": document.folderID = UUID(uuidString: value)
                 case "toc": document.tocMode = WriterTOCMode(rawValue: value)
                 case "outline": document.outline = try? JSONDecoder.outline.decode(DocumentOutline.self, from: Data(value.utf8))
+                case "kind": isPresentation = value == "presentation"
+                case "backgrounds": backgrounds = PresentationDeck.backgrounds(from: value)
                 default: break
                 }
             }
@@ -169,7 +195,13 @@ struct WriterDocumentStore {
         } else {
             return nil
         }
-        document.markdown = String(body)
+        if isPresentation {
+            var deck = PresentationDeck.parse(String(body))
+            if let backgrounds { deck.backgrounds = backgrounds }
+            document.deck = deck
+        } else {
+            document.markdown = String(body)
+        }
         if document.title.isEmpty { document.title = WriterDocument.makeTitle(from: document.markdown) }
         return document
     }
