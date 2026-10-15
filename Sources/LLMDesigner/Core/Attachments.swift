@@ -26,12 +26,8 @@ enum AttachmentStore {
 
     static let maxPixelSize = 1600
 
-    static let directory: URL = {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        let url = base.appendingPathComponent("LLMDesigner/Attachments", isDirectory: true)
-        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-        return url
-    }()
+    /// In the open library.
+    static var directory: URL { AppLibrary.current.folder("Attachments") }
 
     static func url(for attachment: ImageAttachment) -> URL {
         directory.appendingPathComponent(attachment.fileName)

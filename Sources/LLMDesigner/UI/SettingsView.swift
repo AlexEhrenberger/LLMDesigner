@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(AppModel.self) private var app
+    @Environment(LibrarySession.self) private var session
     @State private var engine: LaTeXEngine?
     @State private var qwenVoices = QwenTTSClient.fallbackVoices
     @State private var qwenReachable: Bool?
@@ -10,6 +11,28 @@ struct SettingsView: View {
         @Bindable var app = app
 
         Form {
+            Section {
+                LabeledContent("Bibliothek") {
+                    HStack(spacing: 8) {
+                        Text(session.library.name)
+                            .foregroundStyle(Theme.textPrimary)
+                        Button("Im Finder zeigen") { session.revealInFinder() }
+                    }
+                }
+                LabeledContent("Ort") {
+                    Text(session.library.url.deletingLastPathComponent().path)
+                        .foregroundStyle(Theme.textSecondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .textSelection(.enabled)
+                }
+            } header: {
+                Text("Bibliothek")
+            } footer: {
+                Text("Alle Einstellungen hier gelten für die geöffnete Bibliothek und liegen in ihr – zusammen mit Chats, Dokumenten, Personas und Skills. Gewechselt wird unten links in der Seitenleiste.")
+                    .foregroundStyle(Theme.textTertiary)
+            }
+
             Section {
                 TextField("Endpoint", text: $app.endpoint, prompt: Text(AppModel.defaultEndpoint))
                 SecureField("API-Token (optional)", text: $app.apiKey)

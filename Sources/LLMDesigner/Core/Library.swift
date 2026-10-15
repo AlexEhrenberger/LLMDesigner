@@ -124,7 +124,7 @@ enum SkillPrompt {
     }
 }
 
-/// Saves the chat folders, skills and skill folders next to the chats in Application Support.
+/// Saves the chat folders, skills and skill folders at the top of the library.
 struct LibraryStore {
     struct SkillLibrary: Codable {
         var skills: [Skill] = []
@@ -136,9 +136,7 @@ struct LibraryStore {
     private let decoder: JSONDecoder
 
     init() {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        directory = base.appendingPathComponent("LLMDesigner", isDirectory: true)
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        directory = AppLibrary.current.url
 
         encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601

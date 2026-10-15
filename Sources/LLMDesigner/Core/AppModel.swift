@@ -99,50 +99,53 @@ final class AppModel {
 
     // MARK: Settings
 
+    /// The settings live in the open library (`Einstellungen.plist`), not in the system preferences.
+    @ObservationIgnored let settings: LibrarySettings = AppLibrary.current.settings
+
     var endpoint: String {
         didSet {
-            UserDefaults.standard.set(endpoint, forKey: Keys.endpoint)
+            settings.set(endpoint, forKey: Keys.endpoint)
             scheduleRefresh()
         }
     }
     var apiKey: String {
         didSet {
-            UserDefaults.standard.set(apiKey, forKey: Keys.apiKey)
+            settings.set(apiKey, forKey: Keys.apiKey)
             scheduleRefresh()
         }
     }
     var systemPrompt: String {
-        didSet { UserDefaults.standard.set(systemPrompt, forKey: Keys.systemPrompt) }
+        didSet { settings.set(systemPrompt, forKey: Keys.systemPrompt) }
     }
     var temperature: Double {
-        didSet { UserDefaults.standard.set(temperature, forKey: Keys.temperature) }
+        didSet { settings.set(temperature, forKey: Keys.temperature) }
     }
     var useCustomTemperature: Bool {
-        didSet { UserDefaults.standard.set(useCustomTemperature, forKey: Keys.useCustomTemperature) }
+        didSet { settings.set(useCustomTemperature, forKey: Keys.useCustomTemperature) }
     }
     var sidebarVisible: Bool {
-        didSet { UserDefaults.standard.set(sidebarVisible, forKey: Keys.sidebarVisible) }
+        didSet { settings.set(sidebarVisible, forKey: Keys.sidebarVisible) }
     }
 
     // MARK: PDF export settings
 
     var pdfPaperSize: PaperSize {
-        didSet { UserDefaults.standard.set(pdfPaperSize.rawValue, forKey: Keys.pdfPaperSize) }
+        didSet { settings.set(pdfPaperSize.rawValue, forKey: Keys.pdfPaperSize) }
     }
     /// Starts an exported answer with a line such as "Gemma sagt:".
     var pdfSpeakerLineEnabled: Bool {
-        didSet { UserDefaults.standard.set(pdfSpeakerLineEnabled, forKey: Keys.pdfSpeakerLineEnabled) }
+        didSet { settings.set(pdfSpeakerLineEnabled, forKey: Keys.pdfSpeakerLineEnabled) }
     }
     var pdfSpeakerTemplate: String {
-        didSet { UserDefaults.standard.set(pdfSpeakerTemplate, forKey: Keys.pdfSpeakerTemplate) }
+        didSet { settings.set(pdfSpeakerTemplate, forKey: Keys.pdfSpeakerTemplate) }
     }
     var pdfOpenAfterExport: Bool {
-        didSet { UserDefaults.standard.set(pdfOpenAfterExport, forKey: Keys.pdfOpenAfterExport) }
+        didSet { settings.set(pdfOpenAfterExport, forKey: Keys.pdfOpenAfterExport) }
     }
 
     /// Suggest follow-up questions under each new answer.
     var suggestFollowUps: Bool {
-        didSet { UserDefaults.standard.set(suggestFollowUps, forKey: Keys.suggestFollowUps) }
+        didSet { settings.set(suggestFollowUps, forKey: Keys.suggestFollowUps) }
     }
     @ObservationIgnored private var followUpTasks: [Chat.ID: Task<Void, Never>] = [:]
 
@@ -150,7 +153,7 @@ final class AppModel {
 
     /// Pages without readable text (JavaScript apps) or with bot protection are read through Jina Reader.
     var webReaderFallback: Bool {
-        didSet { UserDefaults.standard.set(webReaderFallback, forKey: Keys.webReaderFallback) }
+        didSet { settings.set(webReaderFallback, forKey: Keys.webReaderFallback) }
     }
     /// Globe and W buttons in the composer of a chat that doesn't exist yet.
     private var newChatWebSearch = false
@@ -162,10 +165,10 @@ final class AppModel {
 
     /// Memory and context length of the chat that is being started; both start with the last choice.
     var newChatMemory: MemoryLevel {
-        didSet { UserDefaults.standard.set(newChatMemory.rawValue, forKey: Keys.memoryDefault) }
+        didSet { settings.set(newChatMemory.rawValue, forKey: Keys.memoryDefault) }
     }
     var newChatContextLength: Int {
-        didSet { UserDefaults.standard.set(newChatContextLength, forKey: Keys.contextDefault) }
+        didSet { settings.set(newChatContextLength, forKey: Keys.contextDefault) }
     }
     /// A model that is being reloaded with another context length before a chat can go on.
     var contextReload: ContextReload?
@@ -185,17 +188,17 @@ final class AppModel {
     // MARK: Speech (dictation and reading aloud, see AppModel+Speech.swift)
 
     var dictationMode: DictationMode {
-        didSet { UserDefaults.standard.set(dictationMode.rawValue, forKey: Keys.dictationMode) }
+        didSet { settings.set(dictationMode.rawValue, forKey: Keys.dictationMode) }
     }
     var speechEngine: SpeechEngine {
-        didSet { UserDefaults.standard.set(speechEngine.rawValue, forKey: Keys.speechEngine) }
+        didSet { settings.set(speechEngine.rawValue, forKey: Keys.speechEngine) }
     }
     var qwenVoice: String {
-        didSet { UserDefaults.standard.set(qwenVoice, forKey: Keys.qwenVoice) }
+        didSet { settings.set(qwenVoice, forKey: Keys.qwenVoice) }
     }
     /// macOS speech rate 0.3…0.7 (0.5 = normal); also the tempo of Qwen playback.
     var speechRate: Double {
-        didSet { UserDefaults.standard.set(speechRate, forKey: Keys.speechRate) }
+        didSet { settings.set(speechRate, forKey: Keys.speechRate) }
     }
     var dictationStatus: DictationStatus = .idle
     var dictationLevel: Float = 0
@@ -216,14 +219,14 @@ final class AppModel {
     var conversation: ConversationSession?
     /// Seconds of silence after which a spoken turn counts as finished.
     var conversationPause: Double {
-        didSet { UserDefaults.standard.set(conversationPause, forKey: Keys.conversationPause) }
+        didSet { settings.set(conversationPause, forKey: Keys.conversationPause) }
     }
 
     // MARK: Outline (table of contents)
 
     /// User preference; the panel only appears for chats that are long enough or already have an outline.
     var outlinePanelVisible: Bool {
-        didSet { UserDefaults.standard.set(outlinePanelVisible, forKey: Keys.outlinePanelVisible) }
+        didSet { settings.set(outlinePanelVisible, forKey: Keys.outlinePanelVisible) }
     }
     private(set) var outlineGeneratingIDs: Set<Chat.ID> = []
     private(set) var outlineErrors: [Chat.ID: String] = [:]
@@ -295,7 +298,7 @@ final class AppModel {
     private(set) var models: [LMModel] = []
     private(set) var connection: ConnectionState = .connecting
     private(set) var preferredModelId: String? {
-        didSet { UserDefaults.standard.set(preferredModelId, forKey: Keys.preferredModel) }
+        didSet { settings.set(preferredModelId, forKey: Keys.preferredModel) }
     }
 
     // MARK: Chats
@@ -320,7 +323,7 @@ final class AppModel {
     var selectedDocumentID: WriterDocument.ID?
     /// Writer Studio shows a white sheet instead of the dark one.
     var writerLightPaper: Bool {
-        didSet { UserDefaults.standard.set(writerLightPaper, forKey: Keys.writerLightPaper) }
+        didSet { settings.set(writerLightPaper, forKey: Keys.writerLightPaper) }
     }
     @ObservationIgnored let documentStore = WriterDocumentStore()
     @ObservationIgnored var documentSaveTasks: [WriterDocument.ID: Task<Void, Never>] = [:]
@@ -349,11 +352,11 @@ final class AppModel {
     var dictationIntoInstruction = false
     /// Answers of the Writer Studio assistant are read aloud as soon as they are complete.
     var writerReadsAnswers: Bool {
-        didSet { UserDefaults.standard.set(writerReadsAnswers, forKey: Keys.writerReadsAnswers) }
+        didSet { settings.set(writerReadsAnswers, forKey: Keys.writerReadsAnswers) }
     }
 
     init() {
-        let defaults = UserDefaults.standard
+        let defaults = settings
         endpoint = defaults.string(forKey: Keys.endpoint) ?? Self.defaultEndpoint
         apiKey = defaults.string(forKey: Keys.apiKey) ?? ""
         systemPrompt = defaults.string(forKey: Keys.systemPrompt) ?? ""
@@ -398,6 +401,34 @@ final class AppModel {
         startPolling()
         setUpSpeechReader()
         removeUnusedAttachments()
+    }
+
+    // MARK: Closing
+
+    /// Before another library opens: writes what is still waiting to be saved and stops everything that runs
+    /// (answers, outlines, memory work, voice, polling), so nothing of this library goes on in the next one.
+    func close() async {
+        if conversation != nil { endConversation() }
+        if isDictating { await stopDictation() }
+        stopReadingDocument()
+        speechReader.stop()
+        writerFlush?()
+        if skillSaveTask != nil { saveSkillLibrary() }
+        savePendingPersonas()
+        savePendingDocuments()
+        pollTask?.cancel()
+        refreshDebounce?.cancel()
+        noticeTask?.cancel()
+        let running = Array(generationTasks.values) + Array(outlineTasks.values) + Array(followUpTasks.values)
+            + Array(documentOutlineTasks.values) + Array(thalamusQuietTasks.values) + [thalamusWorker].compactMap { $0 }
+        running.forEach { $0.cancel() }
+        // Cancelled work ends quickly (an answer is saved as far as it got); it gets a few seconds at most.
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { for task in running { await task.value } }
+            group.addTask { try? await Task.sleep(for: .seconds(4)) }
+            await group.next()
+            group.cancelAll()
+        }
     }
 
     // MARK: Derived state
@@ -473,7 +504,7 @@ final class AppModel {
 
     /// Switches thinking for this chat; new chats start with the last choice.
     func toggleThinking() {
-        UserDefaults.standard.set(!isThinkingOn, forKey: Keys.thinkingDefault)
+        settings.set(!isThinkingOn, forKey: Keys.thinkingDefault)
         guard selectedIndex != nil else { return newChatThinking.toggle() }
         toggleChatFlag(\.thinking)
     }
@@ -605,7 +636,7 @@ final class AppModel {
         editingMessageID = nil
         newChatWebSearch = false
         newChatWikipedia = false
-        newChatThinking = UserDefaults.standard.bool(forKey: Keys.thinkingDefault)
+        newChatThinking = settings.bool(forKey: Keys.thinkingDefault)
         newChatSkillIDs = []
         newChatPersonaID = nil
         newChatFolderID = nil

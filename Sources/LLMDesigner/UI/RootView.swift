@@ -2,6 +2,7 @@ import SwiftUI
 
 struct RootView: View {
     @Environment(AppModel.self) private var app
+    @Environment(LibrarySession.self) private var session
 
     var body: some View {
         Group {
@@ -23,6 +24,11 @@ struct RootView: View {
             Button("OK") {}
         } message: {
             Text(app.dictationError ?? "")
+        }
+        .alert("Bibliothek", isPresented: libraryMessageBinding) {
+            Button("OK") {}
+        } message: {
+            Text(session.message ?? "")
         }
         .alert("PDF-Export fehlgeschlagen", isPresented: exportErrorBinding) {
             Button("OK") {}
@@ -68,6 +74,10 @@ struct RootView: View {
 
     private var dictationErrorBinding: Binding<Bool> {
         Binding(get: { app.dictationError != nil }, set: { if !$0 { app.dictationError = nil } })
+    }
+
+    private var libraryMessageBinding: Binding<Bool> {
+        Binding(get: { session.message != nil }, set: { if !$0 { session.message = nil } })
     }
 
     private var exportErrorBinding: Binding<Bool> {

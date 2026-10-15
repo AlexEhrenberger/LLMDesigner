@@ -1,15 +1,13 @@
 import Foundation
 
-/// Persists every chat as its own JSON file under Application Support.
+/// Persists every chat as its own JSON file in the library's `Chats` folder.
 struct ChatStore {
     let directory: URL
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
 
     init() {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        directory = base.appendingPathComponent("LLMDesigner/Chats", isDirectory: true)
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        directory = AppLibrary.current.folder("Chats")
 
         encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601

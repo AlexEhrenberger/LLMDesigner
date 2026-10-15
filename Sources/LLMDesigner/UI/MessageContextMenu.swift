@@ -5,13 +5,16 @@ import AppKit
 @MainActor
 enum MessageContextMenu {
     private static var monitor: Any?
+    /// The model of the open library; it changes when another library is opened.
+    private static weak var currentApp: AppModel?
 
     static func install(app: AppModel) {
+        currentApp = app
         guard monitor == nil else { return }
         // Local monitors are called on the main thread.
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.rightMouseDown, .leftMouseDown]) { event in
             let isContextClick = event.type == .rightMouseDown || event.modifierFlags.contains(.control)
-            guard isContextClick, let view = event.window?.contentView else { return event }
+            guard isContextClick, let app = currentApp, let view = event.window?.contentView else { return event }
             // AppKit measures from the bottom left, SwiftUI's global space from the top left.
             let point = CGPoint(x: event.locationInWindow.x, y: view.bounds.height - event.locationInWindow.y)
             guard let messageID = app.messageID(at: point), let message = app.message(messageID),

@@ -44,7 +44,7 @@ enum MainWindow {
     static func shrinkForConversation() {
         guard let window, !window.styleMask.contains(.fullScreen) else { return }
         frameBeforeConversation = window.frame
-        let saved = UserDefaults.standard.string(forKey: conversationSizeKey).map(NSSizeFromString)
+        let saved = AppLibrary.current?.settings.string(forKey: conversationSizeKey).map(NSSizeFromString)
         let size = saved.flatMap { $0.width >= conversationMinSize.width && $0.height >= conversationMinSize.height ? $0 : nil }
             ?? NSSize(width: 360, height: 560)
         var frame = NSRect(x: window.frame.midX - size.width / 2, y: window.frame.maxY - size.height, width: size.width, height: size.height)
@@ -62,7 +62,7 @@ enum MainWindow {
     /// so that frame is saved.
     static func restoreBeforeQuit() {
         guard let window, let previous = frameBeforeConversation, !window.styleMask.contains(.fullScreen) else { return }
-        UserDefaults.standard.set(NSStringFromSize(window.frame.size), forKey: conversationSizeKey)
+        AppLibrary.current?.settings.set(NSStringFromSize(window.frame.size), forKey: conversationSizeKey)
         window.setFrame(previous, display: false)
         frameBeforeConversation = nil
     }
@@ -74,7 +74,7 @@ enum MainWindow {
             done()
             return
         }
-        UserDefaults.standard.set(NSStringFromSize(window.frame.size), forKey: conversationSizeKey)
+        AppLibrary.current?.settings.set(NSStringFromSize(window.frame.size), forKey: conversationSizeKey)
         // Animates synchronously; the chat's minimum size only applies afterwards.
         window.setFrame(previous, display: true, animate: true)
         done()

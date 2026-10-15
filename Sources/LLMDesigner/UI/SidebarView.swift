@@ -776,6 +776,75 @@ private struct SearchField: View {
     }
 }
 
+/// The open library, and a menu to switch to another, make a new one or open one from anywhere.
+private struct LibraryMenu: View {
+    @Environment(LibrarySession.self) private var session
+    @State private var hovering = false
+
+    var body: some View {
+        Menu {
+            Section("Bibliotheken") {
+                ForEach(session.recent) { entry in
+                    Button {
+                        Task { await session.open(entry.url) }
+                    } label: {
+                        if session.library.isAt(entry.url) {
+                            Label(entry.name, systemImage: "checkmark")
+                        } else {
+                            Text(entry.isAvailable ? entry.name : "\(entry.name) (nicht verfügbar)")
+                        }
+                    }
+                    .disabled(!entry.isAvailable)
+                }
+            }
+            Divider()
+            Button("Neue Bibliothek …", systemImage: "plus") { session.createLibrary() }
+            Button("Bibliothek öffnen …", systemImage: "folder") { session.chooseLibrary() }
+            Divider()
+            Button("„\(session.library.name)“ umbenennen …", systemImage: "pencil") { session.renameLibrary() }
+            Button("Im Finder zeigen", systemImage: "magnifyingglass") { session.revealInFinder() }
+            let others = session.recent.filter { !session.library.isAt($0.url) }
+            if !others.isEmpty {
+                Menu("Aus der Liste entfernen") {
+                    ForEach(others) { entry in
+                        Button(entry.name) { session.forget(entry) }
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "books.vertical.fill")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Theme.accent)
+                    .frame(width: 16)
+                Text(session.library.name)
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundStyle(Theme.textPrimary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer(minLength: 0)
+                if session.isSwitching {
+                    ProgressView().controlSize(.mini)
+                } else {
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(Theme.textTertiary)
+                }
+            }
+            .padding(.horizontal, 8)
+            .frame(height: 30)
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(hovering ? Theme.hover : Color.white.opacity(0.03)))
+            .contentShape(Rectangle())
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .onHover { hovering = $0 }
+        .onAppear { session.refreshRecent() }
+        .help("Bibliothek: \(session.library.url.path)\nChats, Dokumente, Personas, Skills und Einstellungen liegen getrennt in jeder Bibliothek.")
+    }
+}
+
 private func isPresent<T>(_ item: Binding<T?>) -> Binding<Bool> {
     Binding(get: { item.wrappedValue != nil }, set: { if !$0 { item.wrappedValue = nil } })
 }
@@ -785,6 +854,18 @@ private struct SidebarFooter: View {
     @State private var hoveringSettings = false
 
     var body: some View {
+        VStack(spacing: 0) {
+            LibraryMenu()
+                .padding(.horizontal, 8)
+                .padding(.top, 6)
+            connection
+        }
+        .overlay(alignment: .top) {
+            Rectangle().fill(Theme.border).frame(height: 1)
+        }
+    }
+
+    private var connection: some View {
         HStack(spacing: 10) {
             Button { Task { await app.refreshModels() } } label: {
                 HStack(spacing: 10) {
@@ -820,10 +901,7 @@ private struct SidebarFooter: View {
             .help("Einstellungen (⌘,)")
         }
         .padding(.horizontal, 14)
-        .frame(height: 58)
-        .overlay(alignment: .top) {
-            Rectangle().fill(Theme.border).frame(height: 1)
-        }
+        .frame(height: 52)
     }
 
     private var title: String {

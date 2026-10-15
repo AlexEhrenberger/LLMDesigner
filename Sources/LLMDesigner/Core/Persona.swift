@@ -118,15 +118,10 @@ enum PersonaError: LocalizedError {
     }
 }
 
-/// Every persona has a folder under Application Support: `persona.json`, the profile picture, `files/` with the
+/// Every persona has a folder in the library's `Personas` folder: `persona.json`, the profile picture, `files/` with the
 /// originals of its files and `text/` with their extracted text.
 enum PersonaStore {
-    static let directory: URL = {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        let url = base.appendingPathComponent("LLMDesigner/Personas", isDirectory: true)
-        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-        return url
-    }()
+    static var directory: URL { AppLibrary.current.folder("Personas") }
 
     static let avatarPixelSize = 512
 

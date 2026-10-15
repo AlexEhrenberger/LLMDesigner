@@ -3,21 +3,29 @@ import SwiftUI
 @main
 struct LLMDesignerApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @State private var app = AppModel()
+    /// The open library and its model; everything below follows when another library is opened.
+    @State private var session = LibrarySession()
 
     var body: some Scene {
         Window("LLM Designer", id: "main") {
             // The minimum size comes from RootView: conversation mode makes the window narrow.
             RootView()
-                .environment(app)
+                .environment(session.app)
+                .environment(session)
+                // A new library gets fresh views, so no view state of the old one stays.
+                .id(ObjectIdentifier(session.app))
         }
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1220, height: 820)
-        .commands { AppCommands(app: app) }
+        .commands {
+            AppCommands(app: session.app)
+            LibraryCommands(session: session)
+        }
 
         Settings {
             SettingsView()
-                .environment(app)
+                .environment(session.app)
+                .environment(session)
         }
     }
 }
@@ -37,9 +45,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         true
     }
 
+    /// A library double-clicked in the Finder (or dropped on the app icon) opens in place of the current one.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard let url = urls.first(where: { $0.pathExtension == AppLibrary.fileExtension || AppLibrary.isLibrary($0) }) else { return }
+        Task { @MainActor in await LibrarySession.shared?.open(url) }
+    }
+
+    /// Coming back to the app: if the open library was moved or renamed in the Finder, it is followed.
+    func applicationDidBecomeActive(_ notification: Notification) {
+        Task { @MainActor in LibrarySession.shared?.checkLibraryLocation() }
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         // The narrow conversation window must not become the size the app opens with next time.
         MainWindow.restoreBeforeQuit()
+    }
+}
+
+/// File menu: libraries.
+struct LibraryCommands: Commands {
+    let session: LibrarySession
+
+    var body: some Commands {
+        CommandGroup(after: .newItem) {
+            Divider()
+            Button("Neue Bibliothek …") { session.createLibrary() }
+            Button("Bibliothek öffnen …") { session.chooseLibrary() }
+                .keyboardShortcut("o", modifiers: [.command, .shift])
+            Menu("Zuletzt geöffnete Bibliotheken") {
+                ForEach(session.recent) { entry in
+                    Button(entry.name + (session.library.isAt(entry.url) ? " ✓" : "")) {
+                        Task { await session.open(entry.url) }
+                    }
+                    .disabled(!entry.isAvailable || session.library.isAt(entry.url))
+                }
+            }
+            Button("Bibliothek im Finder zeigen") { session.revealInFinder() }
+        }
     }
 }
 

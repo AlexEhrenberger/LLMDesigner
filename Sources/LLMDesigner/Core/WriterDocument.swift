@@ -74,13 +74,12 @@ enum WriterFont: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-/// Every document is a Markdown file with a short header (front matter) under Application Support.
+/// Every document is a Markdown file with a short header (front matter) in the library's `Documents` folder.
 struct WriterDocumentStore {
     let directory: URL
 
     static var defaultDirectory: URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return base.appendingPathComponent("LLMDesigner/Documents", isDirectory: true)
+        AppLibrary.current.folder("Documents")
     }
 
     init() {
