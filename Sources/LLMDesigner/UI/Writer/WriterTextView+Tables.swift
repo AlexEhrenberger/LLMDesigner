@@ -95,7 +95,7 @@ extension WriterTextView {
         }
         let end = NSMaxRange(model.range)
         // Below the table there must be a paragraph for text; a picture or another table doesn't count.
-        if end < storage.length, [.table, .image, .rule].contains(WriterStyler.block(in: storage, at: end)) {
+        if end < storage.length, [.table, .rule].contains(WriterStyler.block(in: storage, at: end)) || WriterStyler.block(in: storage, at: end).isEmbed {
             let empty = NSAttributedString(string: "\n", attributes: [.writerBlock: WriterBlock.paragraph.rawValue, .writerListLevel: 0])
             performStructureEdit(in: NSRange(location: end, length: 0), with: empty)
         }

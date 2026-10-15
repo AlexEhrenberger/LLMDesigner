@@ -10,6 +10,15 @@ struct WriterImageReference: Equatable, Sendable {
     var caption: String
     /// Percent of the column width; nil: the picture's own size, at most the column.
     var width: Int?
+    /// Set for a plot of the formula above it (`.plot` and its settings in the attributes).
+    var plot: PlotSpec?
+
+    init(source: String, caption: String, width: Int?, plot: PlotSpec? = nil) {
+        self.source = source
+        self.caption = caption
+        self.width = width
+        self.plot = plot
+    }
 
     /// The sizes the editor offers, in percent of the column.
     static let presetWidths = [33, 50, 75, 100]
@@ -65,16 +74,23 @@ struct WriterImageReference: Equatable, Sendable {
         index += 1
 
         var width: Int?
+        var plot: PlotSpec?
         let rest = String(characters[index...]).trimmingCharacters(in: .whitespaces)
         if !rest.isEmpty {
             guard rest.hasPrefix("{"), rest.hasSuffix("}") else { return nil }
-            for attribute in rest.dropFirst().dropLast().split(separator: " ") {
+            let attributes = rest.dropFirst().dropLast().split(separator: " ")
+            if attributes.contains(".plot") { plot = PlotSpec() }
+            for attribute in attributes {
                 let pair = attribute.split(separator: "=", maxSplits: 1).map(String.init)
-                guard pair.count == 2, pair[0] == "width", pair[1].hasSuffix("%"), let value = Int(pair[1].dropLast()) else { continue }
-                width = max(5, min(100, value))
+                guard pair.count == 2 else { continue }
+                if pair[0] == "width", pair[1].hasSuffix("%"), let value = Int(pair[1].dropLast()) {
+                    width = max(5, min(100, value))
+                } else {
+                    plot?.read(pair[0], pair[1])
+                }
             }
         }
-        return WriterImageReference(source: source, caption: caption, width: width)
+        return WriterImageReference(source: source, caption: caption, width: width, plot: plot)
     }
 
     var markdown: String {
@@ -85,7 +101,9 @@ struct WriterImageReference: Equatable, Sendable {
             .replacingOccurrences(of: "\n", with: " ")
             .replacingOccurrences(of: String(WriterMarkdown.lineSeparator), with: " ")
         let destination = source.contains(where: { $0 == " " || $0 == "(" || $0 == ")" }) ? "<\(source)>" : source
-        return "![\(caption)](\(destination))" + (width.map { "{width=\($0)%}" } ?? "")
+        var attributes = width.map { ["width=\($0)%"] } ?? []
+        attributes += plot?.markdownAttributes ?? []
+        return "![\(caption)](\(destination))" + (attributes.isEmpty ? "" : "{" + attributes.joined(separator: " ") + "}")
     }
 }
 
@@ -224,12 +242,43 @@ enum WriterImageStore {
         }.joined(separator: "\n")
     }
 
-    /// Deletes the pictures of a deleted document that no other document uses.
+    /// Deletes the pictures of a deleted document that no other document uses (with a plot's dark and PDF versions).
     static func removeUnused(_ sources: [String], stillUsedIn documents: [String]) {
         let used = Set(documents.flatMap(Self.sources(in:)))
         for source in Set(sources) where source.hasPrefix(folderName + "/") && !used.contains(source) {
-            if let url = url(for: source) { try? FileManager.default.removeItem(at: url) }
+            for variant in [source, darkVariant(of: source), pdfVariant(of: source)] {
+                if let url = url(for: variant) { try? FileManager.default.removeItem(at: url) }
+            }
         }
+    }
+
+    // MARK: Plots
+
+    /// "Bilder/plot-1.png" → "Bilder/plot-1-dark.png": the version for the dark sheet.
+    static func darkVariant(of source: String) -> String {
+        let path = source as NSString
+        return path.deletingPathExtension + "-dark." + (path.pathExtension.isEmpty ? "png" : path.pathExtension)
+    }
+
+    /// "Bilder/plot-1.png" → "Bilder/plot-1.pdf": the vector version for LaTeX.
+    static func pdfVariant(of source: String) -> String {
+        (source as NSString).deletingPathExtension + ".pdf"
+    }
+
+    /// Copies a freshly drawn plot into the pictures folder; returns the Markdown source of its light PNG.
+    static func storePlot(_ output: PlotRenderer.Output) throws -> String {
+        let name = "plot-" + UUID().uuidString.prefix(13).lowercased()
+        let folder = directory
+        try FileManager.default.copyItem(at: output.light, to: folder.appendingPathComponent(name + ".png"))
+        try? FileManager.default.copyItem(at: output.dark, to: folder.appendingPathComponent(name + "-dark.png"))
+        try? FileManager.default.copyItem(at: output.pdf, to: folder.appendingPathComponent(name + ".pdf"))
+        return folderName + "/" + name + ".png"
+    }
+
+    /// The file LaTeX should print for a picture: a plot's PDF when there is one.
+    static func printURL(for reference: WriterImageReference) -> URL? {
+        if reference.plot != nil, let pdf = url(for: pdfVariant(of: reference.source)) { return pdf }
+        return url(for: reference.source)
     }
 }
 

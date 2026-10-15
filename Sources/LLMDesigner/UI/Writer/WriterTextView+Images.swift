@@ -4,6 +4,60 @@ import SwiftUI
 /// Pictures in the editor: each one is a paragraph of its own (`WriterImageAttachment`). A click selects it and
 /// shows a small bar for its size, caption and removal.
 extension WriterTextView {
+    // MARK: Embedded blocks (pictures, display formulas, the table of contents)
+
+    /// The attachment of a picture, display formula or table of contents at `location` when its paragraph is one.
+    func embed(at location: Int) -> NSTextAttachment? {
+        guard let storage = textStorage, location >= 0, location < storage.length,
+              WriterStyler.block(in: storage, at: location).isEmbed else { return nil }
+        let attachment = storage.attribute(.attachment, at: location, effectiveRange: nil) as? NSTextAttachment
+        return attachment is WriterImageAttachment || attachment is WriterMathAttachment || attachment is WriterTOCAttachment ? attachment : nil
+    }
+
+    /// The embedded block when it is selected on its own.
+    var selectedEmbed: (attachment: NSTextAttachment, location: Int)? {
+        let range = selectedRange()
+        guard range.length == 1, let attachment = embed(at: range.location) else { return nil }
+        return (attachment, range.location)
+    }
+
+    /// Any attachment selected on its own (an inline formula too); it draws its own frame instead of the selection.
+    var selectedAttachmentLocation: Int? {
+        let range = selectedRange()
+        guard range.length == 1, let storage = textStorage, range.location < storage.length,
+              storage.attribute(.attachment, at: range.location, effectiveRange: nil) is NSTextAttachment,
+              !(storage.attribute(.attachment, at: range.location, effectiveRange: nil) is WriterRuleAttachment) else { return nil }
+        return range.location
+    }
+
+    func selectEmbed(at location: Int) {
+        guard let storage = textStorage, location < storage.length,
+              storage.attribute(.attachment, at: location, effectiveRange: nil) != nil else { return }
+        window?.makeFirstResponder(self)
+        setSelectedRange(NSRange(location: location, length: 1))
+    }
+
+    /// Removes an embedded block with its paragraph, so no empty line stays behind.
+    func deleteEmbed(at location: Int? = nil) {
+        guard let storage = textStorage, let location = location ?? selectedEmbed?.location, embed(at: location) != nil else { return }
+        let paragraph = (storage.string as NSString).paragraphRange(for: NSRange(location: location, length: 0))
+        performStructureEdit(in: paragraph, with: NSAttributedString())
+        setSelectedRange(NSRange(location: min(paragraph.location, storage.length), length: 0))
+        resetTypingAttributes()
+        onStateChange?()
+    }
+
+    /// The frame of an attachment in view coordinates.
+    func attachmentFrame(at location: Int) -> NSRect? {
+        guard let layoutManager, let container = textContainer, let storage = textStorage, storage.editedMask.isEmpty,
+              location < storage.length, storage.attribute(.attachment, at: location, effectiveRange: nil) != nil else { return nil }
+        let glyphs = layoutManager.glyphRange(forCharacterRange: NSRange(location: location, length: 1), actualCharacterRange: nil)
+        guard glyphs.length > 0 else { return nil }
+        let rect = layoutManager.boundingRect(forGlyphRange: glyphs, in: container)
+        guard !rect.isEmpty else { return nil }
+        return rect.offsetBy(dx: textContainerOrigin.x, dy: textContainerOrigin.y)
+    }
+
     /// The picture when it is selected on its own.
     var selectedImage: (reference: WriterImageReference, location: Int)? {
         let range = selectedRange()
@@ -134,11 +188,14 @@ extension WriterTextView {
             imageControlsHost?.isHidden = true
             return
         }
+        let location = image.location
         let bar = WriterImageBar(
             width: image.reference.width,
             hasCaption: !image.reference.caption.isEmpty,
+            isPlot: image.reference.plot != nil,
             onWidth: { [weak self] in self?.setImageWidth($0) },
             onCaption: { [weak self] in self?.editImageCaption() },
+            onPlot: { [weak self] in self?.editPlot(at: location) },
             onDelete: { [weak self] in self?.deleteImage() }
         )
         let host: NSHostingView<WriterImageBar>
@@ -177,12 +234,18 @@ extension WriterTextView {
             self?.editImageCaption(at: location)
         }
         caption.image = NSImage(systemSymbolName: "text.below.photo", accessibilityDescription: nil)
+        var plotItems: [NSMenuItem] = []
+        if reference.plot != nil {
+            let plot = ClosureMenuItem(title: "Plot bearbeiten …") { [weak self] in self?.editPlot(at: location) }
+            plot.image = NSImage(systemSymbolName: "chart.xyaxis.line", accessibilityDescription: nil)
+            plotItems.append(plot)
+        }
         let reveal = ClosureMenuItem(title: "Im Finder zeigen") { [weak self] in self?.revealImage(at: location) }
         reveal.image = NSImage(systemSymbolName: "folder", accessibilityDescription: nil)
         reveal.isEnabled = WriterImageStore.url(for: reference.source) != nil
         let delete = ClosureMenuItem(title: "Bild entfernen") { [weak self] in self?.deleteImage(at: location) }
         delete.image = NSImage(systemSymbolName: "trash", accessibilityDescription: nil)
-        return [size, caption, reveal, delete, .separator()]
+        return plotItems + [size, caption, reveal, delete, .separator()]
     }
 }
 
@@ -190,8 +253,10 @@ extension WriterTextView {
 struct WriterImageBar: View {
     let width: Int?
     let hasCaption: Bool
+    var isPlot = false
     let onWidth: (Int?) -> Void
     let onCaption: () -> Void
+    var onPlot: () -> Void = {}
     let onDelete: () -> Void
 
     /// nil: the picture's own size, at most the column.
@@ -199,6 +264,21 @@ struct WriterImageBar: View {
 
     var body: some View {
         HStack(spacing: 2) {
+            if isPlot {
+                Button(action: onPlot) {
+                    Label("Plot bearbeiten", systemImage: "chart.xyaxis.line")
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(Theme.accent)
+                        .padding(.horizontal, 9)
+                        .frame(height: 24)
+                        .background(Capsule().fill(Theme.accent.opacity(0.16)))
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .focusable(false)
+                .help("Formel und Plot bearbeiten")
+                Rectangle().fill(Color.white.opacity(0.14)).frame(width: 1, height: 16).padding(.horizontal, 4)
+            }
             ForEach(Self.sizes, id: \.0) { title, value in
                 chip(title, isActive: width == value) { onWidth(value) }
                     .help(value.map { "\($0) % der Spaltenbreite" } ?? "Eigene Größe des Bildes, höchstens die Spaltenbreite")
@@ -261,10 +341,21 @@ final class WriterImageCell: NSTextAttachmentCell {
         (attachment as? WriterImageAttachment)?.reference ?? WriterImageReference(source: "", caption: "", width: nil)
     }
 
+    /// A plot on the dark sheet shows its dark version.
+    @MainActor
+    private func displayImage(_ view: WriterTextView?) -> NSImage? {
+        let reference = reference
+        if reference.plot != nil, view?.palette.isLight == false,
+           let dark = WriterImageStore.displayImage(for: WriterImageStore.darkVariant(of: reference.source)) {
+            return dark
+        }
+        return WriterImageStore.displayImage(for: reference.source)
+    }
+
     private func layout(available: CGFloat, view: WriterTextView?) -> Layout {
         let reference = reference
         var imageSize: NSSize
-        if let image = WriterImageStore.displayImage(for: reference.source), image.size.width > 0, image.size.height > 0 {
+        if let image = displayImage(view), image.size.width > 0, image.size.height > 0 {
             let width = reference.width.map { available * CGFloat($0) / 100 } ?? min(image.size.width, available)
             imageSize = NSSize(width: width, height: width * image.size.height / image.size.width)
             if imageSize.height > Self.maxHeight {
@@ -327,7 +418,7 @@ final class WriterImageCell: NSTextAttachmentCell {
         let imageRect = layout.image.offsetBy(dx: frame.minX, dy: frame.minY)
         let shape = NSBezierPath(roundedRect: imageRect, xRadius: 6, yRadius: 6)
 
-        if let image = WriterImageStore.displayImage(for: reference.source) {
+        if let image = displayImage(view) {
             NSGraphicsContext.saveGraphicsState()
             shape.addClip()
             image.draw(in: imageRect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: [.interpolation: NSImageInterpolation.high.rawValue])
@@ -374,7 +465,9 @@ final class WriterImageCell: NSTextAttachmentCell {
     override func trackMouse(with theEvent: NSEvent, in cellFrame: NSRect, of controlView: NSView?, atCharacterIndex charIndex: Int, untilMouseUp flag: Bool) -> Bool {
         guard let view = controlView as? WriterTextView else { return false }
         view.selectImage(at: charIndex)
-        if theEvent.clickCount >= 2 { view.editImageCaption(at: charIndex) }
+        if theEvent.clickCount >= 2 {
+            if reference.plot != nil { view.editPlot(at: charIndex) } else { view.editImageCaption(at: charIndex) }
+        }
         return true
     }
 }

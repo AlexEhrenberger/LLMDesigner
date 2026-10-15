@@ -105,6 +105,49 @@ extension AppModel {
         }
     }
 
+    // MARK: Table of contents
+
+    func setDocumentTOCMode(_ id: WriterDocument.ID, _ mode: WriterTOCMode) {
+        guard document(id)?.effectiveTOCMode != mode || document(id)?.tocMode == nil else { return }
+        modifyDocument(id) { $0.tocMode = mode }
+    }
+
+    /// Asks the model for the document's topics (the dynamic table of contents). Returns the running task.
+    @discardableResult
+    func refreshDocumentOutline(_ id: WriterDocument.ID) -> Task<Void, Never>? {
+        writerFlush?()
+        if let running = documentOutlineTasks[id] { return running }
+        guard let client, let model = currentModelId, let snapshot = document(id) else {
+            documentOutlineErrors[id] = "Kein Modell gewählt. Wähle oben ein Modell aus LM Studio."
+            return nil
+        }
+        let markdown = snapshot.markdown
+        guard !DocumentOutlineBuilder.blocks(of: markdown).isEmpty else { return nil }
+        documentOutlineGeneratingIDs.insert(id)
+        documentOutlineErrors[id] = nil
+        let request = DocumentOutlineBuilder.requestMessages(for: markdown)
+        let task = Task { [weak self] in
+            do {
+                let answer = try await client.complete(
+                    model: model, messages: request, temperature: 0.1, maxTokens: 1_500,
+                    jsonSchema: (DocumentOutlineBuilder.schemaName, DocumentOutlineBuilder.schema)
+                )
+                let outline = try DocumentOutlineBuilder.parse(answer, markdown: markdown, model: model)
+                // Written into the stored document without touching its text or date.
+                if let self, let index = self.documents.firstIndex(where: { $0.id == id }) {
+                    self.documents[index].outline = outline
+                    self.saveDocument(id)
+                }
+            } catch {
+                if !Task.isCancelled { self?.documentOutlineErrors[id] = error.localizedDescription }
+            }
+            self?.documentOutlineGeneratingIDs.remove(id)
+            self?.documentOutlineTasks[id] = nil
+        }
+        documentOutlineTasks[id] = task
+        return task
+    }
+
     func moveDocument(_ id: WriterDocument.ID, to folderID: Folder.ID?) {
         guard let document = document(id), document.folderID != folderID else { return }
         modifyDocument(id) { $0.folderID = folderID }
@@ -116,6 +159,7 @@ extension AppModel {
     }
 
     func deleteDocument(_ id: WriterDocument.ID) {
+        documentOutlineTasks[id]?.cancel()
         documentSaveTasks[id]?.cancel()
         documentSaveTasks[id] = nil
         let pictures = document(id).map { WriterImageStore.sources(in: $0.markdown) } ?? []
@@ -192,58 +236,88 @@ extension AppModel {
     func exportDocument(as format: WriterExportFormat) {
         writerFlush?()
         guard let document = selectedDocument, !exportingIDs.contains(document.id) else { return }
-        let markdown = document.markdown.trimmingCharacters(in: .whitespacesAndNewlines) + "\n"
-        // The pictures that are on this Mac, by their Markdown source.
-        var figures: [String: URL] = [:]
-        for source in WriterImageStore.sources(in: markdown) {
-            if let url = WriterImageStore.url(for: source) { figures[source] = url }
-        }
-        var part = LaTeXWriter.Part(text: markdown)
-        part.figures = figures
         let paper = pdfPaperSize
+        let engine = LaTeXEngine.locate()
+        if format == .pdf, engine == nil {
+            exportError = PDFExportError.noEngine.localizedDescription
+            return
+        }
+        exportingIDs.insert(document.id)
+        Task {
+            // A dynamic table of contents in the text is brought up to date first, like the chat export does.
+            if WriterTOCAttachment.kind(in: document.markdown) == true, client != nil,
+               document.outline == nil || DocumentOutlineBuilder.isOutdated(document) {
+                await refreshDocumentOutline(document.id)?.value
+            }
+            let current = self.document(document.id) ?? document
+            let markdown = current.markdown.trimmingCharacters(in: .whitespacesAndNewlines) + "\n"
+            // The pictures that are on this Mac, by their Markdown source; LaTeX prints a plot's PDF version.
+            var figures: [String: URL] = [:]
+            var printFigures: [String: URL] = [:]
+            for reference in markdown.components(separatedBy: "\n").compactMap(WriterImageReference.parse) {
+                if let url = WriterImageStore.url(for: reference.source) { figures[reference.source] = url }
+                if let url = WriterImageStore.printURL(for: reference) { printFigures[reference.source] = url }
+            }
+            var part = LaTeXWriter.Part(text: markdown)
+            part.figures = printFigures
+            if let contents = latexContents(of: current.outline, in: markdown) {
+                part.contents = contents.outline
+                part.blockAnchors = contents.anchors
+            }
 
-        switch format {
-        case .markdown, .latex:
-            Task {
-                guard let url = await askForDestination(fileName: document.displayTitle, type: format.type) else { return }
-                do {
+            do {
+                switch format {
+                case .markdown, .latex:
+                    exportingIDs.remove(document.id)
+                    guard let url = await askForDestination(fileName: current.displayTitle, type: format.type) else { return }
                     // The pictures go into a folder next to the file, e.g. "Aufsatz-Bilder".
-                    let folder = figures.isEmpty ? nil : figureFolderName(for: url)
+                    let used = format == .markdown ? figures : printFigures
+                    let folder = used.isEmpty ? nil : figureFolderName(for: url)
                     if let folder {
-                        try copyFigures(Array(figures.values), to: url.deletingLastPathComponent().appendingPathComponent(folder, isDirectory: true))
+                        try copyFigures(Array(used.values), to: url.deletingLastPathComponent().appendingPathComponent(folder, isDirectory: true))
                     }
                     let text: String
                     if format == .markdown {
+                        let exported = WriterMarkdownExport.expandTableOfContents(in: markdown, outline: current.outline)
                         text = folder.map { folder in
-                            WriterImageStore.rewriteSources(in: markdown) { figures[$0].map { folder + "/" + $0.lastPathComponent } }
-                        } ?? markdown
+                            WriterImageStore.rewriteSources(in: exported) { figures[$0].map { folder + "/" + $0.lastPathComponent } }
+                        } ?? exported
                     } else {
                         text = LaTeXWriter.document(parts: [part], paper: paper, math: .native, figureFolder: folder)
                     }
                     try text.write(to: url, atomically: true, encoding: .utf8)
-                } catch {
-                    exportError = error.localizedDescription
-                }
-            }
-        case .pdf:
-            guard let engine = LaTeXEngine.locate() else {
-                exportError = PDFExportError.noEngine.localizedDescription
-                return
-            }
-            exportingIDs.insert(document.id)
-            Task {
-                do {
+                case .pdf:
+                    guard let engine else { return }
                     let pdf = try await engine.makePDF(parts: [part], paper: paper)
                     exportingIDs.remove(document.id)
-                    guard let url = await askForDestination(fileName: document.displayTitle, type: .pdf) else { return }
+                    guard let url = await askForDestination(fileName: current.displayTitle, type: .pdf) else { return }
                     try pdf.write(to: url, options: .atomic)
                     if pdfOpenAfterExport { NSWorkspace.shared.open(url) }
-                } catch {
-                    exportingIDs.remove(document.id)
-                    exportError = error.localizedDescription
                 }
+            } catch {
+                exportingIDs.remove(document.id)
+                exportError = error.localizedDescription
             }
         }
+    }
+
+    /// The model's table of contents for LaTeX: its entries, and labels in front of the blocks they point to.
+    private func latexContents(of outline: DocumentOutline?, in markdown: String) -> (outline: LaTeXWriter.Outline, anchors: [Int: String])? {
+        guard WriterTOCAttachment.kind(in: markdown) == true, let outline else { return nil }
+        var anchors: [Int: String] = [:]
+        func label(_ anchor: DocumentAnchor) -> String? {
+            guard let index = DocumentOutlineBuilder.blockIndex(of: anchor, in: markdown) else { return nil }
+            if let existing = anchors[index] { return existing }
+            let label = "inhalt-\(anchors.count + 1)"
+            anchors[index] = label
+            return label
+        }
+        var entries: [LaTeXWriter.OutlineEntry] = []
+        for section in outline.sections {
+            entries.append(.init(title: section.title, level: 0, label: label(section.anchor)))
+            for item in section.items { entries.append(.init(title: item.title, level: 1, label: label(item.anchor))) }
+        }
+        return (LaTeXWriter.Outline(summary: outline.summary, entries: entries), anchors)
     }
 
     /// A chat or document dragged onto a folder (nil: out of its folder).
@@ -270,5 +344,43 @@ private func copyFigures(_ files: [URL], to folder: URL) throws {
         let destination = folder.appendingPathComponent(file.lastPathComponent)
         try? FileManager.default.removeItem(at: destination)
         try FileManager.default.copyItem(at: file, to: destination)
+    }
+}
+
+/// Markdown for other programs: the table of contents marker becomes a list of the headings with links.
+enum WriterMarkdownExport {
+    static func expandTableOfContents(in markdown: String, outline: DocumentOutline? = nil) -> String {
+        if WriterTOCAttachment.kind(in: markdown) == true {
+            // The model's topics as a numbered list with their points.
+            var lines: [String] = []
+            for (index, section) in (outline?.sections ?? []).enumerated() {
+                lines.append("\(index + 1). \(section.title)")
+                lines += section.items.map { "   - \($0.title)" }
+            }
+            let block = "**Inhaltsverzeichnis**\n\n" + (lines.isEmpty ? "*(noch nicht erstellt)*" : lines.joined(separator: "\n"))
+            return markdown.components(separatedBy: "\n").map { WriterTOCAttachment.kind(of: $0) == true ? block : $0 }.joined(separator: "\n")
+        }
+        guard WriterHeadings.isFormal(markdown) else { return markdown }
+        let headings = WriterHeadings.headings(in: markdown)
+        let top = headings.map(\.level).min() ?? 0
+        var used: [String: Int] = [:]
+        let list = headings.map { heading -> String in
+            let plain = WriterHeadings.plainTitle(heading.title)
+            var anchor = slug(plain)
+            if let count = used[anchor] { used[anchor] = count + 1; anchor += "-\(count)" } else { used[anchor] = 1 }
+            let indent = String(repeating: "  ", count: heading.level - top)
+            return indent + "- [" + [heading.number, plain].compactMap { $0 }.joined(separator: " ") + "](#\(anchor))"
+        }.joined(separator: "\n")
+        let block = "**Inhaltsverzeichnis**\n\n" + (list.isEmpty ? "*(keine Überschriften)*" : list)
+        return markdown.components(separatedBy: "\n").map { $0.trimmingCharacters(in: .whitespaces) == WriterTOCAttachment.marker ? block : $0 }
+            .joined(separator: "\n")
+    }
+
+    /// The anchor GitHub and others give a heading: lower case, spaces as hyphens, without punctuation.
+    private static func slug(_ text: String) -> String {
+        String(text.lowercased().compactMap { character -> Character? in
+            if character.isLetter || character.isNumber || character == "-" || character == "_" { return character }
+            return character == " " ? "-" : nil
+        })
     }
 }

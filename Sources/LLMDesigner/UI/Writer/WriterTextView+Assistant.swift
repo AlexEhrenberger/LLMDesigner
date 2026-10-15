@@ -173,7 +173,8 @@ extension WriterTextView {
         } else if let cursor {
             marker(WriterPrompts.cursorMarker, at: min(cursor, copy.length))
         }
-        var markdown = WriterMarkdown.markdown(from: copy).trimmingCharacters(in: .whitespacesAndNewlines)
+        // Bookmarks are the user's; the model doesn't need them (and would copy them).
+        var markdown = WriterBookmark.strip(WriterMarkdown.markdown(from: copy)).trimmingCharacters(in: .whitespacesAndNewlines)
         if markdown.isEmpty { markdown = WriterPrompts.cursorMarker }
         guard markdown.count > limit else { return markdown }
 
@@ -192,7 +193,7 @@ extension WriterTextView {
         let range = selectedRange()
         let selection = storage.attributedSubstring(from: range)
         let markdown = selection.string.contains("\n") ? WriterMarkdown.markdown(from: selection) : WriterMarkdown.inlineMarkdown(selection)
-        let trimmed = markdown.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = WriterBookmark.strip(markdown).trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
     }
 
@@ -424,7 +425,7 @@ extension WriterTextView {
         var text = ""
         var range: NSRange?
         for paragraph in WriterMarkdown.paragraphs(of: storage, in: scope) {
-            guard ![.code, .raw, .rule, .image].contains(paragraph.block) else { continue }
+            guard ![.code, .raw, .rule].contains(paragraph.block), !paragraph.block.isEmbed else { continue }
             let part = NSIntersectionRange(paragraph.contentRange, scope)
             guard part.length > 0 else { continue }
             let piece = (storage.string as NSString).substring(with: part)

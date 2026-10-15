@@ -13,6 +13,46 @@ struct WriterScreen: View {
 
     var body: some View {
         if let document = app.selectedDocument {
+            HStack(spacing: 0) {
+                main(document)
+                // The document's contents and bookmarks; the check results take its place while they are open.
+                if app.outlinePanelVisible, !assistant.isPanelShown, showsToolbar {
+                    DocumentPanel(document: document, controller: controller, assistant: assistant)
+                        .frame(width: Theme.outlineWidth)
+                        .transition(.move(edge: .trailing))
+                }
+            }
+            .background(Theme.background)
+            .onAppear(perform: playOpening)
+            .onDisappear {
+                app.writerFlush = nil
+                app.writerDictation = nil
+            }
+            // The dynamic table of contents follows the text while it is shown (in the panel or in the document):
+            // a moment after the user stopped writing, if enough changed.
+            .task(id: followsDynamicOutline(document) ? document.markdown : "") {
+                guard followsDynamicOutline(document) else { return }
+                try? await Task.sleep(for: .seconds(document.outline == nil ? 1.5 : 6))
+                guard !Task.isCancelled, !assistant.isBusy, app.documentOutlineErrors[document.id] == nil,
+                      let current = app.document(document.id), DocumentOutlineBuilder.needsRefresh(current) else { return }
+                app.refreshDocumentOutline(document.id)
+            }
+            .sheet(item: Binding(get: { controller.formulaRequest }, set: { if $0 == nil, controller.formulaRequest != nil { controller.cancelFormula() } })) { request in
+                FormulaEditorSheet(request: request) { latex, display, plot in
+                    controller.applyFormula(latex: latex, display: display, plot: plot, isExisting: request.isExisting)
+                } onCancel: {
+                    controller.cancelFormula()
+                }
+            }
+        }
+    }
+
+    private func followsDynamicOutline(_ document: WriterDocument) -> Bool {
+        let panelShowsIt = app.outlinePanelVisible && app.documentPanelTab == .contents && document.effectiveTOCMode == .dynamic
+        return panelShowsIt || WriterTOCAttachment.kind(in: document.markdown) == true
+    }
+
+    private func main(_ document: WriterDocument) -> some View {
             VStack(spacing: 0) {
                 WriterTopBar(document: document)
                     .opacity(showsToolbar ? 1 : 0)
@@ -51,13 +91,6 @@ struct WriterScreen: View {
                 }
                 .animation(.spring(response: 0.38, dampingFraction: 0.88), value: assistant.isPanelShown)
             }
-            .background(Theme.background)
-            .onAppear(perform: playOpening)
-            .onDisappear {
-                app.writerFlush = nil
-                app.writerDictation = nil
-            }
-        }
     }
 
     private func playOpening() {
@@ -259,6 +292,11 @@ private struct WriterTopBar: View {
                 .font(.system(size: 11.5).monospacedDigit())
                 .foregroundStyle(Theme.textTertiary)
             PaperSwitch()
+            if !app.outlinePanelVisible {
+                IconButton(systemName: "sidebar.right", help: "Inhaltsverzeichnis und Lesezeichen einblenden (⌥⌘I)", frameSize: Theme.titleBarControlSize) {
+                    app.toggleOutlinePanel()
+                }
+            }
             IconButton(systemName: "xmark", help: "Writer Studio schließen und zurück zum Chat", size: 12.5, frameSize: Theme.titleBarControlSize) {
                 withAnimation(.easeInOut(duration: 0.3)) { app.closeDocument() }
             }
@@ -271,8 +309,13 @@ private struct WriterTopBar: View {
     }
 
     private var wordCount: String {
-        // Pictures don't count; table cells do.
-        let text = document.markdown.components(separatedBy: "\n").filter { WriterImageReference.parse($0) == nil }.joined(separator: "\n")
+        // Pictures, formulas, bookmarks and the table of contents don't count; table cells do.
+        let text = WriterBookmark.strip(document.markdown).components(separatedBy: "\n")
+            .filter { WriterImageReference.parse($0) == nil && !WriterTOCAttachment.isMarker($0) }
+            .joined(separator: "\n")
+            .replacingOccurrences(of: #"\$\$[\s\S]*?\$\$"#, with: " ", options: .regularExpression)
+            .replacingOccurrences(of: #"(?<!\\)\$[^$\n]+\$"#, with: " ", options: .regularExpression)
+            .replacingOccurrences(of: " {.chapter}", with: "")
         let words = text.split { $0.isWhitespace || $0.isNewline }
             .filter { $0.contains { $0.isLetter || $0.isNumber } }.count
         return words == 1 ? "1 Wort" : "\(words) Wörter"
@@ -389,16 +432,29 @@ private struct WriterToolbar: View {
                 ToolbarButton(symbol: "link", help: "Link (⌘K)", isActive: state.hasLink) { controller.editLink() }
             }
             group(17) {
-                ToolbarButton(symbol: "minus", help: "Trennlinie / Abschnittsmarke", isActive: false) { controller.insertRule() }
+                ToolbarButton(
+                    symbol: state.bookmarkID != nil ? "bookmark.fill" : "bookmark",
+                    help: state.bookmarkID != nil ? "Lesezeichen entfernen (⌥⌘B)" : "Lesezeichen anlegen (⌥⌘B) – für die Markierung oder den Absatz",
+                    isActive: state.bookmarkID != nil
+                ) { controller.toggleBookmark() }
             }
             group(18) {
+                ToolbarButton(symbol: "minus", help: "Trennlinie / Abschnittsmarke", isActive: false) { controller.insertRule() }
+            }
+            group(19) {
                 ToolbarButton(symbol: "photo", help: "Bild einfügen … – Bilder lassen sich auch hineinziehen oder einfügen", isActive: state.image != nil) {
                     controller.chooseImages()
                 }
             }
-            group(19) { TableButton(controller: controller, isInTable: state.table != nil) }
-            divider(20)
+            group(20) { TableButton(controller: controller, isInTable: state.table != nil) }
             group(21) {
+                ToolbarButton(symbol: "x.squareroot", help: "Formel (⌥⌘E) – visueller Formeleditor, auf eigener Zeile auch mit Plot", isActive: state.isFormulaSelected) {
+                    controller.editFormula()
+                }
+            }
+            group(22) { TableOfContentsMenu(controller: controller, isActive: state.block == .toc) }
+            divider(23)
+            group(24) {
                 ToolbarButton(
                     symbol: app.dictationIntoDocument ? "mic.fill" : "mic",
                     help: app.dictationIntoDocument ? "Diktat beenden (⌘D)" : "Ins Dokument diktieren (⌘D) – „neuer Absatz“ beginnt einen neuen Absatz",
@@ -406,7 +462,7 @@ private struct WriterToolbar: View {
                 ) { controller.toggleDictation() }
                 .disabled(!app.isDictationAvailable)
             }
-            group(22) {
+            group(25) {
                 ToolbarButton(
                     symbol: app.speakingDocumentID != nil ? "stop.fill" : "speaker.wave.2",
                     help: app.speakingDocumentID != nil ? "Vorlesen stoppen (esc)" : "Vorlesen (⌥⌘L): die Markierung, sonst ab dem Absatz mit dem Cursor",
@@ -438,12 +494,45 @@ private struct WriterToolbar: View {
 
     private func markButton(_ symbol: String, _ mark: WriterInline, _ help: String, _ state: WriterTextView.State) -> some View {
         ToolbarButton(symbol: symbol, help: help, isActive: state.marks.contains(mark)) { controller.toggle(mark) }
-            .disabled(state.block == .code || state.block == .raw || state.block == .image)
+            .disabled(state.block == .code || state.block == .raw || state.block.isEmbed)
     }
 
     /// Pictures and table cells have no list or quote formatting.
     private func isStructure(_ state: WriterTextView.State) -> Bool {
-        state.block == .image || state.block == .table
+        state.block.isEmbed || state.block == .table
+    }
+}
+
+/// Inserts the table of contents: from the chapters and headings (numbered), or the model's topics.
+private struct TableOfContentsMenu: View {
+    let controller: WriterEditorController
+    let isActive: Bool
+    @State private var hovering = false
+
+    var body: some View {
+        Menu {
+            Section("Inhaltsverzeichnis einfügen") {
+                Button("Aus Kapiteln und Überschriften (nummeriert)", systemImage: "list.number") {
+                    controller.insertTableOfContents(dynamic: false)
+                }
+                Button("Dynamisch – vom Modell gegliedert", systemImage: "sparkles") {
+                    controller.insertTableOfContents(dynamic: true)
+                }
+            }
+        } label: {
+            Image(systemName: "list.bullet.indent")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(isActive ? Theme.accent : (hovering ? Theme.textPrimary : Theme.textSecondary))
+                .frame(width: 30, height: 28)
+                .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(isActive ? Theme.accent.opacity(0.16) : (hovering ? Theme.hover : .clear)))
+                .contentShape(Rectangle())
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .onHover { hovering = $0 }
+        .help("Inhaltsverzeichnis einfügen – aus den Überschriften (nummeriert wie im Export) oder dynamisch vom Modell")
     }
 }
 
@@ -668,7 +757,7 @@ private struct BlockMenu: View {
 
     var body: some View {
         Menu {
-            ForEach([WriterBlock.paragraph, .heading1, .heading2, .heading3, .code], id: \.self) { block in
+            ForEach([WriterBlock.paragraph, .chapter, .heading1, .heading2, .heading3, .code], id: \.self) { block in
                 Button { controller.setBlock(block, toggle: false) } label: {
                     let title = "\(block.label)\(shortcut(block))"
                     if block == current { Label(title, systemImage: "checkmark") } else { Text(title) }
@@ -683,13 +772,14 @@ private struct BlockMenu: View {
         .menuIndicator(.hidden)
         .fixedSize()
         .onHover { hovering = $0 }
-        .disabled(current == .image || current == .table)
+        .disabled(current.isEmbed || current == .table)
         .help("Absatzformat")
     }
 
     private func shortcut(_ block: WriterBlock) -> String {
         switch block {
         case .paragraph: "  ⌥⌘0"
+        case .chapter: "  ⌥⌘K"
         case .heading1: "  ⌥⌘1"
         case .heading2: "  ⌥⌘2"
         case .heading3: "  ⌥⌘3"

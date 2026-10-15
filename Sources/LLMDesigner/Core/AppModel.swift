@@ -335,6 +335,12 @@ final class AppModel {
     var speakingDocumentID: WriterDocument.ID?
     /// Called once reading the document ends (finished or stopped), so the editor can remove its highlight.
     @ObservationIgnored var writerSpeechEnded: (() -> Void)?
+    /// The tab of a document's side panel (contents or bookmarks); the panel itself follows `outlinePanelVisible`.
+    var documentPanelTab: SidePanelTab = .contents
+    /// Documents whose dynamic table of contents is being made, and why it failed.
+    var documentOutlineGeneratingIDs: Set<WriterDocument.ID> = []
+    var documentOutlineErrors: [WriterDocument.ID: String] = [:]
+    @ObservationIgnored var documentOutlineTasks: [WriterDocument.ID: Task<Void, Never>] = [:]
     /// The instruction being written in Writer Studio's assistant bar.
     var writerInstruction = ""
     /// The assistant bar has the keyboard focus (⌘D then dictates into it).
@@ -1335,7 +1341,8 @@ final class AppModel {
 
     func toggleOutlinePanel() {
         withAnimation(.smooth(duration: 0.28)) { outlinePanelVisible.toggle() }
-        if outlinePanelVisible, let id = selectedChatID { refreshOutlineIfNeeded(id) }
+        // In Writer Studio the panel makes its own table of contents when it needs one.
+        if outlinePanelVisible, selectedDocumentID == nil, let id = selectedChatID { refreshOutlineIfNeeded(id) }
     }
 
     @discardableResult

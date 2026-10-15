@@ -93,7 +93,7 @@ enum MathTokenizer {
     /// As in TeX, only the next unescaped `$` can close the formula. It needs a non-space character
     /// before it and must not be followed by a digit; otherwise the opening `$` is just a dollar sign
     /// ("$5 und $10"). A code span or blank line before it also ends the search.
-    private static func inlineDollarClose(in chars: [Character], from start: Int) -> Int? {
+    static func inlineDollarClose(in chars: [Character], from start: Int) -> Int? {
         var index = start
         while index < chars.count {
             let char = chars[index]

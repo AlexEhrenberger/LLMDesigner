@@ -143,7 +143,7 @@ extension WriterTextView {
 
         var script = SpeechScript()
         for paragraph in WriterMarkdown.paragraphs(of: storage, in: range) {
-            guard ![.code, .raw, .rule, .image].contains(paragraph.block) else { continue }
+            guard ![.code, .raw, .rule].contains(paragraph.block), !paragraph.block.isEmbed else { continue }
             let part = NSIntersectionRange(paragraph.contentRange, range)
             guard part.length > 0 else { continue }
             var piece = (storage.string as NSString).substring(with: part)
@@ -181,9 +181,14 @@ extension WriterTextView {
     // MARK: Context menu
 
     override func menu(for event: NSEvent) -> NSMenu? {
-        // A right-click on a picture selects it and offers its own entries.
-        let pictureLocation = imageLocation(at: convert(event.locationInWindow, from: nil))
+        // A right-click on a picture or a formula selects it and offers its own entries.
+        let point = convert(event.locationInWindow, from: nil)
+        let pictureLocation = imageLocation(at: point)
         if let pictureLocation { selectImage(at: pictureLocation) }
+        let formulaLocation = pictureLocation == nil ? self.formulaLocation(at: point) : nil
+        if let formulaLocation { selectFormula(at: formulaLocation) }
+        let tocLocation = pictureLocation == nil && formulaLocation == nil ? tableOfContentsLocation(at: point) : nil
+        if let tocLocation { selectEmbed(at: tocLocation) }
         let menu = super.menu(for: event) ?? NSMenu()
         // The system's font and layout submenus would format past the Markdown meaning; the toolbar does that.
         let foreign: Set<Selector> = [#selector(NSFontManager.orderFrontFontPanel(_:)), #selector(NSTextView.alignLeft(_:)), #selector(NSResponder.makeBaseWritingDirectionNatural(_:)), #selector(NSTextView.changeLayoutOrientation(_:))]
@@ -208,10 +213,13 @@ extension WriterTextView {
         for (index, item) in assistantMenuItems(hasSelection: hasTextSelection).enumerated() {
             menu.insertItem(item, at: index)
         }
-        // Picture and table entries come first.
+        // Picture, formula and table entries come first.
         var own: [NSMenuItem] = []
         if let pictureLocation { own += imageMenuItems(at: pictureLocation) }
+        if let formulaLocation { own += formulaMenuItems(at: formulaLocation) }
+        if let tocLocation { own += tableOfContentsMenuItems(at: tocLocation) }
         if let table = tableMenu() { own += [table, .separator()] }
+        own += insertMenuItems(hasSelection: hasSelection)
         for (index, item) in own.enumerated() { menu.insertItem(item, at: index) }
         return menu
     }
@@ -242,6 +250,31 @@ extension WriterTextView {
             items.append(item("KI hier weiterschreiben lassen", "sparkles", .continueHere))
             items.append(item("Dokument auf Rechtschreibung prüfen", "textformat.abc.dottedunderline", .check(.language)))
             items.append(item("Dokument auf Plausibilität prüfen", "checkmark.seal", .check(.plausibility)))
+        }
+        items.append(.separator())
+        return items
+    }
+
+    /// Bookmark, formula and table of contents.
+    private func insertMenuItems(hasSelection: Bool) -> [NSMenuItem] {
+        var items: [NSMenuItem] = []
+        // Pictures, formulas and the table of contents get no bookmark of their own.
+        if selectedEmbed != nil || currentParagraph?.block.isEmbed == true || currentParagraph?.block == .rule {
+            return []
+        }
+        if let bookmark = bookmarkAtCaret, !hasSelection {
+            let remove = ClosureMenuItem(title: "Lesezeichen „\(bookmark.title)“ entfernen") { [weak self] in self?.removeBookmark(bookmark.id) }
+            remove.image = NSImage(systemSymbolName: "bookmark.slash", accessibilityDescription: nil)
+            items.append(remove)
+        } else {
+            let add = ClosureMenuItem(title: hasSelection ? "Lesezeichen anlegen" : "Lesezeichen für diesen Absatz") { [weak self] in self?.addBookmark() }
+            add.image = NSImage(systemSymbolName: "bookmark", accessibilityDescription: nil)
+            items.append(add)
+        }
+        if selectedFormula == nil {
+            let formula = ClosureMenuItem(title: "Formel einfügen …") { [weak self] in self?.editFormulaAtCaret() }
+            formula.image = NSImage(systemSymbolName: "x.squareroot", accessibilityDescription: nil)
+            items.append(formula)
         }
         items.append(.separator())
         return items

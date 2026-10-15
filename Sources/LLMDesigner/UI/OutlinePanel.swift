@@ -161,7 +161,7 @@ struct OutlinePanel: View {
     }
 }
 
-private struct OutlineRow: View {
+struct OutlineRow: View {
     let title: String
     let number: Int?
     let level: Int
@@ -210,7 +210,7 @@ private struct OutlineRow: View {
     }
 }
 
-private struct PanelTab: View {
+struct PanelTab: View {
     let title: String
     let count: Int?
     let isSelected: Bool
@@ -266,7 +266,8 @@ private struct BookmarkList: View {
             VStack(alignment: .leading, spacing: 2) {
                 ForEach(bookmarks) { bookmark in
                     BookmarkRow(
-                        bookmark: bookmark,
+                        title: bookmark.title,
+                        excerpt: bookmark.excerpt,
                         caption: caption(for: bookmark),
                         isHighlighted: app.recentBookmarkID == bookmark.id || app.highlightedTarget == bookmark.target,
                         onOpen: { app.jump(to: bookmark.target) },
@@ -292,8 +293,9 @@ private struct BookmarkList: View {
     }
 }
 
-private struct BookmarkRow: View {
-    let bookmark: Bookmark
+struct BookmarkRow: View {
+    let title: String
+    let excerpt: String
     let caption: String
     let isHighlighted: Bool
     let onOpen: () -> Void
@@ -328,7 +330,7 @@ private struct BookmarkRow: View {
                             if !focused { commit() }
                         }
                 } else {
-                    Text(bookmark.title)
+                    Text(title)
                         .font(.system(size: 12.5, weight: .medium))
                         .foregroundStyle(Theme.textPrimary)
                         .lineLimit(2)
@@ -362,10 +364,10 @@ private struct BookmarkRow: View {
         .contentShape(Rectangle())
         .onTapGesture { if !renaming { onOpen() } }
         .onHover { hovering = $0 }
-        .help(bookmark.excerpt)
+        .help(excerpt)
         .contextMenu {
             Button("Umbenennen", systemImage: "pencil") {
-                draft = bookmark.title
+                draft = title
                 renaming = true
             }
             Divider()

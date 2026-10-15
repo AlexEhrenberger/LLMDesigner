@@ -96,6 +96,7 @@ enum WriterStyler {
     static func blockFont(_ block: WriterBlock, family: WriterFont, bold: Bool = false, italic: Bool = false) -> NSFont {
         let body = bodySize(family)
         switch block {
+        case .chapter: return font(family, size: body + 19, weight: .bold, italic: italic)
         case .heading1: return font(family, size: body + 14, weight: .bold, italic: italic)
         case .heading2: return font(family, size: body + 7, weight: .semibold, italic: italic)
         case .heading3: return font(family, size: body + 3, weight: .semibold, italic: italic)
@@ -112,6 +113,10 @@ enum WriterStyler {
         style.lineHeightMultiple = 1.32
         style.paragraphSpacing = 10
         switch block {
+        case .chapter:
+            style.lineHeightMultiple = 1.05
+            style.paragraphSpacingBefore = previous == nil ? 0 : 40
+            style.paragraphSpacing = 16
         case .heading1:
             style.lineHeightMultiple = 1.1
             style.paragraphSpacingBefore = previous == nil ? 0 : 22
@@ -145,11 +150,15 @@ enum WriterStyler {
             style.paragraphSpacingBefore = 6
             style.paragraphSpacing = 12
             style.alignment = .center
-        case .image:
+        case .image, .math:
             style.lineHeightMultiple = 1
             style.paragraphSpacingBefore = previous == nil ? 0 : 10
             style.paragraphSpacing = 16
             style.alignment = .center
+        case .toc:
+            style.lineHeightMultiple = 1
+            style.paragraphSpacingBefore = previous == nil ? 0 : 12
+            style.paragraphSpacing = 20
         case .table:
             style.lineHeightMultiple = 1.2
             style.paragraphSpacing = 0
@@ -231,13 +240,18 @@ enum WriterStyler {
         for (index, paragraph) in paragraphs.enumerated() where paragraph.range.length > 0 {
             var block = paragraph.block
             if paragraph.cell == nil {
-                // A line or a picture is a paragraph of its own; without its attachment it is text again.
+                // A line, a picture, a display formula or the table of contents is a paragraph of its own;
+                // without its attachment it is text again. A formula inside text stays an inline one.
                 let attachment = storage.attribute(.attachment, at: paragraph.range.location, effectiveRange: nil)
                 let hasRule = attachment is WriterRuleAttachment
                 let hasImage = attachment is WriterImageAttachment
-                if (block == .rule && !hasRule) || (block == .image && !hasImage) { block = .paragraph }
+                let hasTOC = attachment is WriterTOCAttachment
+                let hasMath = attachment is WriterMathAttachment && paragraph.contentRange.length == 1
+                if (block == .rule && !hasRule) || (block == .image && !hasImage) || (block == .toc && !hasTOC)
+                    || (block == .math && !hasMath) { block = .paragraph }
                 if hasRule { block = .rule }
                 if hasImage { block = .image }
+                if hasTOC { block = .toc }
             }
             var semantic: [NSAttributedString.Key: Any] = paragraph.cell?.attributes
                 ?? [.writerBlock: block.rawValue, .writerListLevel: block.isList ? paragraph.level : 0]

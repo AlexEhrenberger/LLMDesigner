@@ -3,15 +3,34 @@ import AppKit
 /// What a paragraph in Writer Studio is. Stored on every character of the paragraph (`.writerBlock`).
 enum WriterBlock: String, CaseIterable, Sendable {
     case paragraph, heading1, heading2, heading3, bullet, numbered, quote, code, rule
+    /// The top level of the outline, above Überschrift 1. Markdown: `# Titel {.chapter}`.
+    case chapter
     /// A picture on its own paragraph (`WriterImageAttachment`).
     case image
+    /// A display formula on its own paragraph (`WriterMathAttachment`). Markdown: `$$ … $$`.
+    case math
+    /// The table of contents (`WriterTOCAttachment`). Markdown: `[TOC]`, or `[TOC]{.dynamic}` for the model's topics.
+    case toc
     /// A table cell: one paragraph per cell, see `WriterTable`.
     case table
     /// Markdown the editor can't show yet (formulas); kept and written back unchanged.
     case raw
 
     var isList: Bool { self == .bullet || self == .numbered }
-    var isHeading: Bool { self == .heading1 || self == .heading2 || self == .heading3 }
+    var isHeading: Bool { headingLevel != nil }
+    /// Chapter 0, Überschrift 1 to 3: 1 to 3.
+    var headingLevel: Int? {
+        switch self {
+        case .chapter: 0
+        case .heading1: 1
+        case .heading2: 2
+        case .heading3: 3
+        default: nil
+        }
+    }
+    /// A paragraph that is one object: a picture, a display formula or the table of contents. It is selected,
+    /// moved and deleted as a whole, and text is never typed into it.
+    var isEmbed: Bool { self == .image || self == .math || self == .toc }
 
     var label: String {
         switch self {
@@ -19,12 +38,15 @@ enum WriterBlock: String, CaseIterable, Sendable {
         case .heading1: "Überschrift 1"
         case .heading2: "Überschrift 2"
         case .heading3: "Überschrift 3"
+        case .chapter: "Kapitel"
         case .bullet: "Aufzählung"
         case .numbered: "Nummerierte Liste"
         case .quote: "Zitat"
         case .code: "Code"
         case .rule: "Trennlinie"
         case .image: "Bild"
+        case .math: "Formel"
+        case .toc: "Inhaltsverzeichnis"
         case .table: "Tabelle"
         case .raw: "Markdown"
         }
@@ -47,6 +69,69 @@ extension NSAttributedString.Key {
     static let writerTable = NSAttributedString.Key("LLMDesigner.writer.table")
     static let writerTableRow = NSAttributedString.Key("LLMDesigner.writer.tableRow")
     static let writerTableColumn = NSAttributedString.Key("LLMDesigner.writer.tableColumn")
+    /// A bookmark (`WriterBookmark`) on the marked passage.
+    static let writerBookmark = NSAttributedString.Key("LLMDesigner.writer.bookmark")
+}
+
+/// A bookmark in a document: a marked passage with a name. In Markdown it is an HTML span around the passage,
+/// `<span id="lz-1a2b3c4d" title="Name">…</span>`, so it moves with the text and survives other programs.
+final class WriterBookmark: NSObject {
+    let id: String
+    let title: String
+
+    init(id: String = WriterBookmark.newID(), title: String) {
+        self.id = id
+        self.title = title
+    }
+
+    static func newID() -> String { "lz-" + UUID().uuidString.prefix(8).lowercased() }
+
+    override func isEqual(_ object: Any?) -> Bool {
+        guard let other = object as? WriterBookmark else { return false }
+        return other.id == id && other.title == title
+    }
+
+    override var hash: Int { id.hashValue ^ title.hashValue }
+
+    var openingTag: String {
+        "<span id=\"\(Self.escapeAttribute(id))\" title=\"\(Self.escapeAttribute(title))\">"
+    }
+
+    static func escapeAttribute(_ value: String) -> String {
+        value.replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+            .replacingOccurrences(of: "\n", with: " ")
+    }
+
+    static func unescapeAttribute(_ value: String) -> String {
+        value.replacingOccurrences(of: "&quot;", with: "\"")
+            .replacingOccurrences(of: "&lt;", with: "<")
+            .replacingOccurrences(of: "&gt;", with: ">")
+            .replacingOccurrences(of: "&amp;", with: "&")
+    }
+
+    /// The attributes of a `<span …>` tag; nil if it has no id (then it is no bookmark).
+    static func parseTag(_ tag: String) -> WriterBookmark? {
+        var values: [String: String] = [:]
+        let pattern = #"([a-zA-Z-]+)\s*=\s*"([^"]*)""#
+        guard let expression = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let text = tag as NSString
+        for match in expression.matches(in: tag, range: NSRange(location: 0, length: text.length)) {
+            values[text.substring(with: match.range(at: 1)).lowercased()] = unescapeAttribute(text.substring(with: match.range(at: 2)))
+        }
+        guard let id = values["id"], !id.isEmpty else { return nil }
+        return WriterBookmark(id: id, title: values["title"] ?? "")
+    }
+
+    /// Markdown without bookmark spans (for prompts, titles and exports that don't need them).
+    static func strip(_ markdown: String) -> String {
+        guard markdown.contains("<span") else { return markdown }
+        return markdown
+            .replacingOccurrences(of: #"<span\s+[^>]*>"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: "</span>", with: "")
+    }
 }
 
 /// A table in the editor. All cells of a table share this object through their attributes; each cell is one
@@ -207,14 +292,19 @@ enum WriterMarkdown {
                     if let image = WriterImageReference.parse(line) {
                         addText()
                         add(NSAttributedString(attachment: WriterImageAttachment(reference: image)), block: .image)
+                    } else if let dynamic = WriterTOCAttachment.kind(of: line) {
+                        addText()
+                        add(NSAttributedString(attachment: WriterTOCAttachment(dynamic: dynamic)), block: .toc)
                     } else {
                         lines.append(line)
                     }
                 }
                 addText()
             case .heading(let level, let text):
-                let block: WriterBlock = level <= 1 ? .heading1 : level == 2 ? .heading2 : .heading3
-                add(inline(text), block: block)
+                let (title, classes) = headingAttributes(text)
+                var block: WriterBlock = level <= 1 ? .heading1 : level == 2 ? .heading2 : .heading3
+                if classes.contains("chapter") { block = .chapter }
+                add(inline(title), block: block)
             case .code(let language, let code):
                 for line in code.components(separatedBy: "\n") {
                     add(NSAttributedString(string: line), block: .code, language: language)
@@ -241,8 +331,13 @@ enum WriterMarkdown {
                     }
                 }
                 endsWithTable = true
-            case .math(let latex, _):
-                let lines = latex.hasPrefix("\\begin") ? [latex] : ["$$", latex, "$$"]
+            case .math(let latex, let complete):
+                if complete, !latex.isEmpty {
+                    add(NSAttributedString(attachment: WriterMathAttachment(latex: latex)), block: .math)
+                    break
+                }
+                // A formula without its closing `$$` stays Markdown.
+                let lines = latex.hasPrefix("\\begin") ? [latex] : ["$$", latex]
                 for line in lines.joined(separator: "\n").components(separatedBy: "\n") {
                     add(NSAttributedString(string: line), block: .raw)
                 }
@@ -253,6 +348,17 @@ enum WriterMarkdown {
         return result
     }
 
+    /// A heading's text without Pandoc's trailing attributes (`Titel {.chapter}`), and the classes in them.
+    static func headingAttributes(_ text: String) -> (text: String, classes: Set<String>) {
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        guard trimmed.hasSuffix("}"), let open = trimmed.range(of: " {", options: .backwards) else { return (trimmed, []) }
+        let inner = trimmed[open.upperBound..<trimmed.index(before: trimmed.endIndex)]
+        let tokens = inner.split(separator: " ")
+        guard !tokens.isEmpty, tokens.allSatisfy({ $0.hasPrefix(".") || $0.hasPrefix("#") || $0.contains("=") }) else { return (trimmed, []) }
+        let classes = Set(tokens.filter { $0.hasPrefix(".") }.map { String($0.dropFirst()) })
+        return (String(trimmed[..<open.lowerBound]).trimmingCharacters(in: .whitespaces), classes)
+    }
+
     /// A Markdown cell's text: `<br>` is a line break in the cell.
     private static func cellText(_ text: String) -> String {
         text.replacingOccurrences(of: #"<br\s*/?>"#, with: String(lineSeparator), options: [.regularExpression, .caseInsensitive])
@@ -261,19 +367,29 @@ enum WriterMarkdown {
     /// Inline Markdown: `**bold**`, `*italic*`, `<u>underlined</u>`, `~~struck~~`, `` `code` `` and `[links](url)`.
     static func inline(_ text: String) -> NSAttributedString {
         let result = NSMutableAttributedString()
-        appendInline(Array(text), marks: [], link: nil, to: result)
+        appendInline(Array(text), marks: [], link: nil, bookmark: nil, to: result)
         return result
     }
 
-    private static func appendInline(_ characters: [Character], marks initial: WriterInline, link: String?, to result: NSMutableAttributedString) {
+    private static func appendInline(_ characters: [Character], marks initial: WriterInline, link: String?, bookmark: WriterBookmark?,
+                                     to result: NSMutableAttributedString) {
         var marks = initial
         var buffer = ""
         var index = 0
 
         func flush() {
             guard !buffer.isEmpty else { return }
-            result.append(NSAttributedString(string: buffer, attributes: attributes(marks, link: link)))
+            result.append(NSAttributedString(string: buffer, attributes: attributes(marks, link: link, bookmark: bookmark)))
             buffer = ""
+        }
+        /// An inline formula becomes a picture in the text that carries the marks around it.
+        func appendFormula(_ latex: String) {
+            let latex = latex.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !latex.isEmpty else { return }
+            flush()
+            let formula = NSMutableAttributedString(attachment: WriterMathAttachment(latex: latex))
+            formula.addAttributes(attributes(marks, link: link, bookmark: bookmark), range: NSRange(location: 0, length: formula.length))
+            result.append(formula)
         }
         func matches(_ token: String, at position: Int) -> Bool {
             let token = Array(token)
@@ -321,6 +437,42 @@ enum WriterMarkdown {
         while index < characters.count {
             let character = characters[index]
 
+            // Formulas: `$…$` (Pandoc's rules, so "5 $ und 10 $" stays text), `$$…$$` and `\(…\)`.
+            if character == "$" {
+                if index + 1 < characters.count, characters[index + 1] == "$",
+                   let close = find(["$", "$"], in: characters, from: index + 2), close > index + 2 {
+                    appendFormula(String(characters[(index + 2)..<close]))
+                    index = close + 2
+                    continue
+                }
+                if index + 1 < characters.count, !characters[index + 1].isWhitespace, characters[index + 1] != "$",
+                   let close = MathTokenizer.inlineDollarClose(in: characters, from: index + 1) {
+                    appendFormula(String(characters[(index + 1)..<close]))
+                    index = close + 1
+                    continue
+                }
+            }
+            if character == "\\", index + 1 < characters.count, characters[index + 1] == "(",
+               let close = find(["\\", ")"], in: characters, from: index + 2) {
+                appendFormula(String(characters[(index + 2)..<close]))
+                index = close + 2
+                continue
+            }
+            // A bookmark: `<span id="…" title="…">…</span>`.
+            if character == "<", bookmark == nil, matches("<span", at: index), let tagEnd = characters[index...].firstIndex(of: ">"),
+               let close = find(Array("</span>"), in: characters, from: tagEnd + 1) {
+                flush()
+                let tag = String(characters[index...tagEnd])
+                let inner = Array(characters[(tagEnd + 1)..<close])
+                if let mark = WriterBookmark.parseTag(tag) {
+                    appendInline(inner, marks: marks, link: link, bookmark: mark, to: result)
+                } else {
+                    appendInline(inner, marks: marks, link: link, bookmark: nil, to: result)
+                }
+                index = close + 7
+                continue
+            }
+
             if character == "\\", index + 1 < characters.count, characters[index + 1].isPunctuation || characters[index + 1].isSymbol {
                 buffer.append(characters[index + 1])
                 index += 2
@@ -336,7 +488,7 @@ enum WriterMarkdown {
                     if fence > 1, code.hasPrefix(" "), code.hasSuffix(" "), code.count >= 2 {
                         code = String(code.dropFirst().dropLast())
                     }
-                    result.append(NSAttributedString(string: code, attributes: attributes(marks.union(.code), link: link)))
+                    result.append(NSAttributedString(string: code, attributes: attributes(marks.union(.code), link: link, bookmark: bookmark)))
                     index = end + fence
                     continue
                 }
@@ -366,7 +518,7 @@ enum WriterMarkdown {
             }
             if character == "[", link == nil, let (text, url, end) = linkSyntax(in: characters, at: index) {
                 flush()
-                appendInline(text, marks: marks, link: url, to: result)
+                appendInline(text, marks: marks, link: url, bookmark: bookmark, to: result)
                 index = end
                 continue
             }
@@ -374,6 +526,16 @@ enum WriterMarkdown {
             index += 1
         }
         flush()
+    }
+
+    private static func find(_ pattern: [Character], in characters: [Character], from start: Int) -> Int? {
+        guard !pattern.isEmpty, start >= 0, characters.count >= pattern.count, start <= characters.count - pattern.count else { return nil }
+        var index = start
+        while index <= characters.count - pattern.count {
+            if characters[index] == pattern[0], Array(characters[index..<(index + pattern.count)]) == pattern { return index }
+            index += 1
+        }
+        return nil
     }
 
     /// `[text](url)` starting at `position`: the text, the address and the position after it.
@@ -400,12 +562,13 @@ enum WriterMarkdown {
         return (Array(characters[(position + 1)..<closeBracket]), url, closeParen + 1)
     }
 
-    private static func attributes(_ marks: WriterInline, link: String?) -> [NSAttributedString.Key: Any] {
+    private static func attributes(_ marks: WriterInline, link: String?, bookmark: WriterBookmark?) -> [NSAttributedString.Key: Any] {
         var attributes: [NSAttributedString.Key: Any] = [:]
         for mark in [WriterInline.bold, .italic, .underline, .strikethrough, .code] where marks.contains(mark) {
             if let attribute = mark.attribute { attributes[attribute.key] = attribute.value }
         }
         if let link { attributes[.link] = link }
+        if let bookmark { attributes[.writerBookmark] = bookmark }
         return attributes
     }
 
@@ -499,6 +662,15 @@ enum WriterMarkdown {
             case .image:
                 guard let image = images(in: content).first else { continue }
                 pending.append(image.markdown)
+            case .math:
+                guard let formula = formulas(in: content).first else { continue }
+                pending.append(formula.blockMarkdown)
+            case .toc:
+                var toc: WriterTOCAttachment?
+                content.enumerateAttribute(.attachment, in: NSRange(location: 0, length: content.length)) { value, _, _ in
+                    if let value = value as? WriterTOCAttachment { toc = value }
+                }
+                pending.append(toc?.markdown ?? WriterTOCAttachment.marker)
             case .code:
                 if pendingKind == nil { currentLanguage = paragraph.language }
                 pending.append(plainString(content).replacingOccurrences(of: String(lineSeparator), with: "\n"))
@@ -525,13 +697,17 @@ enum WriterMarkdown {
                 guard !line.isEmpty else { continue }
                 let hashes = paragraph.block == .heading1 ? "#" : paragraph.block == .heading2 ? "##" : "###"
                 pending.append(hashes + " " + line)
+            case .chapter:
+                let line = inlineMarkdown(content).replacingOccurrences(of: "\n", with: " ")
+                guard !line.isEmpty else { continue }
+                pending.append("# " + line + " {.chapter}")
             case .paragraph:
                 let line = inlineMarkdown(content)
                 if !line.trimmingCharacters(in: .whitespaces).isEmpty { pending.append(line) }
             }
             pendingKind = group
             // A picture that ended up inside text (after joining paragraphs) is kept as a paragraph of its own.
-            if paragraph.block != .image, paragraph.block != .table {
+            if !paragraph.block.isEmbed, paragraph.block != .table {
                 let inlineImages = images(in: content)
                 if !inlineImages.isEmpty {
                     flush()
@@ -543,6 +719,14 @@ enum WriterMarkdown {
         // Drop quote lines that were only empty and trailing "> " noise.
         return blocks.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && $0 != ">" }
             .joined(separator: "\n\n") + "\n"
+    }
+
+    private static func formulas(in text: NSAttributedString) -> [WriterMathAttachment] {
+        var formulas: [WriterMathAttachment] = []
+        text.enumerateAttribute(.attachment, in: NSRange(location: 0, length: text.length)) { value, _, _ in
+            if let formula = value as? WriterMathAttachment { formulas.append(formula) }
+        }
+        return formulas
     }
 
     private static func images(in text: NSAttributedString) -> [WriterImageReference] {
@@ -576,30 +760,35 @@ enum WriterMarkdown {
     /// One paragraph's text with its inline marks as Markdown. Line breaks inside it become "\n".
     static func inlineMarkdown(_ text: NSAttributedString) -> String {
         var output = ""
-        // Marks currently open, outermost first; a link is kept separately as the outermost one.
+        // Marks currently open, outermost first; a link is kept separately around them, a bookmark around all.
         var open: [WriterInline] = []
         var openLink: String?
+        var openBookmark: WriterBookmark?
         var pendingSpace = ""
         let order: [WriterInline] = [.bold, .italic, .underline, .strikethrough]
 
-        func closeAll() {
+        func closeMarks() {
             for mark in open.reversed() { output += closingToken(mark) }
             open = []
-            if openLink != nil {
-                output += "](\(openLink!))"
+            if let link = openLink {
+                output += "](\(link))"
                 openLink = nil
             }
         }
 
         text.enumerateAttributes(in: NSRange(location: 0, length: text.length)) { attributes, range, _ in
-            guard attributes[.attachment] == nil, attributes[.writerDictationPreview] == nil else { return }
-            let raw = (text.string as NSString).substring(with: range)
+            guard attributes[.writerDictationPreview] == nil else { return }
+            // Pictures and lines are paragraphs of their own; an inline formula is written as `$…$`.
+            let formula = attributes[.attachment] as? WriterMathAttachment
+            guard attributes[.attachment] == nil || formula != nil else { return }
+            let raw = formula.map { "$" + $0.latex + "$" } ?? (text.string as NSString).substring(with: range)
             let marks = WriterInline(attributes)
             let link: String? = (attributes[.link] as? URL)?.absoluteString ?? attributes[.link] as? String
+            let bookmark = attributes[.writerBookmark] as? WriterBookmark
 
-            let leading = String(raw.prefix(while: { $0 == " " || $0 == "\t" }))
+            let leading = formula != nil ? "" : String(raw.prefix(while: { $0 == " " || $0 == "\t" }))
             let rest = raw.dropFirst(leading.count)
-            let trailing = String(rest.reversed().prefix(while: { $0 == " " || $0 == "\t" }).reversed())
+            let trailing = formula != nil ? "" : String(rest.reversed().prefix(while: { $0 == " " || $0 == "\t" }).reversed())
             let core = String(rest.dropLast(trailing.count))
             guard !core.isEmpty else {
                 pendingSpace += raw
@@ -607,14 +796,22 @@ enum WriterMarkdown {
             }
 
             // Close what this stretch doesn't have, from the inside out.
-            if openLink != link {
-                closeAll()
+            if openBookmark != bookmark {
+                closeMarks()
+                if openBookmark != nil { output += "</span>" }
+                openBookmark = nil
+            } else if openLink != link {
+                closeMarks()
             } else if let keep = open.firstIndex(where: { !marks.contains($0) }) {
                 for mark in open[keep...].reversed() { output += closingToken(mark) }
                 open = Array(open[..<keep])
             }
             output += pendingSpace + leading
             pendingSpace = ""
+            if let bookmark, openBookmark == nil {
+                output += bookmark.openingTag
+                openBookmark = bookmark
+            }
             if let link, openLink == nil {
                 output += "["
                 openLink = link
@@ -623,7 +820,9 @@ enum WriterMarkdown {
                 output += openingToken(mark)
                 open.append(mark)
             }
-            if marks.contains(.code) {
+            if formula != nil {
+                output += core
+            } else if marks.contains(.code) {
                 let fence = core.contains("`") ? "`` " : "`"
                 output += fence + core + String(fence.reversed())
             } else {
@@ -631,7 +830,8 @@ enum WriterMarkdown {
             }
             pendingSpace = trailing
         }
-        closeAll()
+        closeMarks()
+        if openBookmark != nil { output += "</span>" }
         output += pendingSpace
         return output.replacingOccurrences(of: String(lineSeparator), with: "\n")
     }
@@ -656,7 +856,7 @@ enum WriterMarkdown {
         var lineStart = atLineStart
         let characters = Array(text)
         for (index, character) in characters.enumerated() {
-            if "\\*_`[]<~".contains(character) {
+            if "\\*_`[]<~$".contains(character) {
                 output += "\\" + String(character)
             } else if lineStart, "#>".contains(character) {
                 output += "\\" + String(character)

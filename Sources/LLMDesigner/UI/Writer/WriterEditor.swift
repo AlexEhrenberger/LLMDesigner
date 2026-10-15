@@ -5,6 +5,12 @@ import SwiftUI
 @Observable
 final class WriterEditorController {
     var state = WriterTextView.State()
+    /// The formula editor is open for this.
+    var formulaRequest: WriterFormulaRequest?
+    /// The heading the reader is in (for the side panel).
+    var currentHeading: Int?
+    /// A bookmark that was just made; the side panel shows it highlighted for a moment.
+    var recentBookmarkID: String?
     @ObservationIgnored weak var textView: WriterTextView?
     @ObservationIgnored weak var app: AppModel?
 
@@ -15,6 +21,55 @@ final class WriterEditorController {
     func editLink() { perform { $0.editLink() } }
     func insertTable(rows: Int, columns: Int) { perform { $0.insertTable(rows: rows, columns: columns) } }
     func tableAction(_ action: WriterTableAction) { perform { $0.performTableAction(action) } }
+    func insertTableOfContents(dynamic: Bool = false) { perform { $0.insertTableOfContents(dynamic: dynamic) } }
+    func setTableOfContents(dynamic: Bool) { perform { $0.setTableOfContents(dynamic: dynamic) } }
+    func editFormula() { perform { $0.editFormulaAtCaret() } }
+    func toggleBookmark() {
+        perform { textView in
+            if let bookmark = textView.bookmarkAtCaret, textView.selectedRange().length == 0 {
+                textView.removeBookmark(bookmark.id)
+            } else {
+                textView.addBookmark()
+            }
+        }
+    }
+
+    // MARK: Formula editor
+
+    func applyFormula(latex: String, display: Bool, plot: WriterImageReference?, isExisting: Bool) {
+        formulaRequest = nil
+        perform { $0.applyFormula(latex: latex, display: display, plot: plot, isExisting: isExisting) }
+    }
+
+    func cancelFormula() {
+        formulaRequest = nil
+        textView?.trackedRanges[WriterTextView.formulaKey] = nil
+        focus()
+    }
+
+    // MARK: Side panel
+
+    func jumpToHeading(_ index: Int) { textView?.jumpToHeading(index) }
+    func jump(to anchor: DocumentAnchor, blockCount: Int) { textView?.jump(to: anchor, blockCount: blockCount) }
+    func jumpToBookmark(_ id: String) { textView?.jumpToBookmark(id) }
+    func renameBookmark(_ id: String, to title: String) { textView?.renameBookmark(id, to: title) }
+    func removeBookmark(_ id: String) { textView?.removeBookmark(id) }
+
+    func bookmarkAdded(_ id: String) {
+        guard let app else { return }
+        app.documentPanelTab = .bookmarks
+        if !app.outlinePanelVisible { withAnimation(.smooth(duration: 0.28)) { app.outlinePanelVisible = true } }
+        recentBookmarkID = id
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1.8))
+            if self.recentBookmarkID == id { self.recentBookmarkID = nil }
+        }
+    }
+
+    func updateCurrentHeading() {
+        let heading = textView?.headingAtTop()
+        if heading != currentHeading { currentHeading = heading }
+    }
 
     /// Asks for pictures and puts them below the current paragraph.
     func chooseImages() {
@@ -106,6 +161,17 @@ struct WriterEditor: NSViewRepresentable {
         textView.onDictate = { [weak controller] in controller?.toggleDictation() }
         textView.onStopReading = { [weak app] in app?.stopReadingDocument() }
         textView.onNotice = { [weak app] in app?.showNotice($0) }
+        textView.onFormula = { [weak controller] request in controller?.formulaRequest = request }
+        // A dynamic table of contents put into the text: the model makes the topics if there are none yet.
+        textView.onDynamicTOCNeeded = { [weak app, weak coordinator] in
+            guard let app, let id = coordinator?.documentID, let document = app.document(id) else { return }
+            app.writerFlush?()
+            if document.outline == nil || DocumentOutlineBuilder.isOutdated(document) { app.refreshDocumentOutline(id) }
+        }
+        textView.onBookmarkAdded = { [weak controller] id in controller?.bookmarkAdded(id) }
+        textView.onOutlineChange = { [weak controller] in
+            DispatchQueue.main.async { controller?.updateCurrentHeading() }
+        }
         assistant.app = app
         assistant.textView = textView
         textView.onAssistant = { [weak assistant] command in assistant?.handle(command) }
@@ -113,6 +179,7 @@ struct WriterEditor: NSViewRepresentable {
         app.writerFlush = { [weak coordinator] in coordinator?.flush() }
         app.writerDictation = { [weak coordinator] event, id in coordinator?.dictation(event, for: id) }
         coordinator.observeResize(of: scrollView)
+        coordinator.observeScrolling(of: scrollView)
         coordinator.load(document, palette: palette)
         return scrollView
     }
@@ -128,6 +195,7 @@ struct WriterEditor: NSViewRepresentable {
             return
         }
         guard let textView = coordinator.textView else { return }
+        textView.dynamicOutline = document.outline
         if textView.palette != palette || textView.family != document.font {
             textView.family = document.font
             textView.palette = palette
@@ -149,11 +217,14 @@ struct WriterEditor: NSViewRepresentable {
         private var isDirty = false
         private var pending: Task<Void, Never>?
         private var resizeObserver: NSObjectProtocol?
+        private var scrollObserver: NSObjectProtocol?
+        private var scrollUpdatePending = false
 
         func load(_ document: WriterDocument, palette: WriterPalette) {
             guard let textView else { return }
             documentID = document.id
             isDirty = false
+            textView.dynamicOutline = document.outline
             textView.load(markdown: document.markdown, family: document.font, palette: palette)
             controller?.state = textView.state
             DispatchQueue.main.async { [weak textView] in
@@ -204,8 +275,26 @@ struct WriterEditor: NSViewRepresentable {
             }
         }
 
+        /// While scrolling, the side panel follows the heading the reader is in.
+        func observeScrolling(of scrollView: NSScrollView) {
+            scrollView.contentView.postsBoundsChangedNotifications = true
+            scrollObserver = NotificationCenter.default.addObserver(
+                forName: NSView.boundsDidChangeNotification, object: scrollView.contentView, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard let self, !self.scrollUpdatePending else { return }
+                    self.scrollUpdatePending = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
+                        self?.scrollUpdatePending = false
+                        self?.controller?.updateCurrentHeading()
+                    }
+                }
+            }
+        }
+
         deinit {
             if let resizeObserver { NotificationCenter.default.removeObserver(resizeObserver) }
+            if let scrollObserver { NotificationCenter.default.removeObserver(scrollObserver) }
         }
     }
 }

@@ -54,12 +54,16 @@ enum LaTeXWriter {
         /// Writer Studio: the files of the pictures in the text (`![…](source)` lines), by their Markdown source.
         /// They become figures with a numbered caption. nil for chats, whose image lines stay text.
         var figures: [String: URL]?
+        /// Writer Studio: the model's table of contents, set where the `[TOC]{.dynamic}` marker stands. Its targets
+        /// are labels in `blockAnchors`.
+        var contents: Outline?
     }
 
     struct OutlineEntry {
         var title: String
         var level: Int
-        var label: String
+        /// nil: the place wasn't found any more; the entry is listed without a page.
+        var label: String?
     }
 
     struct Outline {
@@ -77,6 +81,8 @@ enum LaTeXWriter {
     /// `figureFolder`: where the figure files are, relative to the document (nil: next to it).
     static func document(parts: [Part], outline: Outline? = nil, paper: PaperSize, math: MathMode, figureFolder: String? = nil) -> String {
         var body: [String] = []
+        // Writer Studio documents with chapters are set as a report, where \chapter exists.
+        let hasChapters = parts.contains { $0.figures != nil && WriterHeadings.hasChapters($0.text) }
         for part in parts {
             var section = ""
             if let anchor = part.anchor { section += anchorCommand(anchor) }
@@ -86,34 +92,47 @@ enum LaTeXWriter {
             for image in part.images {
                 section += "\\begin{center}\\includegraphics[width=0.7\\linewidth,height=0.35\\textheight,keepaspectratio]{\(image.lastPathComponent)}\\end{center}\n"
             }
+            let structure = part.figures == nil ? nil : Structure(numbered: WriterHeadings.isFormal(part.text), chapters: hasChapters)
             section += part.isPlainText
                 ? plainText(part.text)
-                : blocks(part.text, math: math, anchors: part.blockAnchors, figures: part.figures, figureFolder: figureFolder)
+                : blocks(part.text, math: math, anchors: part.blockAnchors, figures: part.figures, figureFolder: figureFolder, structure: structure, contents: part.contents)
             body.append(section)
         }
         let contents = outline.map { tableOfContents($0, math: math) } ?? ""
-        return preamble(paper) + "\\begin{document}\n" + contents + body.joined(separator: "\n\n\\bigskip\n\n") + "\n\\end{document}\n"
+        return preamble(paper, documentClass: hasChapters ? "report" : "article") + "\\begin{document}\n" + contents
+            + body.joined(separator: "\n\n\\bigskip\n\n") + "\n\\end{document}\n"
+    }
+
+    /// How a Writer Studio document's headings are set: numbered (it has a table of contents) and with chapters.
+    struct Structure {
+        var numbered: Bool
+        var chapters: Bool
     }
 
     /// Table of contents on its own page(s): linked entries with page numbers via `\pageref`.
-    private static func tableOfContents(_ outline: Outline, math: MathMode) -> String {
-        var output = "\\section*{Inhaltsverzeichnis}\n"
+    /// `standalone`: on pages of its own before the content, with the summary (chat export); otherwise in the
+    /// text where a Writer Studio document has it, under a heading of the given command.
+    private static func tableOfContents(_ outline: Outline, math: MathMode, standalone: Bool = true, headingCommand: String = "section") -> String {
+        var output = "\\\(headingCommand)*{Inhaltsverzeichnis}\n"
         let summary = outline.summary.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !summary.isEmpty {
+        if standalone, !summary.isEmpty {
             output += "{\\itshape \(inline(summary, math: math))\\par}\n\\medskip\n"
         }
         var number = 0
         for entry in outline.entries {
             let title = inline(entry.title, math: math)
-            let page = "\\dotfill\\pageref*{\(entry.label)}\\par\n"
+            let page = entry.label.map { "\\dotfill\\pageref*{\($0)}\\par\n" } ?? "\\par\n"
+            func linked(_ text: String) -> String {
+                entry.label.map { "\\hyperref[\($0)]{\(text)}" } ?? text
+            }
             if entry.level == 0 {
                 number += 1
-                output += "\\vspace{4pt}\\noindent\\hyperref[\(entry.label)]{\\textbf{\(number)\\quad \(title)}}" + page
+                output += "\\vspace{4pt}\\noindent" + linked("\\textbf{\(number)\\quad \(title)}") + page
             } else {
-                output += "\\noindent\\hspace*{1.6em}\\hyperref[\(entry.label)]{\(title)}" + page
+                output += "\\noindent\\hspace*{1.6em}" + linked(title) + page
             }
         }
-        return output + "\\clearpage\n\n"
+        return output + (standalone ? "\\clearpage\n\n" : "\\bigskip\n")
     }
 
     private static func anchorCommand(_ label: String) -> String {
@@ -135,9 +154,9 @@ enum LaTeXWriter {
 
     // MARK: - Preamble
 
-    private static func preamble(_ paper: PaperSize) -> String {
+    private static func preamble(_ paper: PaperSize, documentClass: String = "article") -> String {
         #"""
-        \documentclass[11pt]{article}
+        \documentclass[11pt]{\#(documentClass)}
         \usepackage[\#(paper.geometry)]{geometry}
         \usepackage{amsmath}
         \usepackage{fontspec}
@@ -161,6 +180,8 @@ enum LaTeXWriter {
         \usepackage[hidelinks]{hyperref}
         \urlstyle{same}
         \setlength{\emergencystretch}{3em}
+        \setcounter{secnumdepth}{3}
+        \setcounter{tocdepth}{3}
         \pagestyle{fancy}
         \fancyhf{}
         \renewcommand{\headrulewidth}{0pt}
@@ -179,7 +200,8 @@ enum LaTeXWriter {
 
     // MARK: - Blocks
 
-    private static func blocks(_ markdown: String, math: MathMode, anchors: [Int: String] = [:], figures: [String: URL]? = nil, figureFolder: String? = nil) -> String {
+    private static func blocks(_ markdown: String, math: MathMode, anchors: [Int: String] = [:], figures: [String: URL]? = nil,
+                               figureFolder: String? = nil, structure: Structure? = nil, contents: Outline? = nil) -> String {
         var output: [String] = []
         for (index, block) in MarkdownParser.parse(markdown).enumerated() {
             let start = output.count
@@ -193,12 +215,26 @@ enum LaTeXWriter {
             case .paragraph(let text):
                 let lines = text.components(separatedBy: "\n")
                 let images = lines.compactMap(WriterImageReference.parse)
-                if let figures, !images.isEmpty, images.count == lines.count {
+                if let structure, lines.count == 1, let dynamic = WriterTOCAttachment.kind(of: lines[0]) {
+                    if !dynamic {
+                        output.append("\\tableofcontents" + (structure.chapters ? "" : "\n\\bigskip"))
+                    } else if let contents {
+                        output.append(tableOfContents(contents, math: math, standalone: false, headingCommand: structure.chapters ? "chapter" : "section"))
+                    }
+                } else if let figures, !images.isEmpty, images.count == lines.count {
                     output.append(images.map { figure($0, file: figures[$0.source], folder: figureFolder, math: math) }.joined(separator: "\n\n"))
                 } else {
                     output.append(inline(text, math: math))
                 }
             case .heading(let level, let text):
+                if let structure {
+                    // Writer Studio: chapters, and numbers when the document has a table of contents.
+                    let (title, classes) = WriterMarkdown.headingAttributes(text)
+                    let command = classes.contains("chapter") && level == 1 && structure.chapters
+                        ? "chapter" : ["section", "subsection", "subsubsection"][min(max(level, 1), 3) - 1]
+                    output.append("\\\(command)\(structure.numbered ? "" : "*"){\(inline(title, math: math))}")
+                    break
+                }
                 let command = ["section", "subsection", "subsubsection"][min(max(level, 1), 3) - 1]
                 output.append(level > 3 ? "\\paragraph*{\(inline(text, math: math))}" : "\\\(command)*{\(inline(text, math: math))}")
             case .code(_, let code):
@@ -360,7 +396,9 @@ enum LaTeXWriter {
         var formulas: [String] = []
         // Writer Studio stores underline as <u>…</u>, and line breaks in table cells as <br>. Placeholders made of
         // letters carry them through the Markdown parser and the escaping (it drops private-use characters).
-        let source = source.replacingOccurrences(of: "<u>", with: Self.underlineOpen).replacingOccurrences(of: "</u>", with: Self.underlineClose)
+        // Bookmarks only matter in the editor.
+        let source = WriterBookmark.strip(source)
+            .replacingOccurrences(of: "<u>", with: Self.underlineOpen).replacingOccurrences(of: "</u>", with: Self.underlineClose)
             .replacingOccurrences(of: #"<br\s*/?>"#, with: Self.lineBreak, options: [.regularExpression, .caseInsensitive])
         for segment in MathTokenizer.segments(source.trimmingCharacters(in: .whitespacesAndNewlines)) {
             switch segment {
