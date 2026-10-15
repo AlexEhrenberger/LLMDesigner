@@ -29,6 +29,9 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN_DIR/LLMDesigner" "$APP/Contents/MacOS/LLMDesigner"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+# mermaid.js draws the diagrams of the content analysis (offline, in a hidden web view).
+cp Resources/Mermaid/mermaid.min.js Resources/Mermaid/LICENSE "$APP/Contents/Resources/"
+mv "$APP/Contents/Resources/LICENSE" "$APP/Contents/Resources/mermaid-LICENSE.txt"
 # SwiftPM resource bundles (math fonts) go into Contents/Resources; see Vendor/SwiftMath/README.md.
 for bundle in "$BIN_DIR"/*.bundle; do
     [ -d "$bundle" ] && cp -R "$bundle" "$APP/Contents/Resources/"

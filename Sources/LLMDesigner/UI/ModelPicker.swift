@@ -1,53 +1,8 @@
 import SwiftUI
 
-struct ModelPickerButton: View {
-    @Environment(AppModel.self) private var app
-    @State private var isOpen = false
-    @State private var hovering = false
-
-    var body: some View {
-        Button { isOpen.toggle() } label: {
-            HStack(spacing: 7) {
-                StatusDot(color: statusColor)
-                Text(title)
-                    .font(.system(size: 14.5, weight: .semibold))
-                    .foregroundStyle(Theme.textPrimary)
-                    .lineLimit(1)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(Theme.textTertiary)
-            }
-            .padding(.horizontal, 10)
-            .frame(height: Theme.titleBarControlSize)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(hovering || isOpen ? Theme.hover : .clear))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering = $0 }
-        .help("Modell wählen")
-        .popover(isPresented: $isOpen, arrowEdge: .bottom) {
-            ModelPickerPanel { isOpen = false }
-                .environment(app)
-        }
-        .onChange(of: isOpen) { _, open in
-            if open { Task { await app.refreshModels() } }
-        }
-    }
-
-    private var title: String {
-        if let model = app.currentModel { return model.displayName }
-        if let id = app.currentModelId { return id }
-        return app.connection == .connected ? "Kein Modell geladen" : "Kein Modell"
-    }
-
-    private var statusColor: Color {
-        guard app.connection == .connected else { return app.connection.color }
-        guard let model = app.currentModel else { return Theme.textTertiary }
-        return model.isLoaded ? Theme.success : Theme.warning
-    }
-}
-
-private struct ModelPickerPanel: View {
+/// The models LM Studio has loaded (and the others it offers) to choose from. Opens from the connection row at the
+/// bottom of the sidebar.
+struct ModelPickerPanel: View {
     @Environment(AppModel.self) private var app
     let close: () -> Void
     @State private var showAvailable = false

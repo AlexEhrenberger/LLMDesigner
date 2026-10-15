@@ -852,6 +852,8 @@ private func isPresent<T>(_ item: Binding<T?>) -> Binding<Bool> {
 private struct SidebarFooter: View {
     @Environment(AppModel.self) private var app
     @State private var hoveringSettings = false
+    @State private var hoveringConnection = false
+    @State private var showsModels = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -867,7 +869,8 @@ private struct SidebarFooter: View {
 
     private var connection: some View {
         HStack(spacing: 10) {
-            Button { Task { await app.refreshModels() } } label: {
+            // Opening the model list also checks the connection again.
+            Button { showsModels.toggle() } label: {
                 HStack(spacing: 10) {
                     StatusDot(color: app.connection.color)
                     VStack(alignment: .leading, spacing: 1) {
@@ -881,10 +884,21 @@ private struct SidebarFooter: View {
                             .truncationMode(.tail)
                     }
                 }
+                .padding(.horizontal, 6)
+                .padding(.vertical, 4)
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(hoveringConnection || showsModels ? Theme.hover : .clear))
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help("Verbindung erneut prüfen")
+            .onHover { hoveringConnection = $0 }
+            .help(app.currentModel.map { "Modell: \($0.displayName) – klicken, um ein anderes zu wählen" } ?? "Modell wählen")
+            .popover(isPresented: $showsModels, arrowEdge: .top) {
+                ModelPickerPanel { showsModels = false }
+                    .environment(app)
+            }
+            .onChange(of: showsModels) { _, open in
+                if open { Task { await app.refreshModels() } }
+            }
 
             Spacer(minLength: 0)
 
@@ -900,23 +914,36 @@ private struct SidebarFooter: View {
             .onHover { hoveringSettings = $0 }
             .help("Einstellungen (⌘,)")
         }
-        .padding(.horizontal, 14)
+        .padding(.leading, 8)
+        .padding(.trailing, 14)
         .frame(height: 52)
     }
 
+    /// The model the chats and documents use; the green dot alone says the connection stands.
     private var title: String {
         switch app.connection {
         case .connecting: "Verbinde mit LM Studio…"
-        case .connected: "LM Studio verbunden"
         case .failed: "LM Studio nicht erreichbar"
+        case .connected:
+            if let model = app.currentModel { model.displayName }
+            else if let id = app.currentModelId { id }
+            else { "Kein Modell geladen" }
         }
     }
 
     private var subtitle: String {
         switch app.connection {
         case .connected:
-            let count = app.loadedModels.count
-            return "\(app.hostDescription) · \(count) \(count == 1 ? "Modell" : "Modelle") geladen"
+            guard let model = app.currentModel else { return "\(app.hostDescription) · Modell wählen" }
+            var parts: [String] = []
+            if let quantization = model.quantization { parts.append(quantization) }
+            if let context = model.loadedContextLength ?? model.maxContextLength {
+                parts.append("\(LMModel.formatTokens(context)) Kontext")
+            }
+            if !model.isLoaded { parts.append("nicht geladen") }
+            let others = app.loadedModels.filter { $0.id != model.id }.count
+            if others > 0 { parts.append("+\(others) geladen") }
+            return parts.isEmpty ? app.hostDescription : parts.joined(separator: " · ")
         case .connecting:
             return app.hostDescription
         case .failed(let message):

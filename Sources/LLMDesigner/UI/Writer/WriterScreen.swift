@@ -10,13 +10,14 @@ struct WriterScreen: View {
     @State private var showsToolbar = false
     @State private var showsContent = false
     @State private var showsGlow = true
+    @State private var analysisScrollTarget: ContentAnalysisModule?
 
     var body: some View {
         if let document = app.selectedDocument {
             HStack(spacing: 0) {
                 main(document)
                 // The document's contents and bookmarks; the check results take its place while they are open.
-                if app.outlinePanelVisible, !assistant.isPanelShown, showsToolbar {
+                if app.outlinePanelVisible, !assistant.isPanelShown, showsToolbar, app.writerTab == .document {
                     DocumentPanel(document: document, controller: controller, assistant: assistant)
                         .frame(width: Theme.outlineWidth)
                         .transition(.move(edge: .trailing))
@@ -53,11 +54,19 @@ struct WriterScreen: View {
     }
 
     private func main(_ document: WriterDocument) -> some View {
-            VStack(spacing: 0) {
+            let showsAnalysis = app.writerTab == .analysis
+            return VStack(spacing: 0) {
                 WriterTopBar(document: document)
                     .opacity(showsToolbar ? 1 : 0)
-                WriterToolbar(controller: controller, document: document, isShown: showsToolbar)
-                    .padding(.bottom, 6)
+                Group {
+                    if showsAnalysis {
+                        ContentAnalysisToolbar(document: document, scrollTarget: $analysisScrollTarget)
+                    } else {
+                        WriterToolbar(controller: controller, document: document, isShown: showsToolbar)
+                    }
+                }
+                .transition(.opacity)
+                .padding(.bottom, 6)
                 HStack(spacing: 0) {
                     ZStack {
                         WriterEditor(
@@ -69,28 +78,56 @@ struct WriterScreen: View {
                             isReadingAloud: app.speakingDocumentID != nil,
                             isDictating: app.dictationIntoDocument
                         )
-                        .opacity(showsContent ? 1 : 0)
-                        .overlay(alignment: .bottom) {
-                            VStack(spacing: 10) {
-                                WriterAudioStatus(controller: controller)
+                        .opacity(showsContent && !showsAnalysis ? 1 : 0)
+                        .allowsHitTesting(!showsAnalysis)
+                        // The editor stays while the analysis is shown, with its caret, selection and undo.
+                        if showsAnalysis {
+                            ContentAnalysisView(
+                                document: document,
+                                colors: .make(lightPaper: app.writerLightPaper),
+                                scrollTarget: $analysisScrollTarget
+                            ) { anchor in
+                                jump(to: anchor, in: document)
+                            }
+                            .transition(.opacity)
+                        }
+                        VStack(spacing: 10) {
+                            WriterAudioStatus(controller: controller)
+                            if !showsAnalysis {
                                 WriterAssistantDock(assistant: assistant, state: controller.state)
                             }
-                            .padding(.bottom, 16)
-                            .opacity(showsContent ? 1 : 0)
                         }
+                        .frame(maxHeight: .infinity, alignment: .bottom)
+                        .padding(.bottom, 16)
+                        .opacity(showsContent ? 1 : 0)
                         if showsGlow {
                             UnfoldingFrame(progress: unfold, lightPaper: app.writerLightPaper)
                                 .allowsHitTesting(false)
                         }
                     }
-                    if assistant.isPanelShown {
+                    if assistant.isPanelShown, !showsAnalysis {
                         WriterCheckPanel(assistant: assistant)
                             .frame(width: 320)
                             .transition(.move(edge: .trailing).combined(with: .opacity))
                     }
                 }
                 .animation(.spring(response: 0.38, dampingFraction: 0.88), value: assistant.isPanelShown)
+                .animation(.easeInOut(duration: 0.2), value: showsAnalysis)
             }
+            .onChange(of: showsAnalysis) { _, isShown in
+                // The hidden editor must not keep the keyboard.
+                if isShown { NSApp.keyWindow?.makeFirstResponder(nil) } else { controller.focus() }
+            }
+    }
+
+    /// From the analysis to the passage it is about: back to the document, then scroll there.
+    private func jump(to anchor: DocumentAnchor, in document: WriterDocument) {
+        app.showWriterTab(.document)
+        let blockCount = MarkdownParser.parse(WriterBookmark.strip(document.markdown)).count
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(60))
+            controller.jump(to: anchor, blockCount: blockCount)
+        }
     }
 
     private func playOpening() {
@@ -284,15 +321,16 @@ private struct WriterTopBar: View {
                 .foregroundStyle(Theme.textTertiary)
                 .lineLimit(1)
                 .truncationMode(.tail)
+            WriterTabSwitch(document: document)
+                .padding(.leading, 10)
+                .layoutPriority(1)
             Spacer(minLength: 12)
-            // The assistant writes with this model.
-            ModelPickerButton()
             ExportMenu(document: document)
             Text(wordCount)
                 .font(.system(size: 11.5).monospacedDigit())
                 .foregroundStyle(Theme.textTertiary)
             PaperSwitch()
-            if !app.outlinePanelVisible {
+            if !app.outlinePanelVisible, app.writerTab == .document {
                 IconButton(systemName: "sidebar.right", help: "Inhaltsverzeichnis und Lesezeichen einblenden (⌥⌘I)", frameSize: Theme.titleBarControlSize) {
                     app.toggleOutlinePanel()
                 }

@@ -431,7 +431,7 @@ final class WriterAssistant {
     private func prepare() -> Request? {
         guard let app else { return nil }
         guard let client = app.client, let model = app.currentModelId else {
-            error = "Kein Modell gewählt. Wähle oben ein Modell aus LM Studio."
+            error = "Kein Modell gewählt. Wähle eines unten links in der Seitenleiste („LM Studio verbunden“)."
             return nil
         }
         guard !isBusy else { return nil }

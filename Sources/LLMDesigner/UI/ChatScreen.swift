@@ -91,7 +91,6 @@ private struct TopBar: View {
                 IconButton(systemName: "square.and.pencil", help: "Neuer Chat (⌘N)", frameSize: Theme.titleBarControlSize) { app.newChat() }
                     .padding(.trailing, 6)
             }
-            ModelPickerButton()
             Spacer(minLength: 0)
             if let chat = app.selectedChat, !chat.messages.isEmpty {
                 ChatExportControls(chat: chat)

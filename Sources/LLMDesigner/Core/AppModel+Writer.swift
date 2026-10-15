@@ -46,6 +46,7 @@ extension AppModel {
         documents.insert(document, at: 0)
         if let folderID = document.folderID { expandFolder(folderID) }
         showChats()
+        writerTab = .document
         selectedDocumentID = document.id
     }
 
@@ -53,6 +54,7 @@ extension AppModel {
         guard selectedDocumentID != id else { return showChats() }
         closeDocument()
         showChats()
+        writerTab = .document
         selectedDocumentID = id
     }
 
@@ -118,7 +120,7 @@ extension AppModel {
         writerFlush?()
         if let running = documentOutlineTasks[id] { return running }
         guard let client, let model = currentModelId, let snapshot = document(id) else {
-            documentOutlineErrors[id] = "Kein Modell gewählt. Wähle oben ein Modell aus LM Studio."
+            documentOutlineErrors[id] = "Kein Modell gewählt. Wähle eines unten links in der Seitenleiste („LM Studio verbunden“)."
             return nil
         }
         let markdown = snapshot.markdown
@@ -160,6 +162,7 @@ extension AppModel {
 
     func deleteDocument(_ id: WriterDocument.ID) {
         documentOutlineTasks[id]?.cancel()
+        deleteAnalysis(id)
         documentSaveTasks[id]?.cancel()
         documentSaveTasks[id] = nil
         let pictures = document(id).map { WriterImageStore.sources(in: $0.markdown) } ?? []

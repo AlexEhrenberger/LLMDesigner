@@ -261,7 +261,8 @@ struct LMStudioClient: Sendable {
         messages: [ChatPayloadMessage],
         temperature: Double,
         maxTokens: Int,
-        jsonSchema: (name: String, schema: [String: Any])? = nil
+        jsonSchema: (name: String, schema: [String: Any])? = nil,
+        orderedSchema: (name: String, json: String)? = nil
     ) async throws -> String {
         var body: [String: Any] = [
             "model": model,
@@ -270,16 +271,19 @@ struct LMStudioClient: Sendable {
             "max_tokens": maxTokens,
             "stream": false,
         ]
-        if let jsonSchema {
+        // A schema given as JSON text keeps the order of its properties, which the model then writes in.
+        let placeholder = "__ordered_schema__"
+        if let schema = jsonSchema.map({ ($0.name, $0.schema as Any) }) ?? orderedSchema.map({ ($0.name, placeholder as Any) }) {
             body["response_format"] = [
                 "type": "json_schema",
-                "json_schema": ["name": jsonSchema.name, "strict": true, "schema": jsonSchema.schema],
+                "json_schema": ["name": schema.0, "strict": true, "schema": schema.1],
             ]
         }
-        let request = makeRequest(
-            "v1/chat/completions", method: "POST",
-            body: try JSONSerialization.data(withJSONObject: body), timeout: 300
-        )
+        var requestBody = try JSONSerialization.data(withJSONObject: body)
+        if jsonSchema == nil, let orderedSchema, let text = String(data: requestBody, encoding: .utf8) {
+            requestBody = Data(text.replacingOccurrences(of: "\"\(placeholder)\"", with: orderedSchema.json).utf8)
+        }
+        let request = makeRequest("v1/chat/completions", method: "POST", body: requestBody, timeout: 300)
         let (data, response) = try await URLSession.shared.data(for: request)
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
             throw LMStudioError.http(http.statusCode, Self.errorMessage(from: data))

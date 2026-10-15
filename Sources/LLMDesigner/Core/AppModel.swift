@@ -344,6 +344,16 @@ final class AppModel {
     var documentOutlineGeneratingIDs: Set<WriterDocument.ID> = []
     var documentOutlineErrors: [WriterDocument.ID: String] = [:]
     @ObservationIgnored var documentOutlineTasks: [WriterDocument.ID: Task<Void, Never>] = [:]
+    /// Writer Studio shows the open document or its content analysis (see AppModel+Analysis.swift).
+    var writerTab: WriterTab = .document
+    /// Content analyses, read from disk when a document's analysis is first shown.
+    var documentAnalyses: [WriterDocument.ID: ContentAnalysis] = [:]
+    /// Analyses being made: the part the model is working on and the parts still to come.
+    var analysisProgress: [WriterDocument.ID: ContentAnalysisProgress] = [:]
+    var analysisErrors: [WriterDocument.ID: [ContentAnalysisModule: String]] = [:]
+    @ObservationIgnored var analysisTasks: [WriterDocument.ID: Task<Void, Never>] = [:]
+    @ObservationIgnored var loadedAnalysisIDs: Set<WriterDocument.ID> = []
+    @ObservationIgnored let analysisStore = ContentAnalysisStore()
     /// The instruction being written in Writer Studio's assistant bar.
     var writerInstruction = ""
     /// The assistant bar has the keyboard focus (⌘D then dictates into it).
@@ -420,7 +430,8 @@ final class AppModel {
         refreshDebounce?.cancel()
         noticeTask?.cancel()
         let running = Array(generationTasks.values) + Array(outlineTasks.values) + Array(followUpTasks.values)
-            + Array(documentOutlineTasks.values) + Array(thalamusQuietTasks.values) + [thalamusWorker].compactMap { $0 }
+            + Array(documentOutlineTasks.values) + Array(analysisTasks.values) + Array(thalamusQuietTasks.values)
+            + [thalamusWorker].compactMap { $0 }
         running.forEach { $0.cancel() }
         // Cancelled work ends quickly (an answer is saved as far as it got); it gets a few seconds at most.
         await withTaskGroup(of: Void.self) { group in
