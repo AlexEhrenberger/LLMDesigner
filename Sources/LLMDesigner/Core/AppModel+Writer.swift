@@ -23,13 +23,15 @@ extension AppModel {
 
     /// The application in the main area; nil while the chat is shown.
     var activeApplication: StudioApplication? {
-        selectedDocumentID != nil ? .writer : nil
+        if citationStudioOpen { return .citation }
+        return selectedDocumentID != nil ? .writer : nil
     }
 
     /// From the applications menu under the composer.
     func openApplication(_ application: StudioApplication) {
         switch application {
         case .writer: newDocument()
+        case .citation: openCitationStudio()
         case .presenter, .notes: break
         }
     }
@@ -58,8 +60,22 @@ extension AppModel {
         selectedDocumentID = id
     }
 
+    /// Citation Studio takes the main area; choosing a chat or a document closes it again.
+    func openCitationStudio() {
+        closeDocument()
+        showChats()
+        citations.loadIfNeeded()
+        citationStudioOpen = true
+    }
+
+    func closeCitationStudio() {
+        citations.saveAll()
+        citationStudioOpen = false
+    }
+
     /// Leaves Writer Studio for the chat that was open before.
     func closeDocument() {
+        if citationStudioOpen { closeCitationStudio() }
         guard let id = selectedDocumentID else { return }
         // Dictation and reading belong to the open document.
         if dictationIntoDocument { Task { await stopDictation() } }

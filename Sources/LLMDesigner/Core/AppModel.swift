@@ -321,6 +321,8 @@ final class AppModel {
     var documents: [WriterDocument] = []
     /// The document open in Writer Studio; while it is set, the main area shows Writer Studio instead of the chat.
     var selectedDocumentID: WriterDocument.ID?
+    /// Citation Studio is shown in the main area.
+    var citationStudioOpen = false
     /// Writer Studio shows a white sheet instead of the dark one.
     var writerLightPaper: Bool {
         didSet { settings.set(writerLightPaper, forKey: Keys.writerLightPaper) }

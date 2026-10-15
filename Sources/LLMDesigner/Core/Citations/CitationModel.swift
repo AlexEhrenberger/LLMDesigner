@@ -403,3 +403,46 @@ extension CitationQuote {
         try c.encode(updatedAt, forKey: .updatedAt)
     }
 }
+
+// MARK: - Short forms
+
+extension CitationSource {
+    /// "Müller", "Müller & Kaiser", "Müller u. a.": the people as a citation in the text names them; without
+    /// people the container ("Wikipedia") or the start of the title.
+    var shortAuthors: String {
+        let people = creators
+        switch people.count {
+        case 0:
+            if !container.isEmpty { return container }
+            let words = title.split(separator: " ").prefix(3).joined(separator: " ")
+            return words.isEmpty ? "Ohne Titel" : words
+        case 1: return people[0].citationName
+        case 2: return people[0].citationName + " & " + people[1].citationName
+        default: return people[0].citationName + " u. a."
+        }
+    }
+
+    /// "Müller & Kaiser 2026", for lists.
+    var shortReference: String { shortAuthors + " " + yearText }
+
+    /// "(Müller & Kaiser, 2026, S. 12)", the APA form in the text.
+    func parenthetical(locator: String = "") -> String {
+        "(" + [shortAuthors, yearText, locator].filter { !$0.isEmpty }.joined(separator: ", ") + ")"
+    }
+
+    /// Nothing entered yet (a new source the user left right away).
+    var isBlank: Bool {
+        title.trimmingCharacters(in: .whitespaces).isEmpty && authors.isEmpty && editors.isEmpty && doi.isEmpty && isbn.isEmpty && url.isEmpty
+            && attachments.isEmpty
+    }
+}
+
+extension CitationQuote {
+    /// „Wortlaut“ (Müller, 2026, S. 12) — or the paraphrase with its reference.
+    func formatted(with source: CitationSource?) -> String {
+        let reference = source?.parenthetical(locator: locator) ?? ""
+        let exact = exactText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let body = exact.isEmpty ? paraphrase.trimmingCharacters(in: .whitespacesAndNewlines) : "„\(exact)“"
+        return reference.isEmpty ? body : body + " " + reference
+    }
+}

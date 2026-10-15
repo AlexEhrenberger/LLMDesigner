@@ -47,7 +47,10 @@ struct RootView: View {
             ZStack {
                 switch app.sidebarMode {
                 case .chats:
-                    if app.selectedDocumentID != nil {
+                    if app.citationStudioOpen {
+                        CitationStudioScreen()
+                            .transition(.opacity)
+                    } else if app.selectedDocumentID != nil {
                         WriterScreen()
                             .transition(.asymmetric(insertion: .identity, removal: .opacity))
                     } else {
@@ -63,7 +66,8 @@ struct RootView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .animation(.easeInOut(duration: 0.4), value: app.selectedDocumentID == nil)
-            if app.sidebarMode == .chats, app.selectedDocumentID == nil, app.isOutlinePanelShown, let chat = app.selectedChat {
+            .animation(.easeInOut(duration: 0.25), value: app.citationStudioOpen)
+            if app.sidebarMode == .chats, app.selectedDocumentID == nil, !app.citationStudioOpen, app.isOutlinePanelShown, let chat = app.selectedChat {
                 OutlinePanel(chat: chat)
                     .frame(width: Theme.outlineWidth)
                     .transition(.move(edge: .trailing))
