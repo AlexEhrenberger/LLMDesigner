@@ -150,10 +150,10 @@ extension AppModel {
         return task
     }
 
-    func moveDocument(_ id: WriterDocument.ID, to folderID: Folder.ID?) {
+    func moveDocument(_ id: WriterDocument.ID, to folderID: Folder.ID?, reveal: Bool = true) {
         guard let document = document(id), document.folderID != folderID else { return }
         modifyDocument(id) { $0.folderID = folderID }
-        if let folderID { expandFolder(folderID) }
+        if reveal, let folderID { expandFolder(folderID) }
     }
 
     func moveDocumentToNewFolder(_ id: WriterDocument.ID) {
@@ -323,12 +323,12 @@ extension AppModel {
         return (LaTeXWriter.Outline(summary: outline.summary, entries: entries), anchors)
     }
 
-    /// A chat or document dragged onto a folder (nil: out of its folder).
+    /// A chat or document dragged onto a folder (nil: out of its folder). The folder swallows it and stays as it is.
     func moveSidebarItem(_ id: UUID, to folderID: Folder.ID?) {
         if document(id) != nil {
-            moveDocument(id, to: folderID)
+            moveDocument(id, to: folderID, reveal: false)
         } else {
-            moveChat(id, to: folderID)
+            moveChat(id, to: folderID, reveal: false)
         }
     }
 }

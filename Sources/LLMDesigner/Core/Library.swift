@@ -6,9 +6,43 @@ struct Folder: Identifiable, Codable, Hashable, Sendable {
     var name: String
     var createdAt = Date()
     var isCollapsed: Bool?
+    /// nil: the plain grey folder.
+    var color: FolderColor?
 
     static func sorted(_ folders: [Folder]) -> [Folder] {
         folders.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+}
+
+/// The colours a sidebar folder can take; its chats, documents and skills take it on too.
+enum FolderColor: String, Codable, CaseIterable, Sendable {
+    case red, orange, yellow, green, teal, blue, purple, pink
+
+    var name: String {
+        switch self {
+        case .red: "Rot"
+        case .orange: "Orange"
+        case .yellow: "Gelb"
+        case .green: "Grün"
+        case .teal: "Türkis"
+        case .blue: "Blau"
+        case .purple: "Lila"
+        case .pink: "Pink"
+        }
+    }
+
+    /// sRGB, tuned for the dark sidebar.
+    var hex: UInt32 {
+        switch self {
+        case .red: 0xFF6B6B
+        case .orange: 0xFF9F4A
+        case .yellow: 0xF5CB4E
+        case .green: 0x4FD18B
+        case .teal: 0x3FC9C9
+        case .blue: 0x5AA9FF
+        case .purple: 0xA996FF
+        case .pink: 0xF27AC0
+        }
     }
 }
 

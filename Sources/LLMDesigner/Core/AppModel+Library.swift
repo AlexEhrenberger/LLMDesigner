@@ -46,6 +46,10 @@ extension AppModel {
         updateFolder(id) { $0.name = trimmed }
     }
 
+    func setFolderColor(_ id: Folder.ID, to color: FolderColor?) {
+        updateFolder(id) { $0.color = color }
+    }
+
     func toggleFolderCollapsed(_ id: Folder.ID) {
         updateFolder(id) { $0.isCollapsed = $0.isCollapsed == true ? nil : true }
     }
@@ -69,6 +73,11 @@ extension AppModel {
             skillFolders.removeAll { $0.id == id }
             saveSkillLibrary()
         }
+    }
+
+    func folder(_ id: Folder.ID?) -> Folder? {
+        guard let id else { return nil }
+        return chatFolders.first { $0.id == id } ?? skillFolders.first { $0.id == id }
     }
 
     func folderName(_ id: Folder.ID?) -> String? {
@@ -110,11 +119,12 @@ extension AppModel {
         }
     }
 
-    /// Moves a chat into a folder (nil: out of its folder). The folder opens, so the chat stays in view.
-    func moveChat(_ chatID: Chat.ID, to folderID: Folder.ID?) {
+    /// Moves a chat into a folder (nil: out of its folder). With `reveal` the folder opens, so the chat stays in view;
+    /// a chat dropped onto a folder is just swallowed.
+    func moveChat(_ chatID: Chat.ID, to folderID: Folder.ID?, reveal: Bool = true) {
         guard let chat = chat(chatID), chat.folderID != folderID else { return }
         modifyChat(chatID) { $0.folderID = folderID }
-        if let folderID { expandFolder(folderID) }
+        if reveal, let folderID { expandFolder(folderID) }
     }
 
     func moveChatToNewFolder(_ chatID: Chat.ID) {
@@ -201,10 +211,10 @@ extension AppModel {
         updateSkill(id) { $0.name = trimmed }
     }
 
-    func moveSkill(_ id: Skill.ID, to folderID: Folder.ID?) {
+    func moveSkill(_ id: Skill.ID, to folderID: Folder.ID?, reveal: Bool = true) {
         guard let skill = skill(id), skill.folderID != folderID else { return }
         updateSkill(id, touch: false) { $0.folderID = folderID }
-        if let folderID { expandFolder(folderID) }
+        if reveal, let folderID { expandFolder(folderID) }
     }
 
     func moveSkillToNewFolder(_ id: Skill.ID) {

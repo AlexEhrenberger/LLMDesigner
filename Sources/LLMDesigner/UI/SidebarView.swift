@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct SidebarView: View {
@@ -156,12 +157,13 @@ private struct ChatList: View {
                                     app.newDocument(inFolder: section.folder.id)
                                 }
                                 Divider()
+                                FolderColorMenu(folder: section.folder)
                                 Button("Umbenennen", systemImage: "pencil") { app.renamingID = section.folder.id }
                                 Button("Ordner löschen …", systemImage: "trash", role: .destructive) { pendingFolderDelete = section.folder }
                             }
                         ) {
                             ForEach(section.items) { entry in
-                                row(for: entry, indented: true)
+                                row(for: entry, in: section.folder)
                             }
                         }
                     }
@@ -169,7 +171,7 @@ private struct ChatList: View {
                 ForEach(groups) { group in
                     SectionHeader(title: group.id)
                     ForEach(group.entries) { entry in
-                        row(for: entry, indented: false)
+                        row(for: entry, in: nil)
                     }
                 }
             }
@@ -222,27 +224,28 @@ private struct ChatList: View {
         }
     }
 
+    /// `folder`: the folder the row is shown in; its colour tints the symbol.
     @ViewBuilder
-    private func row(for entry: SidebarEntry, indented: Bool) -> some View {
+    private func row(for entry: SidebarEntry, in folder: Folder?) -> some View {
         switch entry {
-        case .chat(let chat): row(for: chat, indented: indented)
-        case .document(let document): row(for: document, indented: indented)
+        case .chat(let chat): row(for: chat, in: folder)
+        case .document(let document): row(for: document, in: folder)
         }
     }
 
-    private func row(for document: WriterDocument, indented: Bool) -> some View {
+    private func row(for document: WriterDocument, in folder: Folder?) -> some View {
         SidebarRow(
             id: document.id,
             title: document.displayTitle,
             isSelected: app.selectedDocumentID == document.id,
-            indent: indented ? 18 : 0,
+            indent: folder != nil ? 18 : 0,
             dragPayload: SidebarDrag.payload(SidebarDrag.chat, document.id),
             onSelect: { app.selectDocument(document.id) },
             onRename: { app.renameDocument(document.id, to: $0) },
             leading: {
                 Image(systemName: StudioApplication.writer.symbol)
                     .font(.system(size: 12))
-                    .foregroundStyle(Theme.accent.opacity(0.85))
+                    .foregroundStyle(folder?.color?.color ?? Theme.accent.opacity(0.85))
                     .frame(width: 18)
                     .help("Dokument (Writer Studio)")
             },
@@ -264,24 +267,31 @@ private struct ChatList: View {
         )
     }
 
-    private func row(for chat: Chat, indented: Bool) -> some View {
+    private func row(for chat: Chat, in folder: Folder?) -> some View {
         SidebarRow(
             id: chat.id,
             title: chat.title,
             isSelected: app.selectedChatID == chat.id && app.selectedDocumentID == nil,
-            indent: indented ? 18 : 0,
+            indent: folder != nil ? 18 : 0,
             dragPayload: SidebarDrag.payload(SidebarDrag.chat, chat.id),
             onSelect: { app.selectChat(chat.id) },
             onRename: { app.renameChat(chat.id, to: $0) },
             leading: {
+                // A persona's picture keeps its own colours; the bubble takes on the folder's.
                 if let persona = app.persona(of: chat) {
                     PersonaAvatar(persona: persona, size: 18)
                         .help("Chat mit \(persona.displayName)")
+                } else {
+                    Image(systemName: "bubble.left")
+                        .font(.system(size: 12))
+                        .foregroundStyle(folder?.color?.color ?? Theme.textTertiary)
+                        .frame(width: 18)
+                        .help("Chat")
                 }
                 if chat.branch != nil {
                     Image(systemName: "arrow.triangle.branch")
                         .font(.system(size: 10.5, weight: .semibold))
-                        .foregroundStyle(Theme.textTertiary)
+                        .foregroundStyle(folder?.color?.color.opacity(0.8) ?? Theme.textTertiary)
                         .help("Abgezweigter Chat")
                 }
             },
@@ -327,17 +337,18 @@ private struct SkillList: View {
                         count: section.items.count,
                         isExpanded: searching || section.folder.isCollapsed != true,
                         dragPrefix: SidebarDrag.skill,
-                        onDrop: { app.moveSkill($0, to: section.folder.id) },
+                        onDrop: { app.moveSkill($0, to: section.folder.id, reveal: false) },
                         emptyHint: "Leer – Skills hierher ziehen",
                         menu: {
                             Button("Neuer Skill in diesem Ordner", systemImage: "plus") { app.createSkill(inFolder: section.folder.id) }
                             Divider()
+                            FolderColorMenu(folder: section.folder)
                             Button("Umbenennen", systemImage: "pencil") { app.renamingID = section.folder.id }
                             Button("Ordner löschen …", systemImage: "trash", role: .destructive) { pendingFolderDelete = section.folder }
                         }
                     ) {
                         ForEach(section.items) { skill in
-                            row(for: skill, indented: true)
+                            row(for: skill, in: section.folder)
                         }
                     }
                 }
@@ -345,7 +356,7 @@ private struct SkillList: View {
                     SectionHeader(title: "Ohne Ordner")
                 }
                 ForEach(library.unfiled) { skill in
-                    row(for: skill, indented: false)
+                    row(for: skill, in: nil)
                 }
             }
             .padding(.horizontal, 8)
@@ -395,19 +406,19 @@ private struct SkillList: View {
         }
     }
 
-    private func row(for skill: Skill, indented: Bool) -> some View {
+    private func row(for skill: Skill, in folder: Folder?) -> some View {
         SidebarRow(
             id: skill.id,
             title: skill.displayName,
             isSelected: app.selectedSkillID == skill.id,
-            indent: indented ? 18 : 0,
+            indent: folder != nil ? 18 : 0,
             dragPayload: SidebarDrag.payload(SidebarDrag.skill, skill.id),
             onSelect: { app.selectSkill(skill.id) },
             onRename: { app.renameSkill(skill.id, to: $0) },
             leading: {
                 Image(systemName: skill.symbol ?? Skill.defaultSymbol)
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Theme.accent.opacity(0.85))
+                    .foregroundStyle(folder?.color?.color ?? Theme.accent.opacity(0.85))
                     .frame(width: 18)
             },
             trailing: {
@@ -575,6 +586,44 @@ private struct MoveToFolderMenu: View {
     }
 }
 
+extension FolderColor {
+    var color: Color { Color(hex: hex) }
+
+    /// A filled dot for the menu; menus draw SF Symbols in one colour, so it is a non-template image.
+    var swatch: NSImage {
+        let image = NSImage(size: NSSize(width: 12, height: 12), flipped: false) { rect in
+            NSColor(color).setFill()
+            NSBezierPath(ovalIn: rect.insetBy(dx: 1, dy: 1)).fill()
+            return true
+        }
+        image.isTemplate = false
+        return image
+    }
+}
+
+/// "Farbe" submenu of a folder: its colour also tints the symbols of what lies in it.
+private struct FolderColorMenu: View {
+    @Environment(AppModel.self) private var app
+    let folder: Folder
+
+    var body: some View {
+        Menu("Farbe", systemImage: "paintpalette") {
+            ForEach(FolderColor.allCases, id: \.self) { color in
+                Toggle(isOn: choice(color)) {
+                    Label { Text(color.name) } icon: { Image(nsImage: color.swatch) }
+                }
+            }
+            Divider()
+            Toggle("Keine Farbe", isOn: choice(nil))
+        }
+    }
+
+    /// Menus show a toggle that is on with a checkmark: the folder's current colour.
+    private func choice(_ color: FolderColor?) -> Binding<Bool> {
+        Binding(get: { folder.color == color }, set: { _ in app.setFolderColor(folder.id, to: color) })
+    }
+}
+
 /// A folder row that opens and closes, with its chats or skills below. Chats or skills dropped on it move in.
 private struct FolderBlock<Rows: View, MenuItems: View>: View {
     @Environment(AppModel.self) private var app
@@ -587,6 +636,10 @@ private struct FolderBlock<Rows: View, MenuItems: View>: View {
     @ViewBuilder let menu: MenuItems
     @ViewBuilder let rows: Rows
     @State private var isTargeted = false
+    /// Counts up with every drop, so the folder icon gives a little gulp.
+    @State private var swallowed = 0
+
+    private var tint: Color { folder.color?.color ?? Theme.accent }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
@@ -607,7 +660,8 @@ private struct FolderBlock<Rows: View, MenuItems: View>: View {
                             .frame(width: 10)
                         Image(systemName: isExpanded ? "folder" : "folder.fill")
                             .font(.system(size: 12.5))
-                            .foregroundStyle(isTargeted ? Theme.accent : Theme.textSecondary)
+                            .foregroundStyle(folder.color?.color ?? (isTargeted ? Theme.accent : Theme.textSecondary))
+                            .symbolEffect(.bounce, value: swallowed)
                             .frame(width: 18)
                     }
                 },
@@ -633,12 +687,13 @@ private struct FolderBlock<Rows: View, MenuItems: View>: View {
         }
         .background(
             RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .fill(Theme.accent.opacity(isTargeted ? 0.08 : 0))
-                .strokeBorder(Theme.accent.opacity(isTargeted ? 0.7 : 0), lineWidth: 1.5)
+                .fill(tint.opacity(isTargeted ? 0.08 : 0))
+                .strokeBorder(tint.opacity(isTargeted ? 0.7 : 0), lineWidth: 1.5)
         )
         .dropDestination(for: String.self) { items, _ in
             let ids = SidebarDrag.ids(in: items, prefix: dragPrefix)
             ids.forEach(onDrop)
+            if !ids.isEmpty { swallowed += 1 }
             return !ids.isEmpty
         } isTargeted: { targeted in
             withAnimation(.easeOut(duration: 0.12)) { isTargeted = targeted }
