@@ -3,7 +3,11 @@ import AppKit
 /// What a paragraph in Writer Studio is. Stored on every character of the paragraph (`.writerBlock`).
 enum WriterBlock: String, CaseIterable, Sendable {
     case paragraph, heading1, heading2, heading3, bullet, numbered, quote, code, rule
-    /// Markdown the editor can't show yet (tables, formulas); kept and written back unchanged.
+    /// A picture on its own paragraph (`WriterImageAttachment`).
+    case image
+    /// A table cell: one paragraph per cell, see `WriterTable`.
+    case table
+    /// Markdown the editor can't show yet (formulas); kept and written back unchanged.
     case raw
 
     var isList: Bool { self == .bullet || self == .numbered }
@@ -20,6 +24,8 @@ enum WriterBlock: String, CaseIterable, Sendable {
         case .quote: "Zitat"
         case .code: "Code"
         case .rule: "Trennlinie"
+        case .image: "Bild"
+        case .table: "Tabelle"
         case .raw: "Markdown"
         }
     }
@@ -37,6 +43,79 @@ extension NSAttributedString.Key {
     static let writerCode = NSAttributedString.Key("LLMDesigner.writer.code")
     /// Dictated words that are still being recognised: shown grey, never saved.
     static let writerDictationPreview = NSAttributedString.Key("LLMDesigner.writer.dictationPreview")
+    /// The `WriterTable` a cell belongs to, and the cell's place in it.
+    static let writerTable = NSAttributedString.Key("LLMDesigner.writer.table")
+    static let writerTableRow = NSAttributedString.Key("LLMDesigner.writer.tableRow")
+    static let writerTableColumn = NSAttributedString.Key("LLMDesigner.writer.tableColumn")
+}
+
+/// A table in the editor. All cells of a table share this object through their attributes; each cell is one
+/// paragraph, and its newline carries the cell's place. It never changes: a new column or alignment builds the
+/// table anew, so undo brings back the old one.
+final class WriterTable: NSObject {
+    let columns: Int
+    let alignments: [MarkdownBlock.Alignment]
+    /// AppKit's table, which lays out the cells.
+    let textTable: NSTextTable
+
+    init(columns: Int, alignments: [MarkdownBlock.Alignment]) {
+        self.columns = max(1, columns)
+        self.alignments = (0..<self.columns).map { $0 < alignments.count ? alignments[$0] : .leading }
+        let table = NSTextTable()
+        table.numberOfColumns = self.columns
+        table.layoutAlgorithm = .automaticLayoutAlgorithm
+        table.collapsesBorders = true
+        table.hidesEmptyCells = false
+        table.setContentWidth(100, type: .percentageValueType)
+        table.setWidth(6, type: .absoluteValueType, for: .margin, edge: .minY)
+        table.setWidth(16, type: .absoluteValueType, for: .margin, edge: .maxY)
+        textTable = table
+    }
+
+    func alignment(of column: Int) -> MarkdownBlock.Alignment {
+        column < alignments.count ? alignments[column] : .leading
+    }
+}
+
+/// Where a paragraph sits in a table.
+struct WriterTableCell {
+    let table: WriterTable
+    let row: Int
+    let column: Int
+
+    init(table: WriterTable, row: Int, column: Int) {
+        self.table = table
+        self.row = row
+        self.column = column
+    }
+
+    init?(_ attributes: [NSAttributedString.Key: Any]) {
+        guard let table = attributes[.writerTable] as? WriterTable else { return nil }
+        self.init(table: table, row: attributes[.writerTableRow] as? Int ?? 0, column: attributes[.writerTableColumn] as? Int ?? 0)
+    }
+
+    var attributes: [NSAttributedString.Key: Any] {
+        [.writerBlock: WriterBlock.table.rawValue, .writerListLevel: 0, .writerTable: table, .writerTableRow: row, .writerTableColumn: column]
+    }
+}
+
+extension MarkdownBlock.Alignment {
+    var textAlignment: NSTextAlignment {
+        switch self {
+        case .leading: .natural
+        case .center: .center
+        case .trailing: .right
+        }
+    }
+
+    /// The column's separator in a Markdown table.
+    var separator: String {
+        switch self {
+        case .leading: "---"
+        case .center: ":---:"
+        case .trailing: "---:"
+        }
+    }
 }
 
 /// Inline marks of a stretch of text. Underline, strikethrough and links use the standard attributes.
@@ -90,6 +169,9 @@ final class WriterRuleAttachment: NSTextAttachment {
 /// the meaning (block, list level, inline marks); `WriterStyler` adds fonts and colours from it.
 enum WriterMarkdown {
     static let lineSeparator: Character = "\u{2028}"
+    /// The attributes that say what a paragraph is; text inserted into a paragraph takes these along.
+    static let paragraphKeys: Set<NSAttributedString.Key> = [.writerBlock, .writerListLevel, .writerTable, .writerTableRow, .writerTableColumn]
+    static let tableKeys: [NSAttributedString.Key] = [.writerTable, .writerTableRow, .writerTableColumn]
 
     // MARK: Markdown → text
 
@@ -99,9 +181,9 @@ enum WriterMarkdown {
 
         /// Appends a paragraph. Its newline comes with the next paragraph but carries this paragraph's
         /// attributes, so empty paragraphs keep their block too.
-        func add(_ paragraph: NSAttributedString, block: WriterBlock, level: Int = 0, language: String? = nil) {
+        func add(_ paragraph: NSAttributedString, block: WriterBlock, level: Int = 0, language: String? = nil, cell: WriterTableCell? = nil) {
             if let previous { result.append(NSAttributedString(string: "\n", attributes: previous)) }
-            var attributes: [NSAttributedString.Key: Any] = [.writerBlock: block.rawValue, .writerListLevel: level]
+            var attributes: [NSAttributedString.Key: Any] = cell?.attributes ?? [.writerBlock: block.rawValue, .writerListLevel: level]
             if let language, !language.isEmpty { attributes[.writerCodeLanguage] = language }
             let start = result.length
             result.append(paragraph)
@@ -109,10 +191,27 @@ enum WriterMarkdown {
             previous = attributes
         }
 
+        var endsWithTable = false
         for block in MarkdownParser.parse(markdown) {
+            endsWithTable = false
             switch block {
             case .paragraph(let text):
-                add(inline(text.replacingOccurrences(of: "\n", with: String(lineSeparator))), block: .paragraph)
+                // A line that is only a picture becomes a picture of its own.
+                var lines: [String] = []
+                func addText() {
+                    guard !lines.isEmpty else { return }
+                    add(inline(lines.joined(separator: String(lineSeparator))), block: .paragraph)
+                    lines = []
+                }
+                for line in text.components(separatedBy: "\n") {
+                    if let image = WriterImageReference.parse(line) {
+                        addText()
+                        add(NSAttributedString(attachment: WriterImageAttachment(reference: image)), block: .image)
+                    } else {
+                        lines.append(line)
+                    }
+                }
+                addText()
             case .heading(let level, let text):
                 let block: WriterBlock = level <= 1 ? .heading1 : level == 2 ? .heading2 : .heading3
                 add(inline(text), block: block)
@@ -132,9 +231,16 @@ enum WriterMarkdown {
             case .rule:
                 let attachment = WriterRuleAttachment()
                 add(NSAttributedString(attachment: attachment), block: .rule)
-            case .table(let header, let rows):
-                let lines = [row(header), row(header.map { _ in "---" })] + rows.map(row)
-                for line in lines { add(NSAttributedString(string: line), block: .raw) }
+            case .table(let header, let rows, let alignments):
+                let columns = max(header.count, rows.map(\.count).max() ?? 0, 1)
+                let table = WriterTable(columns: columns, alignments: alignments)
+                for (index, cells) in ([header] + rows).enumerated() {
+                    for column in 0..<columns {
+                        let text = column < cells.count ? cells[column] : ""
+                        add(inline(cellText(text)), block: .table, cell: WriterTableCell(table: table, row: index, column: column))
+                    }
+                }
+                endsWithTable = true
             case .math(let latex, _):
                 let lines = latex.hasPrefix("\\begin") ? [latex] : ["$$", latex, "$$"]
                 for line in lines.joined(separator: "\n").components(separatedBy: "\n") {
@@ -142,11 +248,14 @@ enum WriterMarkdown {
                 }
             }
         }
+        // Every cell ends with its newline, the last one too: text after the table is never part of a cell.
+        if endsWithTable, let previous { result.append(NSAttributedString(string: "\n", attributes: previous)) }
         return result
     }
 
-    private static func row(_ cells: [String]) -> String {
-        "| " + cells.joined(separator: " | ") + " |"
+    /// A Markdown cell's text: `<br>` is a line break in the cell.
+    private static func cellText(_ text: String) -> String {
+        text.replacingOccurrences(of: #"<br\s*/?>"#, with: String(lineSeparator), options: [.regularExpression, .caseInsensitive])
     }
 
     /// Inline Markdown: `**bold**`, `*italic*`, `<u>underlined</u>`, `~~struck~~`, `` `code` `` and `[links](url)`.
@@ -309,6 +418,9 @@ enum WriterMarkdown {
         let block: WriterBlock
         let level: Int
         let language: String?
+        /// Set for a table cell. A paragraph is a cell when its newline belongs to a table; text typed or pasted
+        /// in front of a cell can't make another paragraph one.
+        let cell: WriterTableCell?
     }
 
     static func paragraphs(of text: NSAttributedString, in range: NSRange? = nil) -> [Paragraph] {
@@ -322,12 +434,18 @@ enum WriterMarkdown {
             var content = paragraph
             if content.length > 0, string.character(at: NSMaxRange(content) - 1) == 0x0A { content.length -= 1 }
             let attributes = paragraph.length > 0 ? text.attributes(at: paragraph.location, effectiveRange: nil) : [:]
+            let cell = content.length < paragraph.length
+                ? WriterTableCell(text.attributes(at: NSMaxRange(paragraph) - 1, effectiveRange: nil))
+                : nil
+            var block = (attributes[.writerBlock] as? String).flatMap(WriterBlock.init(rawValue:)) ?? .paragraph
+            if cell != nil { block = .table } else if block == .table { block = .paragraph }
             result.append(Paragraph(
                 range: paragraph,
                 contentRange: content,
-                block: (attributes[.writerBlock] as? String).flatMap(WriterBlock.init(rawValue:)) ?? .paragraph,
+                block: block,
                 level: attributes[.writerListLevel] as? Int ?? 0,
-                language: attributes[.writerCodeLanguage] as? String
+                language: attributes[.writerCodeLanguage] as? String,
+                cell: cell
             ))
             location = NSMaxRange(paragraph)
         } while location < end && location < string.length
@@ -340,9 +458,22 @@ enum WriterMarkdown {
         var pendingKind: WriterBlock?
         var listCounters: [Int] = []
         var currentLanguage: String?
+        var currentTable: WriterTable?
+        var tableCells: [Int: [Int: String]] = [:]
 
         func flush() {
-            guard let kind = pendingKind, !pending.isEmpty else { pendingKind = nil; return }
+            defer {
+                pending = []
+                pendingKind = nil
+                listCounters = []
+                currentTable = nil
+                tableCells = [:]
+            }
+            if pendingKind == .table, let table = currentTable {
+                blocks.append(tableMarkdown(table, cells: tableCells))
+                return
+            }
+            guard let kind = pendingKind, !pending.isEmpty else { return }
             switch kind {
             case .code:
                 let language = currentLanguage ?? ""
@@ -350,18 +481,24 @@ enum WriterMarkdown {
             default:
                 blocks.append(pending.joined(separator: "\n"))
             }
-            pending = []
-            pendingKind = nil
-            listCounters = []
         }
 
         for paragraph in paragraphs(of: text) {
             let content = text.attributedSubstring(from: paragraph.contentRange)
             let group: WriterBlock = paragraph.block.isList ? .bullet : paragraph.block
-            let grouped: Set<WriterBlock> = [.bullet, .quote, .code, .raw]
-            if pendingKind != group || !grouped.contains(group) { flush() }
+            let grouped: Set<WriterBlock> = [.bullet, .quote, .code, .raw, .table]
+            if pendingKind != group || !grouped.contains(group) || (group == .table && paragraph.cell?.table !== currentTable) { flush() }
 
             switch paragraph.block {
+            case .table:
+                guard let cell = paragraph.cell else { continue }
+                currentTable = cell.table
+                tableCells[cell.row, default: [:]][cell.column] = inlineMarkdown(content)
+                    .replacingOccurrences(of: "|", with: "\\|")
+                    .replacingOccurrences(of: "\n", with: "<br>")
+            case .image:
+                guard let image = images(in: content).first else { continue }
+                pending.append(image.markdown)
             case .code:
                 if pendingKind == nil { currentLanguage = paragraph.language }
                 pending.append(plainString(content).replacingOccurrences(of: String(lineSeparator), with: "\n"))
@@ -390,15 +527,41 @@ enum WriterMarkdown {
                 pending.append(hashes + " " + line)
             case .paragraph:
                 let line = inlineMarkdown(content)
-                guard !line.trimmingCharacters(in: .whitespaces).isEmpty else { continue }
-                pending.append(line)
+                if !line.trimmingCharacters(in: .whitespaces).isEmpty { pending.append(line) }
             }
             pendingKind = group
+            // A picture that ended up inside text (after joining paragraphs) is kept as a paragraph of its own.
+            if paragraph.block != .image, paragraph.block != .table {
+                let inlineImages = images(in: content)
+                if !inlineImages.isEmpty {
+                    flush()
+                    blocks += inlineImages.map(\.markdown)
+                }
+            }
         }
         flush()
         // Drop quote lines that were only empty and trailing "> " noise.
         return blocks.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && $0 != ">" }
             .joined(separator: "\n\n") + "\n"
+    }
+
+    private static func images(in text: NSAttributedString) -> [WriterImageReference] {
+        var references: [WriterImageReference] = []
+        text.enumerateAttribute(.attachment, in: NSRange(location: 0, length: text.length)) { value, _, _ in
+            if let image = value as? WriterImageAttachment { references.append(image.reference) }
+        }
+        return references
+    }
+
+    private static func tableMarkdown(_ table: WriterTable, cells: [Int: [Int: String]]) -> String {
+        let rows = (cells.keys.max() ?? 0) + 1
+        var lines: [String] = []
+        for row in 0..<rows {
+            let values = (0..<table.columns).map { cells[row]?[$0] ?? "" }
+            lines.append("| " + values.joined(separator: " | ") + " |")
+            if row == 0 { lines.append("| " + table.alignments.map(\.separator).joined(separator: " | ") + " |") }
+        }
+        return lines.joined(separator: "\n")
     }
 
     /// The text without dictation that is still being recognised.

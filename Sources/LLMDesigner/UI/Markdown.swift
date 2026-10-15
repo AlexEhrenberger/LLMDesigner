@@ -101,7 +101,7 @@ struct MarkdownView: View {
                     Rectangle().fill(Theme.accent.opacity(0.6)).frame(width: 3)
                 }
 
-        case .table(let header, let rows):
+        case .table(let header, let rows, _):
             TableBlockView(header: header, rows: rows)
 
         case .math(let latex, let complete):

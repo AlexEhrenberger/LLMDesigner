@@ -1,4 +1,5 @@
 import AppKit
+import UniformTypeIdentifiers
 
 extension NSPasteboard.PasteboardType {
     /// Markdown of a Writer Studio selection, so formatting survives copy and paste between documents.
@@ -36,13 +37,23 @@ final class WriterTextView: NSTextView {
     /// Commands from the context menu and ⌘J for the assistant.
     var onAssistant: ((WriterAssistantCommand) -> Void)?
     let aiCursorIndicator = AICursorIndicator()
+    /// Messages for the user, e.g. a picture that can't be read.
+    var onNotice: ((String) -> Void)?
+    /// The bar on a selected picture (see WriterTextView+Images.swift).
+    var imageControlsHost: NSView?
+    /// Set while a table-safe or structural edit runs, so `shouldChangeText` lets it through.
+    var isEditingStructure = false
 
-    /// Words still being recognised never become typing attributes, so typed text isn't grey or lost.
+    /// Words still being recognised never become typing attributes, so typed text isn't grey or lost. Outside a
+    /// table, text never takes a cell's attributes (e.g. at the end of a document that ends with a table).
     override var typingAttributes: [NSAttributedString.Key: Any] {
         get { super.typingAttributes }
         set {
             var attributes = newValue
             attributes.removeValue(forKey: .writerDictationPreview)
+            if attributes[.writerTable] != nil, textStorage != nil, tableCellAtCaret == nil {
+                attributes = WriterStyler.typingAttributes(block: .paragraph, level: 0, semantic: attributes, family: family, palette: palette)
+            }
             super.typingAttributes = attributes
         }
     }
@@ -87,6 +98,8 @@ final class WriterTextView: NSTextView {
         textContainerInset = NSSize(width: 0, height: 170)
         drawsBackground = true
         applyPalette()
+        // Pictures can be dropped in (see `acceptableDragTypes`).
+        updateDragTypeRegistration()
     }
 
     private func applyPalette() {
@@ -125,7 +138,10 @@ final class WriterTextView: NSTextView {
         if let container = textContainer, abs(container.size.width - width) > 0.5 {
             container.size = NSSize(width: width, height: .greatestFiniteMagnitude)
         }
-        DispatchQueue.main.async { [weak self] in self?.updateAICursorIndicator() }
+        DispatchQueue.main.async { [weak self] in
+            self?.updateAICursorIndicator()
+            self?.updateImageControls()
+        }
     }
 
     override func drawBackground(in rect: NSRect) {
@@ -204,6 +220,23 @@ final class WriterTextView: NSTextView {
         /// A few words before the AI cursor; empty at the start of the document.
         var aiCursorContext = ""
         var isAICursorAtEnd = true
+        /// The picture selected on its own.
+        var image: ImageState?
+        /// The table with the caret.
+        var table: TableState?
+
+        struct ImageState: Equatable {
+            var width: Int?
+            var hasCaption: Bool
+        }
+
+        struct TableState: Equatable {
+            var row: Int
+            var column: Int
+            var rows: Int
+            var columns: Int
+            var alignment: MarkdownBlock.Alignment
+        }
     }
 
     var state: State {
@@ -234,6 +267,11 @@ final class WriterTextView: NSTextView {
         state.isAICursorAtEnd = isAICursorAtEnd
         state.block = currentParagraph?.block
             ?? (typingAttributes[.writerBlock] as? String).flatMap(WriterBlock.init(rawValue:)) ?? .paragraph
+        if let image = selectedImage {
+            state.block = .image
+            state.image = State.ImageState(width: image.reference.width, hasCaption: !image.reference.caption.isEmpty)
+        }
+        state.table = tableState
         return state
     }
 
@@ -262,17 +300,25 @@ final class WriterTextView: NSTextView {
         } else if location > 0, (storage.string as NSString).character(at: location - 1) != 0x0A {
             semantic = storage.attributes(at: location - 1, effectiveRange: nil)
         } else if location < storage.length {
-            semantic = storage.attributes(at: location, effectiveRange: nil).filter { $0.key == .writerBlock || $0.key == .writerListLevel }
+            semantic = storage.attributes(at: location, effectiveRange: nil).filter { WriterMarkdown.paragraphKeys.contains($0.key) }
         } else {
+            // The empty end of the document is never part of a table.
             semantic = typingAttributes.filter { $0.key == .writerBlock || $0.key == .writerListLevel }
         }
-        let block = (semantic[.writerBlock] as? String).flatMap(WriterBlock.init(rawValue:)) ?? .paragraph
+        var block = (semantic[.writerBlock] as? String).flatMap(WriterBlock.init(rawValue:)) ?? .paragraph
+        if block == .rule || block == .image || (block == .table && tableCellAtCaret == nil) { block = .paragraph }
         let level = semantic[.writerListLevel] as? Int ?? 0
-        typingAttributes = WriterStyler.typingAttributes(block: block == .rule ? .paragraph : block, level: level, semantic: semantic, family: family, palette: palette)
+        typingAttributes = WriterStyler.typingAttributes(block: block, level: level, semantic: semantic, family: family, palette: palette)
     }
 
     override func setSelectedRanges(_ ranges: [NSValue], affinity: NSSelectionAffinity, stillSelecting: Bool) {
+        let previousImage = selectedImage?.location
         super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelecting)
+        // A picture shows whether it is selected; redraw the one that was and the one that is.
+        for location in [previousImage, selectedImage?.location].compactMap({ $0 }) {
+            if let frame = imageFrame(at: location) { setNeedsDisplay(frame.insetBy(dx: -6, dy: -6)) }
+        }
+        updateImageControls()
         if !stillSelecting { onStateChange?() }
     }
 
@@ -315,7 +361,10 @@ final class WriterTextView: NSTextView {
     /// selected paragraph already has them.
     func setBlock(_ block: WriterBlock, toggle: Bool = true) {
         guard let storage = textStorage else { return }
-        let paragraphs = selectedParagraphs().filter { $0.block != .rule }
+        let selected = selectedParagraphs()
+        // Lines, pictures and table cells keep what they are.
+        let paragraphs = selected.filter { ![.rule, .image, .table].contains($0.block) }
+        if paragraphs.isEmpty, selected.contains(where: { $0.block == .image || $0.block == .table }) || selectedImage != nil { return }
         let current = paragraphs.isEmpty ? state.block : nil
         let all = paragraphs.isEmpty ? current == block : paragraphs.allSatisfy { $0.block == block }
         let target: WriterBlock = toggle && all && block != .paragraph ? .paragraph : block
@@ -370,43 +419,56 @@ final class WriterTextView: NSTextView {
 
     /// Puts a horizontal line below the current paragraph (or in place of an empty one) and the caret after it.
     func insertRule() {
-        guard let storage = textStorage else { return }
-        let string = storage.string as NSString
-        let location = selectedRange().location
         let ruleAttributes: [NSAttributedString.Key: Any] = [.writerBlock: WriterBlock.rule.rawValue, .writerListLevel: 0]
         let rule = NSMutableAttributedString(attachment: WriterRuleAttachment())
         rule.addAttributes(ruleAttributes, range: NSRange(location: 0, length: rule.length))
         rule.append(NSAttributedString(string: "\n", attributes: ruleAttributes))
+        guard let start = insertBlock(rule) else { return }
+        setSelectedRange(NSRange(location: min(start + rule.length, textStorage?.length ?? 0), length: 0))
+        setBlockOfEmptyCaretParagraph(.paragraph)
+    }
+
+    /// Puts whole paragraphs (a line, pictures, a table; ending with their newline) below the current
+    /// paragraph, below the table with the caret, or in place of an empty paragraph. Returns where they start.
+    @discardableResult
+    func insertBlock(_ block: NSAttributedString) -> Int? {
+        guard let storage = textStorage else { return nil }
+        let string = storage.string as NSString
+        var paragraph = currentParagraph
+        var paragraphRange = paragraph?.range
+        if let current = paragraph, current.cell != nil, let model = tableModel(at: current.range.location) {
+            paragraphRange = model.range
+        } else if selectedImage != nil {
+            paragraph = WriterMarkdown.paragraphs(of: storage, in: NSRange(location: selectedRange().location, length: 0)).first
+            paragraphRange = paragraph?.range
+        }
 
         let target: NSRange
         let insertion = NSMutableAttributedString()
-        let paragraph = currentParagraph
-        if let paragraph, paragraph.contentRange.length > 0 {
+        let start: Int
+        if let paragraph, let range = paragraphRange, paragraph.contentRange.length > 0 || paragraph.cell != nil {
             // Below the paragraph; at the end of the text a new empty paragraph follows.
-            let end = NSMaxRange(paragraph.range)
+            let end = NSMaxRange(range)
             target = NSRange(location: end, length: 0)
-            if end == NSMaxRange(paragraph.contentRange) {
+            if end == NSMaxRange(paragraph.contentRange), end > 0, string.character(at: end - 1) != 0x0A {
                 insertion.append(NSAttributedString(string: "\n", attributes: storage.attributes(at: max(0, end - 1), effectiveRange: nil)))
             }
-            insertion.append(rule)
+            start = target.location + insertion.length
+            insertion.append(block)
         } else if let paragraph {
-            // An empty paragraph in the middle becomes the line; writing goes on in a new empty paragraph.
+            // An empty paragraph in the middle is taken by the block; writing goes on in a new empty paragraph.
             target = paragraph.range
-            insertion.append(rule)
+            start = target.location
+            insertion.append(block)
             insertion.append(NSAttributedString(string: "\n", attributes: [.writerBlock: WriterBlock.paragraph.rawValue, .writerListLevel: 0]))
         } else {
             // The empty last paragraph.
             target = NSRange(location: string.length, length: 0)
-            insertion.append(rule)
+            start = target.location
+            insertion.append(block)
         }
-        guard shouldChangeText(in: target, replacementString: insertion.string) else { return }
-        storage.replaceCharacters(in: target, with: insertion)
-        didChangeText()
-        let caret = paragraph != nil && paragraph!.contentRange.length == 0
-            ? target.location + rule.length
-            : target.location + insertion.length
-        setSelectedRange(NSRange(location: min(caret, storage.length), length: 0))
-        setBlockOfEmptyCaretParagraph(.paragraph)
+        performStructureEdit(in: target, with: insertion)
+        return start
     }
 
     /// Asks for an address and links the selection (or removes the link).
@@ -466,7 +528,7 @@ final class WriterTextView: NSTextView {
 
     /// Gives the paragraph at the caret this block if it is empty (a fresh line after Return or a rule).
     /// A paragraph with text is left alone.
-    private func setBlockOfEmptyCaretParagraph(_ block: WriterBlock) {
+    func setBlockOfEmptyCaretParagraph(_ block: WriterBlock) {
         guard let storage = textStorage else { return }
         let location = selectedRange().location
         let string = storage.string as NSString
@@ -535,6 +597,15 @@ final class WriterTextView: NSTextView {
     }
 
     override func insertNewline(_ sender: Any?) {
+        // In a table Return goes to the cell below (shift-return breaks the line inside the cell).
+        if tableCellAtCaret != nil {
+            if NSApp.currentEvent?.modifierFlags.contains(.shift) == true {
+                return insertText(String(WriterMarkdown.lineSeparator), replacementRange: selectedRange())
+            }
+            return moveToCellBelow()
+        }
+        // A selected picture stays; the new paragraph comes below it.
+        if let image = selectedImage { setSelectedRange(NSRange(location: image.location + 1, length: 0)) }
         guard selectedRange().length == 0 else { return super.insertNewline(sender) }
         guard let paragraph = currentParagraph else {
             // Return in the empty last paragraph moves a list item out, or ends a list, quote or code block.
@@ -551,10 +622,14 @@ final class WriterTextView: NSTextView {
                 return setBlock(.paragraph, toggle: false)
             }
             super.insertNewline(sender)
-        case .heading1, .heading2, .heading3, .rule:
-            // After a heading or a line, writing goes on in a plain paragraph.
-            if paragraph.block == .rule || location >= NSMaxRange(paragraph.contentRange) {
-                if paragraph.block == .rule { setSelectedRange(NSRange(location: NSMaxRange(paragraph.contentRange), length: 0)) }
+        case .image where location == paragraph.contentRange.location:
+            // Return in front of a picture pushes it down.
+            insertEmptyParagraph(at: location)
+            setSelectedRange(NSRange(location: location + 1, length: 0))
+        case .heading1, .heading2, .heading3, .rule, .image:
+            // After a heading, a line or a picture, writing goes on in a plain paragraph.
+            if paragraph.block == .rule || paragraph.block == .image || location >= NSMaxRange(paragraph.contentRange) {
+                if paragraph.block == .rule || paragraph.block == .image { setSelectedRange(NSRange(location: NSMaxRange(paragraph.contentRange), length: 0)) }
                 undoManager?.beginUndoGrouping()
                 super.insertNewline(sender)
                 setBlockOfEmptyCaretParagraph(.paragraph)
@@ -568,24 +643,73 @@ final class WriterTextView: NSTextView {
     }
 
     override func insertTab(_ sender: Any?) {
+        if tableCellAtCaret != nil { return moveToAdjacentCell(forward: true) }
         if state.block.isList { return changeListLevel(by: 1) }
         super.insertTab(sender)
     }
 
     override func insertBacktab(_ sender: Any?) {
+        if tableCellAtCaret != nil { return moveToAdjacentCell(forward: false) }
         if state.block.isList { return changeListLevel(by: -1) }
         super.insertBacktab(sender)
     }
 
+    /// An empty text paragraph at `location` (the start of a paragraph), as its own undo step.
+    private func insertEmptyParagraph(at location: Int) {
+        let empty = NSAttributedString(string: "\n", attributes: [.writerBlock: WriterBlock.paragraph.rawValue, .writerListLevel: 0])
+        performStructureEdit(in: NSRange(location: location, length: 0), with: empty)
+    }
+
+    override func deleteForward(_ sender: Any?) {
+        if selectedImage != nil { return deleteImage() }
+        // At the end of a cell there is nothing to join.
+        if selectedRange().length == 0, let paragraph = currentParagraph, paragraph.block == .table,
+           selectedRange().location == NSMaxRange(paragraph.contentRange) { return }
+        // At the end of a paragraph in front of a picture, delete selects the picture first.
+        if let storage = textStorage, selectedRange().length == 0, let paragraph = currentParagraph,
+           paragraph.block != .table, selectedRange().location == NSMaxRange(paragraph.contentRange),
+           NSMaxRange(paragraph.range) < storage.length, image(at: NSMaxRange(paragraph.range)) != nil {
+            return selectImage(at: NSMaxRange(paragraph.range))
+        }
+        super.deleteForward(sender)
+    }
+
     override func deleteBackward(_ sender: Any?) {
+        if selectedImage != nil { return deleteImage() }
         guard let storage = textStorage, selectedRange().length == 0 else { return super.deleteBackward(sender) }
         let location = selectedRange().location
         if let paragraph = currentParagraph, location == paragraph.contentRange.location {
+            // In a table the cells stay apart: at the start of a cell backspace only moves to the previous one.
+            if paragraph.block == .table {
+                if location > 0 { setSelectedRange(NSRange(location: location - 1, length: 0)) }
+                return
+            }
+            // In front of a picture: an empty paragraph above goes away; text above is never joined with it.
+            if paragraph.block == .image {
+                guard location > 0 else { return }
+                let above = (storage.string as NSString).paragraphRange(for: NSRange(location: location - 1, length: 0))
+                if above.length == 1, tableCell(at: above.location) == nil {
+                    performStructureEdit(in: above, with: NSAttributedString())
+                    setSelectedRange(NSRange(location: above.location, length: 0))
+                } else {
+                    setSelectedRange(NSRange(location: location - 1, length: 0))
+                }
+                return
+            }
             // At the start of a list item, quote, heading or code block, backspace first takes the formatting away.
             if paragraph.block.isList, paragraph.level > 0 { return changeListLevel(by: -1) }
             let previous = location > 0 ? WriterStyler.block(in: storage, at: location - 1) : nil
             if paragraph.block != .paragraph, paragraph.block != .rule, !(paragraph.block == previous && (paragraph.block == .code || paragraph.block == .quote)) {
                 return setBlock(.paragraph, toggle: false)
+            }
+            // Right after a picture: an empty line goes away, otherwise backspace selects the picture first.
+            if previous == .image, location >= 2, image(at: location - 2) != nil {
+                if paragraph.contentRange.length == 0, paragraph.range.length > 0 {
+                    performStructureEdit(in: paragraph.range, with: NSAttributedString())
+                    setSelectedRange(NSRange(location: location - 1, length: 0))
+                    return
+                }
+                return selectImage(at: location - 2)
             }
             // A line above goes away as a whole instead of merging with this paragraph.
             if previous == .rule, location > 0 {
@@ -596,6 +720,10 @@ final class WriterTextView: NSTextView {
                 }
                 return
             }
+        } else if currentParagraph == nil, location >= 2, location == storage.length, image(at: location - 2) != nil,
+                  WriterStyler.block(in: storage, at: location - 1) == .image {
+            // In the empty end right after a picture.
+            return selectImage(at: location - 2)
         } else if currentParagraph == nil, location > 0, location == storage.length, state.block != .paragraph {
             // Empty last paragraph with a block that only lives in the typing attributes.
             if state.block.isList, typingAttributes[.writerListLevel] as? Int ?? 0 > 0 { return changeListLevel(by: -1) }
@@ -606,10 +734,20 @@ final class WriterTextView: NSTextView {
 
     override func insertText(_ string: Any, replacementRange: NSRange) {
         let text = (string as? String) ?? (string as? NSAttributedString)?.string ?? ""
-        // Typing on the line of a horizontal rule starts a new paragraph below it.
-        if let paragraph = currentParagraph, paragraph.block == .rule, selectedRange().length == 0, !text.isEmpty {
-            setSelectedRange(NSRange(location: NSMaxRange(paragraph.contentRange), length: 0))
-            super.insertNewline(nil)
+        var replacementRange = replacementRange
+        // Typing on the line of a horizontal rule or a picture starts a new paragraph below it (above a picture
+        // when the caret is in front of it); the text then goes to the new caret, whatever range was asked for.
+        // (The newline that `insertNewline` itself inserts passes through here and must not start another one.)
+        if let paragraph = currentParagraph, paragraph.block == .rule || paragraph.block == .image, selectedRange().length == 0,
+           !text.isEmpty, !text.allSatisfy(\.isNewline) {
+            defer { replacementRange = selectedRange() }
+            if paragraph.block == .image, selectedRange().location == paragraph.contentRange.location {
+                insertEmptyParagraph(at: paragraph.range.location)
+                setSelectedRange(NSRange(location: paragraph.range.location, length: 0))
+            } else {
+                setSelectedRange(NSRange(location: NSMaxRange(paragraph.contentRange), length: 0))
+                super.insertNewline(nil)
+            }
             setBlockOfEmptyCaretParagraph(.paragraph)
         }
         super.insertText(string, replacementRange: replacementRange)
@@ -646,28 +784,51 @@ final class WriterTextView: NSTextView {
     // MARK: Copy and paste
 
     override var writablePasteboardTypes: [NSPasteboard.PasteboardType] { [.writerMarkdown, .string] }
-    override var readablePasteboardTypes: [NSPasteboard.PasteboardType] { [.writerMarkdown, .string] }
+    /// In this order of preference: own Markdown, picture files, text, picture data (e.g. a screenshot).
+    override var readablePasteboardTypes: [NSPasteboard.PasteboardType] {
+        [.writerMarkdown, .fileURL, .string, .png, .tiff, NSPasteboard.PasteboardType(UTType.jpeg.identifier), NSPasteboard.PasteboardType(UTType.heic.identifier)]
+    }
+    override var acceptableDragTypes: [NSPasteboard.PasteboardType] { readablePasteboardTypes }
+
+    override func preferredPasteboardType(from availableTypes: [NSPasteboard.PasteboardType], restrictedToTypesFrom allowedTypes: [NSPasteboard.PasteboardType]?) -> NSPasteboard.PasteboardType? {
+        let allowed = allowedTypes ?? readablePasteboardTypes
+        return readablePasteboardTypes.first { availableTypes.contains($0) && allowed.contains($0) }
+            ?? super.preferredPasteboardType(from: availableTypes, restrictedToTypesFrom: allowedTypes)
+    }
 
     override func writeSelection(to pboard: NSPasteboard, types: [NSPasteboard.PasteboardType]) -> Bool {
         guard let storage = textStorage else { return false }
         let range = selectedRange()
         guard range.length > 0 else { return false }
         let selection = storage.attributedSubstring(from: range)
-        let markdown = selection.string.contains("\n")
-            ? WriterMarkdown.markdown(from: selection)
+        let markdown = selection.string.contains("\n") || selectedImage != nil
+            ? WriterMarkdown.markdown(from: selection).trimmingCharacters(in: .newlines)
             : WriterMarkdown.inlineMarkdown(selection)
-        let plain = selection.string
-            .replacingOccurrences(of: String(WriterMarkdown.lineSeparator), with: "\n")
-            .replacingOccurrences(of: "\u{FFFC}", with: "———")
-        pboard.declareTypes([.writerMarkdown, .string], owner: nil)
+        let plain = NSMutableString(string: selection.string.replacingOccurrences(of: String(WriterMarkdown.lineSeparator), with: "\n"))
+        selection.enumerateAttribute(.attachment, in: NSRange(location: 0, length: selection.length), options: .reverse) { value, attachmentRange, _ in
+            guard value != nil else { return }
+            let caption = (value as? WriterImageAttachment)?.reference.caption ?? ""
+            let text = value is WriterImageAttachment ? (caption.isEmpty ? "[Bild]" : "[Bild: \(caption)]") : "———"
+            plain.replaceCharacters(in: attachmentRange, with: text)
+        }
+        var types: [NSPasteboard.PasteboardType] = [.writerMarkdown, .string]
+        // A picture on its own also goes to other apps as a picture.
+        let picture = selectedImage.flatMap { WriterImageStore.url(for: $0.reference.source) }.flatMap(NSImage.init(contentsOf:))
+        if picture != nil { types.append(.tiff) }
+        pboard.declareTypes(types, owner: nil)
         pboard.setString(markdown, forType: .writerMarkdown)
-        pboard.setString(plain, forType: .string)
+        pboard.setString(plain as String, forType: .string)
+        if let data = picture?.tiffRepresentation { pboard.setData(data, forType: .tiff) }
         return true
     }
 
     override func readSelection(from pboard: NSPasteboard, type: NSPasteboard.PasteboardType) -> Bool {
-        if let markdown = pboard.string(forType: .writerMarkdown) {
+        if type == .writerMarkdown, let markdown = pboard.string(forType: .writerMarkdown) {
             insertMarkdown(markdown)
+            return true
+        }
+        if type != .string, let sources = ImagePasteboard.sources(on: pboard, preferText: false) {
+            insertImages(sources)
             return true
         }
         if let plain = pboard.string(forType: .string) {
@@ -677,17 +838,35 @@ final class WriterTextView: NSTextView {
         return false
     }
 
-    /// Inserts Markdown with its formatting. A single paragraph takes the block of the paragraph it lands in.
+    /// Inserts Markdown with its formatting. A single paragraph takes the block of the paragraph it lands in;
+    /// pictures and tables go in as whole paragraphs; in a table cell everything stays on one line.
     func insertMarkdown(_ markdown: String) {
         let trimmed = markdown.trimmingCharacters(in: .newlines)
         let parsed = WriterMarkdown.attributedString(from: trimmed)
+        let blocks = WriterMarkdown.paragraphs(of: parsed).map(\.block)
         let isInline = !parsed.string.contains("\n") && WriterStyler.block(in: parsed, at: 0) == .paragraph
         let insertion: NSAttributedString
-        if isInline {
+        if let cell = tableCellAtCaret, !isInline {
+            let flat = trimmed.components(separatedBy: .newlines).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }.joined(separator: " ")
+            let inline = NSMutableAttributedString(attributedString: WriterMarkdown.inline(flat))
+            inline.addAttributes(cell.attributes, range: NSRange(location: 0, length: inline.length))
+            insertion = inline
+        } else if isInline {
             let inline = NSMutableAttributedString(attributedString: WriterMarkdown.inline(trimmed))
-            let block = typingAttributes.filter { $0.key == .writerBlock || $0.key == .writerListLevel }
+            let block = typingAttributes.filter { WriterMarkdown.paragraphKeys.contains($0.key) }
             inline.addAttributes(block, range: NSRange(location: 0, length: inline.length))
             insertion = inline
+        } else if blocks.contains(.image) || blocks.contains(.table) {
+            // Whole paragraphs below the current one, ending with a newline like every block.
+            let text = NSMutableAttributedString(attributedString: parsed)
+            if !text.string.hasSuffix("\n") {
+                text.append(NSAttributedString(string: "\n", attributes: text.attributes(at: text.length - 1, effectiveRange: nil)))
+            }
+            if selectedRange().length > 0 { delete(nil) }
+            guard let start = insertBlock(text) else { return }
+            setSelectedRange(NSRange(location: min(start + text.length, textStorage?.length ?? 0), length: 0))
+            resetTypingAttributes()
+            return
         } else {
             insertion = parsed
         }
@@ -704,6 +883,7 @@ final class WriterRestyler: NSObject, NSTextStorageDelegate {
         guard !isLoading, let view else { return }
         if editedMask.contains(.editedCharacters) { view.shiftTrackedRanges(edited: editedRange, delta: delta) }
         WriterStyler.restyle(textStorage, around: editedRange, family: view.family, palette: view.palette)
+        DispatchQueue.main.async { [weak view] in view?.updateImageControls() }
     }
 }
 
@@ -711,6 +891,13 @@ final class WriterRestyler: NSObject, NSTextStorageDelegate {
 /// background of code blocks.
 final class WriterLayoutManager: NSLayoutManager {
     weak var writerView: WriterTextView?
+
+    /// A picture selected on its own shows a frame of its own (see `WriterImageCell`) instead of the grey
+    /// selection band, which would also cover its caption.
+    override func fillBackgroundRectArray(_ rectArray: UnsafePointer<NSRect>, count rectCount: Int, forCharacterRange charRange: NSRange, color: NSColor) {
+        if charRange.length == 1, let view = writerView, view.selectedRange() == charRange, view.image(at: charRange.location) != nil { return }
+        super.fillBackgroundRectArray(rectArray, count: rectCount, forCharacterRange: charRange, color: color)
+    }
 
     override func drawBackground(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
         super.drawBackground(forGlyphRange: glyphsToShow, at: origin)

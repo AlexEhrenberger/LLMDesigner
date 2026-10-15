@@ -7,12 +7,17 @@ enum MarkdownBlock: Hashable {
         let text: String
     }
 
+    /// How a table column is aligned, from its separator (`:--`, `:-:`, `--:`).
+    enum Alignment: Hashable, Sendable {
+        case leading, center, trailing
+    }
+
     case paragraph(String)
     case heading(level: Int, text: String)
     case code(language: String, code: String)
     case list([ListItem])
     case quote(String)
-    case table(header: [String], rows: [[String]])
+    case table(header: [String], rows: [[String]], alignments: [Alignment])
     case math(latex: String, complete: Bool)
     case rule
 }
@@ -133,6 +138,7 @@ enum MarkdownParser {
             if trimmed.hasPrefix("|"), index + 1 < lines.count, isTableSeparator(lines[index + 1]) {
                 flushParagraph()
                 let header = cells(of: trimmed)
+                let alignments = cells(of: lines[index + 1]).map { alignment(of: $0) }
                 var rows: [[String]] = []
                 index += 2
                 while index < lines.count {
@@ -141,7 +147,7 @@ enum MarkdownParser {
                     rows.append(cells(of: current))
                     index += 1
                 }
-                blocks.append(.table(header: header, rows: rows))
+                blocks.append(.table(header: header, rows: rows, alignments: alignments))
                 continue
             }
 
@@ -231,10 +237,30 @@ enum MarkdownParser {
         return trimmed.allSatisfy { "|-: ".contains($0) }
     }
 
+    /// The cells of a table row. An escaped `\|` stays in its cell (and keeps its backslash for the inline parser).
     private static func cells(of line: String) -> [String] {
         var content = line.trimmingCharacters(in: .whitespaces)
         if content.hasPrefix("|") { content.removeFirst() }
-        if content.hasSuffix("|") { content.removeLast() }
-        return content.components(separatedBy: "|").map { $0.trimmingCharacters(in: .whitespaces) }
+        if content.hasSuffix("|"), !content.hasSuffix("\\|") { content.removeLast() }
+        var cells: [String] = []
+        var current = ""
+        var escaped = false
+        for character in content {
+            if character == "|", !escaped {
+                cells.append(current)
+                current = ""
+            } else {
+                current.append(character)
+            }
+            escaped = character == "\\" && !escaped
+        }
+        cells.append(current)
+        return cells.map { $0.trimmingCharacters(in: .whitespaces) }
+    }
+
+    private static func alignment(of separator: String) -> MarkdownBlock.Alignment {
+        let left = separator.hasPrefix(":")
+        let right = separator.hasSuffix(":")
+        return left && right ? .center : right ? .trailing : .leading
     }
 }

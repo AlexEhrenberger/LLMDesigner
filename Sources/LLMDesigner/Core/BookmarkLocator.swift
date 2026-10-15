@@ -38,7 +38,7 @@ enum BookmarkLocator {
         case .heading(_, let text): text
         case .code(_, let code): code
         case .list(let items): items.map(\.text).joined(separator: " ")
-        case .table(let header, let rows): (header + rows.flatMap { $0 }).joined(separator: " ")
+        case .table(let header, let rows, _): (header + rows.flatMap { $0 }).joined(separator: " ")
         case .math(let latex, _): latex
         case .rule: ""
         }

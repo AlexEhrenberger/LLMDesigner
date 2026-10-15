@@ -16,6 +16,8 @@ struct WriterPalette: Equatable {
     let quoteBar: NSColor
     let selection: NSColor
     let rule: NSColor
+    let tableBorder: NSColor
+    let tableHeader: NSColor
 
     static let dark = WriterPalette(
         isLight: false,
@@ -31,7 +33,9 @@ struct WriterPalette: Equatable {
         inlineCodeBackground: NSColor.white.withAlphaComponent(0.08),
         quoteBar: NSColor(hex: 0xA996FF).withAlphaComponent(0.55),
         selection: NSColor(hex: 0xA996FF).withAlphaComponent(0.32),
-        rule: NSColor.white.withAlphaComponent(0.16)
+        rule: NSColor.white.withAlphaComponent(0.16),
+        tableBorder: NSColor.white.withAlphaComponent(0.15),
+        tableHeader: NSColor.white.withAlphaComponent(0.05)
     )
 
     static let light = WriterPalette(
@@ -48,7 +52,9 @@ struct WriterPalette: Equatable {
         inlineCodeBackground: NSColor(hex: 0xEEEBFA),
         quoteBar: NSColor(hex: 0x6A54E0).withAlphaComponent(0.6),
         selection: NSColor(hex: 0xD9D2FF),
-        rule: NSColor.black.withAlphaComponent(0.15)
+        rule: NSColor.black.withAlphaComponent(0.15),
+        tableBorder: NSColor.black.withAlphaComponent(0.16),
+        tableHeader: NSColor(hex: 0xF4F3F8)
     )
 }
 
@@ -95,11 +101,13 @@ enum WriterStyler {
         case .heading3: return font(family, size: body + 3, weight: .semibold, italic: italic)
         case .code: return font(family, size: body - 2.5, weight: bold ? .semibold : .regular, monospaced: true)
         case .raw: return font(family, size: body - 3, monospaced: true)
+        case .table: return font(family, size: body - 1.5, weight: bold ? .semibold : .regular, italic: italic)
         default: return font(family, size: body, weight: bold ? .bold : .regular, italic: italic || block == .quote)
         }
     }
 
-    static func paragraphStyle(_ block: WriterBlock, level: Int, family: WriterFont, previous: WriterBlock?, next: WriterBlock?) -> NSParagraphStyle {
+    static func paragraphStyle(_ block: WriterBlock, level: Int, family: WriterFont, previous: WriterBlock?, next: WriterBlock?,
+                               cell: WriterTableCell? = nil, palette: WriterPalette = .dark) -> NSParagraphStyle {
         let style = NSMutableParagraphStyle()
         style.lineHeightMultiple = 1.32
         style.paragraphSpacing = 10
@@ -137,10 +145,36 @@ enum WriterStyler {
             style.paragraphSpacingBefore = 6
             style.paragraphSpacing = 12
             style.alignment = .center
+        case .image:
+            style.lineHeightMultiple = 1
+            style.paragraphSpacingBefore = previous == nil ? 0 : 10
+            style.paragraphSpacing = 16
+            style.alignment = .center
+        case .table:
+            style.lineHeightMultiple = 1.2
+            style.paragraphSpacing = 0
+            if let cell { style.textBlocks = [tableBlock(cell, palette: palette)] }
+            style.alignment = cell?.table.alignment(of: cell?.column ?? 0).textAlignment ?? .natural
         case .paragraph:
             break
         }
+        // AppKit leaves no room below a table; the paragraph after it keeps its distance.
+        if block != .table, previous == .table { style.paragraphSpacingBefore = max(style.paragraphSpacingBefore, 16) }
         return style
+    }
+
+    /// The cell's box in AppKit's table: thin lines, a little room around the text, a tinted header row.
+    private static func tableBlock(_ cell: WriterTableCell, palette: WriterPalette) -> NSTextTableBlock {
+        let block = NSTextTableBlock(table: cell.table.textTable, startingRow: cell.row, rowSpan: 1, startingColumn: cell.column, columnSpan: 1)
+        block.setWidth(1, type: .absoluteValueType, for: .border)
+        block.setBorderColor(palette.tableBorder)
+        block.setWidth(9, type: .absoluteValueType, for: .padding, edge: .minX)
+        block.setWidth(9, type: .absoluteValueType, for: .padding, edge: .maxX)
+        block.setWidth(5, type: .absoluteValueType, for: .padding, edge: .minY)
+        block.setWidth(6, type: .absoluteValueType, for: .padding, edge: .maxY)
+        block.verticalAlignment = .topAlignment
+        if cell.row == 0 { block.backgroundColor = palette.tableHeader }
+        return block
     }
 
     /// Display attributes for one stretch of text with these meaning attributes.
@@ -165,7 +199,9 @@ enum WriterStyler {
             attributes[.backgroundColor] = palette.inlineCodeBackground
             return attributes
         }
-        let font = blockFont(block, family: family, bold: marks.contains(.bold), italic: marks.contains(.italic))
+        // The first row of a table is its header.
+        let isHeader = block == .table && semantic[.writerTableRow] as? Int == 0
+        let font = blockFont(block, family: family, bold: marks.contains(.bold) || isHeader, italic: marks.contains(.italic))
         attributes[.font] = font
         // Fonts without an italic cut (SF Pro Rounded) lean instead.
         if marks.contains(.italic) || block == .quote, !font.fontDescriptor.symbolicTraits.contains(.italic) {
@@ -194,17 +230,27 @@ enum WriterStyler {
 
         for (index, paragraph) in paragraphs.enumerated() where paragraph.range.length > 0 {
             var block = paragraph.block
-            let hasRule = storage.attribute(.attachment, at: paragraph.range.location, effectiveRange: nil) is WriterRuleAttachment
-            if block == .rule && !hasRule { block = .paragraph }
-            if hasRule { block = .rule }
-            var semantic: [NSAttributedString.Key: Any] = [.writerBlock: block.rawValue, .writerListLevel: block.isList ? paragraph.level : 0]
+            if paragraph.cell == nil {
+                // A line or a picture is a paragraph of its own; without its attachment it is text again.
+                let attachment = storage.attribute(.attachment, at: paragraph.range.location, effectiveRange: nil)
+                let hasRule = attachment is WriterRuleAttachment
+                let hasImage = attachment is WriterImageAttachment
+                if (block == .rule && !hasRule) || (block == .image && !hasImage) { block = .paragraph }
+                if hasRule { block = .rule }
+                if hasImage { block = .image }
+            }
+            var semantic: [NSAttributedString.Key: Any] = paragraph.cell?.attributes
+                ?? [.writerBlock: block.rawValue, .writerListLevel: block.isList ? paragraph.level : 0]
             if block == .code, let language = paragraph.language { semantic[.writerCodeLanguage] = language }
             storage.addAttributes(semantic, range: paragraph.range)
             if block != .code { storage.removeAttribute(.writerCodeLanguage, range: paragraph.range) }
+            if paragraph.cell == nil {
+                for key in WriterMarkdown.tableKeys { storage.removeAttribute(key, range: paragraph.range) }
+            }
 
             let previous = index > 0 ? paragraphs[index - 1].block : previousBlock(in: storage, before: paragraph.range.location)
             let next = index + 1 < paragraphs.count ? paragraphs[index + 1].block : nextBlock(in: storage, after: NSMaxRange(paragraph.range))
-            let style = paragraphStyle(block, level: paragraph.level, family: family, previous: previous, next: next)
+            let style = paragraphStyle(block, level: paragraph.level, family: family, previous: previous, next: next, cell: paragraph.cell, palette: palette)
 
             for key in displayKeys { storage.removeAttribute(key, range: paragraph.range) }
             storage.addAttribute(.paragraphStyle, value: style, range: paragraph.range)
@@ -238,10 +284,13 @@ enum WriterStyler {
     /// Typing attributes for a paragraph with this block and these marks.
     static func typingAttributes(block: WriterBlock, level: Int, semantic: [NSAttributedString.Key: Any], family: WriterFont, palette: WriterPalette) -> [NSAttributedString.Key: Any] {
         var attributes = semantic.filter { [.writerBold, .writerItalic, .writerCode, .underlineStyle, .strikethroughStyle, .link].contains($0.key) }
+        let cell = block == .table ? WriterTableCell(semantic) : nil
+        let block: WriterBlock = block == .table && cell == nil ? .paragraph : block
         attributes[.writerBlock] = block.rawValue
         attributes[.writerListLevel] = block.isList ? level : 0
+        if let cell { attributes.merge(cell.attributes) { $1 } }
         attributes.merge(displayAttributes(for: attributes, block: block, family: family, palette: palette)) { $1 }
-        attributes[.paragraphStyle] = paragraphStyle(block, level: level, family: family, previous: nil, next: nil)
+        attributes[.paragraphStyle] = paragraphStyle(block, level: level, family: family, previous: nil, next: nil, cell: cell, palette: palette)
         return attributes
     }
 }

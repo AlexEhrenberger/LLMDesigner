@@ -15,7 +15,7 @@ enum SpeakableText {
                 parts.append(sentence(inline(text, german: german)))
             case .list(let items):
                 parts.append(items.map { sentence(inline($0.text, german: german)) }.joined(separator: "\n"))
-            case .table(let header, let rows):
+            case .table(let header, let rows, _):
                 for row in rows {
                     let cells = zip(header, row).map { "\(inline($0, german: german)): \(inline($1, german: german))" }
                     parts.append(sentence(cells.joined(separator: ", ")))

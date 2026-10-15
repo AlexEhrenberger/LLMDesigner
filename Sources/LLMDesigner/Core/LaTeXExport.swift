@@ -51,6 +51,9 @@ enum LaTeXWriter {
         var blockAnchors: [Int: String] = [:]
         /// Pictures attached to the message, set above the text. The engine copies them next to the document.
         var images: [URL] = []
+        /// Writer Studio: the files of the pictures in the text (`![…](source)` lines), by their Markdown source.
+        /// They become figures with a numbered caption. nil for chats, whose image lines stay text.
+        var figures: [String: URL]?
     }
 
     struct OutlineEntry {
@@ -71,7 +74,8 @@ enum LaTeXWriter {
         case plain         // all formulas are printed as code
     }
 
-    static func document(parts: [Part], outline: Outline? = nil, paper: PaperSize, math: MathMode) -> String {
+    /// `figureFolder`: where the figure files are, relative to the document (nil: next to it).
+    static func document(parts: [Part], outline: Outline? = nil, paper: PaperSize, math: MathMode, figureFolder: String? = nil) -> String {
         var body: [String] = []
         for part in parts {
             var section = ""
@@ -82,7 +86,9 @@ enum LaTeXWriter {
             for image in part.images {
                 section += "\\begin{center}\\includegraphics[width=0.7\\linewidth,height=0.35\\textheight,keepaspectratio]{\(image.lastPathComponent)}\\end{center}\n"
             }
-            section += part.isPlainText ? plainText(part.text) : blocks(part.text, math: math, anchors: part.blockAnchors)
+            section += part.isPlainText
+                ? plainText(part.text)
+                : blocks(part.text, math: math, anchors: part.blockAnchors, figures: part.figures, figureFolder: figureFolder)
             body.append(section)
         }
         let contents = outline.map { tableOfContents($0, math: math) } ?? ""
@@ -143,6 +149,10 @@ enum LaTeXWriter {
         \usepackage{fvextra}
         \usepackage{booktabs,xltabular}
         \newcolumntype{L}{>{\raggedright\arraybackslash}X}
+        \newcolumntype{C}{>{\centering\arraybackslash}X}
+        \newcolumntype{R}{>{\raggedleft\arraybackslash}X}
+        \usepackage{float}
+        \usepackage[font=small,labelfont=bf]{caption}
         \usepackage{enumitem}
         \usepackage[normalem]{ulem}
         \usepackage{parskip}
@@ -169,7 +179,7 @@ enum LaTeXWriter {
 
     // MARK: - Blocks
 
-    private static func blocks(_ markdown: String, math: MathMode, anchors: [Int: String] = [:]) -> String {
+    private static func blocks(_ markdown: String, math: MathMode, anchors: [Int: String] = [:], figures: [String: URL]? = nil, figureFolder: String? = nil) -> String {
         var output: [String] = []
         for (index, block) in MarkdownParser.parse(markdown).enumerated() {
             let start = output.count
@@ -181,7 +191,13 @@ enum LaTeXWriter {
             }
             switch block {
             case .paragraph(let text):
-                output.append(inline(text, math: math))
+                let lines = text.components(separatedBy: "\n")
+                let images = lines.compactMap(WriterImageReference.parse)
+                if let figures, !images.isEmpty, images.count == lines.count {
+                    output.append(images.map { figure($0, file: figures[$0.source], folder: figureFolder, math: math) }.joined(separator: "\n\n"))
+                } else {
+                    output.append(inline(text, math: math))
+                }
             case .heading(let level, let text):
                 let command = ["section", "subsection", "subsubsection"][min(max(level, 1), 3) - 1]
                 output.append(level > 3 ? "\\paragraph*{\(inline(text, math: math))}" : "\\\(command)*{\(inline(text, math: math))}")
@@ -191,8 +207,8 @@ enum LaTeXWriter {
                 output.append(list(items, math: math))
             case .quote(let text):
                 output.append("\\begin{quote}\n\(inline(text, math: math))\n\\end{quote}")
-            case .table(let header, let rows):
-                output.append(table(header: header, rows: rows, math: math))
+            case .table(let header, let rows, let alignments):
+                output.append(table(header: header, rows: rows, alignments: alignments, math: math))
             case .math(let latex, _):
                 output.append(displayMath(latex, math: math))
             case .rule:
@@ -255,9 +271,31 @@ enum LaTeXWriter {
         return output
     }
 
-    private static func table(header: [String], rows: [[String]], math: MathMode) -> String {
+    /// A picture from a Writer Studio document: at its width in the column, kept in place, with a numbered
+    /// caption. A missing file leaves a note instead of breaking the document.
+    private static func figure(_ image: WriterImageReference, file: URL?, folder: String?, math: MathMode) -> String {
+        let caption = image.caption.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let file else {
+            return "\\begin{center}\\emph{[Bild fehlt\(caption.isEmpty ? "" : ": " + escape(caption))]}\\end{center}"
+        }
+        let width = image.width.map { CGFloat($0) / 100 } ?? WriterImageStore.naturalWidthFraction(of: file)
+        let path = (folder.map { $0 + "/" } ?? "") + file.lastPathComponent
+        var output = "\\begin{figure}[H]\n\\centering\n"
+        output += "\\includegraphics[width=\(String(format: "%.2f", width))\\linewidth,height=0.6\\textheight,keepaspectratio]{\(path)}\n"
+        if !caption.isEmpty { output += "\\caption{\(inline(caption, math: math))}\n" }
+        return output + "\\end{figure}"
+    }
+
+    private static func table(header: [String], rows: [[String]], alignments: [MarkdownBlock.Alignment], math: MathMode) -> String {
         let columns = max(header.count, 1)
-        var output = "\\begin{xltabular}{\\linewidth}{@{}\(String(repeating: "L", count: columns))@{}}\n\\toprule\n"
+        let spec = (0..<columns).map { column -> String in
+            switch column < alignments.count ? alignments[column] : .leading {
+            case .leading: "L"
+            case .center: "C"
+            case .trailing: "R"
+            }
+        }.joined()
+        var output = "\\begin{xltabular}{\\linewidth}{@{}\(spec)@{}}\n\\toprule\n"
         output += header.map { "\\textbf{\(inline($0, math: math))}" }.joined(separator: " & ") + " \\\\\n\\midrule\n\\endhead\n"
         for row in rows {
             let cells = (0..<columns).map { $0 < row.count ? inline(row[$0], math: math) : "" }
@@ -320,9 +358,10 @@ enum LaTeXWriter {
     private static func inline(_ source: String, math: MathMode) -> String {
         var markdown = ""
         var formulas: [String] = []
-        // Writer Studio stores underline as <u>…</u>. Placeholders made of letters carry it through the Markdown
-        // parser and the escaping (it drops private-use characters).
+        // Writer Studio stores underline as <u>…</u>, and line breaks in table cells as <br>. Placeholders made of
+        // letters carry them through the Markdown parser and the escaping (it drops private-use characters).
         let source = source.replacingOccurrences(of: "<u>", with: Self.underlineOpen).replacingOccurrences(of: "</u>", with: Self.underlineClose)
+            .replacingOccurrences(of: #"<br\s*/?>"#, with: Self.lineBreak, options: [.regularExpression, .caseInsensitive])
         for segment in MathTokenizer.segments(source.trimmingCharacters(in: .whitespacesAndNewlines)) {
             switch segment {
             case .text(let text): markdown += text
@@ -357,6 +396,7 @@ enum LaTeXWriter {
                 }
                 piece += escape(fragment).replacingOccurrences(of: "\n", with: "\\newline\n")
                     .replacingOccurrences(of: Self.underlineOpen, with: "\\uline{").replacingOccurrences(of: Self.underlineClose, with: "}")
+                    .replacingOccurrences(of: Self.lineBreak, with: "\\newline{}")
             }
             if intent.contains(.stronglyEmphasized) { piece = "\\textbf{\(piece)}" }
             if intent.contains(.emphasized) { piece = "\\emph{\(piece)}" }
@@ -369,6 +409,7 @@ enum LaTeXWriter {
 
     private static let underlineOpen = "LLMDULINEOPENX"
     private static let underlineClose = "LLMDULINECLOSEX"
+    private static let lineBreak = "LLMDLINEBREAKX"
 
     /// Characters the Latin Modern text font lacks, mapped to their math equivalents.
     private static let symbolReplacements: [Character: String] = [
@@ -461,7 +502,7 @@ struct LaTeXEngine: Sendable {
         for mode in LaTeXWriter.MathMode.allCases {
             let source = await MainActor.run { LaTeXWriter.document(parts: parts, outline: outline, paper: paper, math: mode) }
             do {
-                return try await compile(source, images: parts.flatMap(\.images))
+                return try await compile(source, images: parts.flatMap(\.images) + parts.flatMap { Array(($0.figures ?? [:]).values) })
             } catch {
                 lastError = error
             }

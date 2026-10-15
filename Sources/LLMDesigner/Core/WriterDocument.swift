@@ -25,9 +25,11 @@ struct WriterDocument: Identifiable, Hashable, Sendable {
 
     /// The first line of the text without Markdown marks, as the automatic title.
     static func makeTitle(from markdown: String) -> String {
+        // Pictures and tables don't make a title; the first line of text does.
         let line = markdown.split(whereSeparator: \.isNewline)
             .map { $0.trimmingCharacters(in: .whitespaces) }
-            .first { !$0.isEmpty && !$0.hasPrefix("```") && !$0.allSatisfy { "-*_ ".contains($0) } } ?? ""
+            .first { !$0.isEmpty && !$0.hasPrefix("```") && !$0.hasPrefix("|") && WriterImageReference.parse($0) == nil
+                && !$0.allSatisfy { "-*_ ".contains($0) } } ?? ""
         var text = line.drop { "#>-*+ ".contains($0) }
         if let digits = text.firstIndex(where: { !$0.isNumber }), digits != text.startIndex,
            text[digits] == ".", text[text.index(after: digits)...].first == " " {
@@ -66,9 +68,13 @@ enum WriterFont: String, CaseIterable, Identifiable, Sendable {
 struct WriterDocumentStore {
     let directory: URL
 
-    init() {
+    static var defaultDirectory: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        directory = base.appendingPathComponent("LLMDesigner/Documents", isDirectory: true)
+        return base.appendingPathComponent("LLMDesigner/Documents", isDirectory: true)
+    }
+
+    init() {
+        directory = Self.defaultDirectory
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     }
 

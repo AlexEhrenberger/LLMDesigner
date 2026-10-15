@@ -13,6 +13,24 @@ final class WriterEditorController {
     func changeListLevel(by step: Int) { perform { $0.changeListLevel(by: step) } }
     func insertRule() { perform { $0.insertRule() } }
     func editLink() { perform { $0.editLink() } }
+    func insertTable(rows: Int, columns: Int) { perform { $0.insertTable(rows: rows, columns: columns) } }
+    func tableAction(_ action: WriterTableAction) { perform { $0.performTableAction(action) } }
+
+    /// Asks for pictures and puts them below the current paragraph.
+    func chooseImages() {
+        guard let window = textView?.window else { return }
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.image]
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = false
+        panel.prompt = "Einfügen"
+        panel.message = "Bilder für das Dokument auswählen"
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard response == .OK else { return }
+            let sources = panel.urls.map { AttachmentStore.Source.file($0) }
+            self?.perform { $0.insertImages(sources) }
+        }
+    }
 
     /// Reads the selection, or from the caret on; a second call stops.
     func readAloud() {
@@ -87,6 +105,7 @@ struct WriterEditor: NSViewRepresentable {
         textView.onReadAloud = { [weak controller] in controller?.readAloud() }
         textView.onDictate = { [weak controller] in controller?.toggleDictation() }
         textView.onStopReading = { [weak app] in app?.stopReadingDocument() }
+        textView.onNotice = { [weak app] in app?.showNotice($0) }
         assistant.app = app
         assistant.textView = textView
         textView.onAssistant = { [weak assistant] command in assistant?.handle(command) }

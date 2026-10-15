@@ -118,8 +118,11 @@ extension AppModel {
     func deleteDocument(_ id: WriterDocument.ID) {
         documentSaveTasks[id]?.cancel()
         documentSaveTasks[id] = nil
+        let pictures = document(id).map { WriterImageStore.sources(in: $0.markdown) } ?? []
         documents.removeAll { $0.id == id }
         documentStore.delete(id)
+        // Its pictures go too, unless another document shows them (copied and pasted).
+        WriterImageStore.removeUnused(pictures, stillUsedIn: documents.map(\.markdown))
         if selectedDocumentID == id { selectedDocumentID = nil }
     }
 
@@ -190,17 +193,33 @@ extension AppModel {
         writerFlush?()
         guard let document = selectedDocument, !exportingIDs.contains(document.id) else { return }
         let markdown = document.markdown.trimmingCharacters(in: .whitespacesAndNewlines) + "\n"
-        let part = LaTeXWriter.Part(text: markdown)
+        // The pictures that are on this Mac, by their Markdown source.
+        var figures: [String: URL] = [:]
+        for source in WriterImageStore.sources(in: markdown) {
+            if let url = WriterImageStore.url(for: source) { figures[source] = url }
+        }
+        var part = LaTeXWriter.Part(text: markdown)
+        part.figures = figures
         let paper = pdfPaperSize
 
         switch format {
         case .markdown, .latex:
             Task {
                 guard let url = await askForDestination(fileName: document.displayTitle, type: format.type) else { return }
-                let text = format == .markdown
-                    ? markdown
-                    : LaTeXWriter.document(parts: [part], paper: paper, math: .native)
                 do {
+                    // The pictures go into a folder next to the file, e.g. "Aufsatz-Bilder".
+                    let folder = figures.isEmpty ? nil : figureFolderName(for: url)
+                    if let folder {
+                        try copyFigures(Array(figures.values), to: url.deletingLastPathComponent().appendingPathComponent(folder, isDirectory: true))
+                    }
+                    let text: String
+                    if format == .markdown {
+                        text = folder.map { folder in
+                            WriterImageStore.rewriteSources(in: markdown) { figures[$0].map { folder + "/" + $0.lastPathComponent } }
+                        } ?? markdown
+                    } else {
+                        text = LaTeXWriter.document(parts: [part], paper: paper, math: .native, figureFolder: folder)
+                    }
                     try text.write(to: url, atomically: true, encoding: .utf8)
                 } catch {
                     exportError = error.localizedDescription
@@ -234,5 +253,22 @@ extension AppModel {
         } else {
             moveChat(id, to: folderID)
         }
+    }
+}
+
+/// "Mein Aufsatz.tex" → "Mein-Aufsatz-Bilder": no spaces or LaTeX specials, so `\\includegraphics` takes it.
+private func figureFolderName(for file: URL) -> String {
+    let stem = file.deletingPathExtension().lastPathComponent
+    let cleaned = String(stem.map { $0.isLetter || $0.isNumber || $0 == "-" ? $0 : "-" })
+        .split(separator: "-").joined(separator: "-")
+    return (cleaned.isEmpty ? "Dokument" : cleaned) + "-Bilder"
+}
+
+private func copyFigures(_ files: [URL], to folder: URL) throws {
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    for file in Set(files) {
+        let destination = folder.appendingPathComponent(file.lastPathComponent)
+        try? FileManager.default.removeItem(at: destination)
+        try FileManager.default.copyItem(at: file, to: destination)
     }
 }

@@ -271,7 +271,9 @@ private struct WriterTopBar: View {
     }
 
     private var wordCount: String {
-        let words = document.markdown.split { $0.isWhitespace || $0.isNewline }
+        // Pictures don't count; table cells do.
+        let text = document.markdown.components(separatedBy: "\n").filter { WriterImageReference.parse($0) == nil }.joined(separator: "\n")
+        let words = text.split { $0.isWhitespace || $0.isNewline }
             .filter { $0.contains { $0.isLetter || $0.isNumber } }.count
         return words == 1 ? "1 Wort" : "\(words) Wörter"
     }
@@ -364,9 +366,11 @@ private struct WriterToolbar: View {
             divider(9)
             group(10) {
                 ToolbarButton(symbol: "list.bullet", help: "Aufzählung (⇧⌘8)", isActive: state.block == .bullet) { controller.setBlock(.bullet) }
+                    .disabled(isStructure(state))
             }
             group(11) {
                 ToolbarButton(symbol: "list.number", help: "Nummerierte Liste (⇧⌘7)", isActive: state.block == .numbered) { controller.setBlock(.numbered) }
+                    .disabled(isStructure(state))
             }
             group(12) {
                 ToolbarButton(symbol: "decrease.indent", help: "Weniger einrücken (⇧⇥)", isActive: false) { controller.changeListLevel(by: -1) }
@@ -378,6 +382,7 @@ private struct WriterToolbar: View {
             }
             group(14) {
                 ToolbarButton(symbol: "text.quote", help: "Zitat (⇧⌘9)", isActive: state.block == .quote) { controller.setBlock(.quote) }
+                    .disabled(isStructure(state))
             }
             divider(15)
             group(16) {
@@ -386,8 +391,14 @@ private struct WriterToolbar: View {
             group(17) {
                 ToolbarButton(symbol: "minus", help: "Trennlinie / Abschnittsmarke", isActive: false) { controller.insertRule() }
             }
-            divider(18)
-            group(19) {
+            group(18) {
+                ToolbarButton(symbol: "photo", help: "Bild einfügen … – Bilder lassen sich auch hineinziehen oder einfügen", isActive: state.image != nil) {
+                    controller.chooseImages()
+                }
+            }
+            group(19) { TableButton(controller: controller, isInTable: state.table != nil) }
+            divider(20)
+            group(21) {
                 ToolbarButton(
                     symbol: app.dictationIntoDocument ? "mic.fill" : "mic",
                     help: app.dictationIntoDocument ? "Diktat beenden (⌘D)" : "Ins Dokument diktieren (⌘D) – „neuer Absatz“ beginnt einen neuen Absatz",
@@ -395,7 +406,7 @@ private struct WriterToolbar: View {
                 ) { controller.toggleDictation() }
                 .disabled(!app.isDictationAvailable)
             }
-            group(20) {
+            group(22) {
                 ToolbarButton(
                     symbol: app.speakingDocumentID != nil ? "stop.fill" : "speaker.wave.2",
                     help: app.speakingDocumentID != nil ? "Vorlesen stoppen (esc)" : "Vorlesen (⌥⌘L): die Markierung, sonst ab dem Absatz mit dem Cursor",
@@ -427,7 +438,156 @@ private struct WriterToolbar: View {
 
     private func markButton(_ symbol: String, _ mark: WriterInline, _ help: String, _ state: WriterTextView.State) -> some View {
         ToolbarButton(symbol: symbol, help: help, isActive: state.marks.contains(mark)) { controller.toggle(mark) }
-            .disabled(state.block == .code || state.block == .raw)
+            .disabled(state.block == .code || state.block == .raw || state.block == .image)
+    }
+
+    /// Pictures and table cells have no list or quote formatting.
+    private func isStructure(_ state: WriterTextView.State) -> Bool {
+        state.block == .image || state.block == .table
+    }
+}
+
+/// Inserts a table (a grid to pick its size) or, with the caret in a table, changes it.
+private struct TableButton: View {
+    let controller: WriterEditorController
+    let isInTable: Bool
+    @State private var showsPopover = false
+
+    var body: some View {
+        ToolbarButton(symbol: "tablecells", help: isInTable ? "Tabelle bearbeiten" : "Tabelle einfügen", isActive: isInTable || showsPopover) {
+            showsPopover.toggle()
+        }
+        .popover(isPresented: $showsPopover, arrowEdge: .bottom) {
+            WriterTablePopover(controller: controller) { showsPopover = false }
+        }
+    }
+}
+
+private struct WriterTablePopover: View {
+    let controller: WriterEditorController
+    let close: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if let table = controller.state.table {
+                Text("Tabelle · \(table.columns) × \(table.rows)")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Theme.textSecondary)
+                VStack(spacing: 2) {
+                    action("Zeile darüber einfügen", "arrow.up.to.line", .insertRowAbove)
+                    action("Zeile darunter einfügen", "arrow.down.to.line", .insertRowBelow)
+                    action("Spalte links einfügen", "arrow.left.to.line", .insertColumnLeft)
+                    action("Spalte rechts einfügen", "arrow.right.to.line", .insertColumnRight)
+                }
+                HStack(spacing: 6) {
+                    Text("Spalte")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Theme.textTertiary)
+                    Spacer()
+                    alignment("text.alignleft", .leading, table.alignment, help: "Linksbündig")
+                    alignment("text.aligncenter", .center, table.alignment, help: "Zentriert")
+                    alignment("text.alignright", .trailing, table.alignment, help: "Rechtsbündig")
+                }
+                .padding(.horizontal, 8)
+                Divider()
+                VStack(spacing: 2) {
+                    action("Zeile löschen", "minus.square", .deleteRow)
+                    action("Spalte löschen", "minus.rectangle.portrait", .deleteColumn)
+                    action("Tabelle löschen", "trash", .deleteTable, destructive: true)
+                }
+                Text("⇥ nächste Zelle · ↩ Zelle darunter · ⇧↩ neue Zeile in der Zelle")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(Theme.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                TableSizePicker { rows, columns in
+                    controller.insertTable(rows: rows, columns: columns)
+                    close()
+                }
+            }
+        }
+        .padding(12)
+        .frame(width: 250)
+    }
+
+    private func action(_ title: String, _ symbol: String, _ action: WriterTableAction, destructive: Bool = false) -> some View {
+        PopoverRow(title: title, symbol: symbol, destructive: destructive) {
+            controller.tableAction(action)
+            if action == .deleteTable { close() }
+        }
+    }
+
+    private func alignment(_ symbol: String, _ value: MarkdownBlock.Alignment, _ current: MarkdownBlock.Alignment, help: String) -> some View {
+        ToolbarButton(symbol: symbol, help: help, isActive: value == current) { controller.tableAction(.align(value)) }
+    }
+}
+
+private struct PopoverRow: View {
+    let title: String
+    let symbol: String
+    let destructive: Bool
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 9) {
+                Image(systemName: symbol)
+                    .font(.system(size: 12, weight: .medium))
+                    .frame(width: 18)
+                Text(title)
+                    .font(.system(size: 12.5))
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(destructive ? Theme.danger : (hovering ? Theme.textPrimary : Theme.textSecondary))
+            .padding(.horizontal, 8)
+            .frame(height: 27)
+            .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(hovering ? Theme.hover : .clear))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .focusable(false)
+        .onHover { hovering = $0 }
+    }
+}
+
+/// A grid like in word processors: move over it to choose columns and rows (the first row is the header).
+private struct TableSizePicker: View {
+    let onPick: (_ rows: Int, _ columns: Int) -> Void
+    @State private var rows = 3
+    @State private var columns = 3
+    private let maxRows = 8
+    private let maxColumns = 8
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Tabelle einfügen")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Theme.textSecondary)
+            VStack(spacing: 3) {
+                ForEach(0..<maxRows, id: \.self) { row in
+                    HStack(spacing: 3) {
+                        ForEach(0..<maxColumns, id: \.self) { column in
+                            let isOn = row < rows && column < columns
+                            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                .fill(isOn ? Theme.accent.opacity(row == 0 ? 0.95 : 0.6) : Color.white.opacity(0.07))
+                                .overlay(RoundedRectangle(cornerRadius: 3, style: .continuous).strokeBorder(Color.white.opacity(isOn ? 0 : 0.08)))
+                                .frame(width: 24, height: 18)
+                                .contentShape(Rectangle())
+                                .onHover { inside in
+                                    guard inside else { return }
+                                    rows = row + 1
+                                    columns = column + 1
+                                }
+                                .onTapGesture { onPick(row + 1, column + 1) }
+                        }
+                    }
+                }
+            }
+            Text("\(columns) \(columns == 1 ? "Spalte" : "Spalten") × \(rows) \(rows == 1 ? "Zeile" : "Zeilen") (erste Zeile = Kopf)")
+                .font(.system(size: 11.5).monospacedDigit())
+                .foregroundStyle(Theme.textTertiary)
+        }
     }
 }
 
@@ -523,6 +683,7 @@ private struct BlockMenu: View {
         .menuIndicator(.hidden)
         .fixedSize()
         .onHover { hovering = $0 }
+        .disabled(current == .image || current == .table)
         .help("Absatzformat")
     }
 

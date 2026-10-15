@@ -80,7 +80,7 @@ extension WriterTextView {
     }
 
     func placeAICursor(at location: Int) {
-        trackedRanges[Self.aiCursorKey] = NSRange(location: max(0, min(location, textStorage?.length ?? 0)), length: 0)
+        trackedRanges[Self.aiCursorKey] = NSRange(location: outsideTables(max(0, min(location, textStorage?.length ?? 0))), length: 0)
         updateAICursorIndicator()
         onStateChange?()
     }
@@ -99,6 +99,12 @@ extension WriterTextView {
     }
 
     var isAICursorAtEnd: Bool { aiCursorLocation >= (textStorage?.length ?? 0) }
+
+    /// The assistant writes paragraphs, which don't fit into a table cell: a place in a table moves below it.
+    func outsideTables(_ location: Int) -> Int {
+        guard tableCell(at: location) != nil, let model = tableModel(at: location) else { return location }
+        return NSMaxRange(model.range)
+    }
 
     /// Moves the AI cursor's marker (its own small view on top of the text) to where the cursor is.
     func updateAICursorIndicator() {
@@ -157,7 +163,7 @@ extension WriterTextView {
             if location > 0, location < copy.length, (copy.string as NSString).character(at: location - 1) == 0x0A { source = location }
             let startsEmptyEnd = location == copy.length && location > 0 && (copy.string as NSString).character(at: location - 1) == 0x0A
             let block = copy.length > 0 && !startsEmptyEnd
-                ? copy.attributes(at: min(source, copy.length - 1), effectiveRange: nil).filter { $0.key == .writerBlock || $0.key == .writerListLevel }
+                ? copy.attributes(at: min(source, copy.length - 1), effectiveRange: nil).filter { WriterMarkdown.paragraphKeys.contains($0.key) }
                 : [:]
             copy.insert(NSAttributedString(string: text, attributes: block), at: location)
         }
@@ -197,7 +203,7 @@ extension WriterTextView {
         guard let storage = textStorage else { return }
         removeDictationPreview()
         let string = storage.string as NSString
-        let location = aiCursorLocation
+        let location = outsideTables(aiCursorLocation)
         let placement: AIPlacement
         if storage.length == 0 || (location >= storage.length && string.character(at: storage.length - 1) == 0x0A) {
             placement = .fill(storage.length)
@@ -285,7 +291,7 @@ extension WriterTextView {
             let flat = markdown.replacingOccurrences(of: "\n\n", with: " ").replacingOccurrences(of: "\n", with: " ")
             let inline = NSMutableAttributedString(attributedString: WriterMarkdown.inline(flat))
             let block = storage.attributes(at: max(0, location - 1), effectiveRange: nil)
-                .filter { $0.key == .writerBlock || $0.key == .writerListLevel }
+                .filter { WriterMarkdown.paragraphKeys.contains($0.key) }
             inline.addAttributes(block, range: NSRange(location: 0, length: inline.length))
             let previous = location > 0 ? Character(Unicode.Scalar(string.character(at: location - 1)) ?? " ") : " "
             if !previous.isWhitespace, !flat.isEmpty {
@@ -302,13 +308,15 @@ extension WriterTextView {
             return (text, text.length)
         case .after(let location):
             let result = NSMutableAttributedString(string: "\n", attributes: storage.attributes(at: max(0, location - 1), effectiveRange: nil)
-                .filter { $0.key == .writerBlock || $0.key == .writerListLevel })
+                .filter { WriterMarkdown.paragraphKeys.contains($0.key) })
             result.append(WriterMarkdown.attributedString(from: markdown))
             return (result, result.length)
         case .before:
             let text = NSMutableAttributedString(attributedString: WriterMarkdown.attributedString(from: markdown))
             guard text.length > 0 else { return (text, 0) }
-            let last = text.attributes(at: text.length - 1, effectiveRange: nil).filter { $0.key == .writerBlock || $0.key == .writerListLevel }
+            // A table at the end already ends with its newline.
+            if text.string.hasSuffix("\n") { return (text, text.length) }
+            let last = text.attributes(at: text.length - 1, effectiveRange: nil).filter { WriterMarkdown.paragraphKeys.contains($0.key) }
             let length = text.length
             text.append(NSAttributedString(string: "\n", attributes: last))
             return (text, length)
@@ -342,16 +350,16 @@ extension WriterTextView {
         let replacement: NSMutableAttributedString
         if startsParagraph && endsParagraph {
             replacement = NSMutableAttributedString(attributedString: WriterMarkdown.attributedString(from: text))
-            if end > 0, string.character(at: end - 1) == 0x0A, replacement.length > 0 {
+            if end > 0, string.character(at: end - 1) == 0x0A, replacement.length > 0, !replacement.string.hasSuffix("\n") {
                 let last = replacement.attributes(at: replacement.length - 1, effectiveRange: nil)
-                    .filter { $0.key == .writerBlock || $0.key == .writerListLevel }
+                    .filter { WriterMarkdown.paragraphKeys.contains($0.key) }
                 replacement.append(NSAttributedString(string: "\n", attributes: last))
             }
         } else {
             let flat = text.replacingOccurrences(of: "\n\n", with: " ").replacingOccurrences(of: "\n", with: " ")
             replacement = NSMutableAttributedString(attributedString: WriterMarkdown.inline(flat))
             let block = storage.attributes(at: range.location, effectiveRange: nil)
-                .filter { $0.key == .writerBlock || $0.key == .writerListLevel }
+                .filter { WriterMarkdown.paragraphKeys.contains($0.key) }
             replacement.addAttributes(block, range: NSRange(location: 0, length: replacement.length))
         }
         markPassage(nil)
@@ -372,7 +380,7 @@ extension WriterTextView {
         var contentEnd = NSMaxRange(paragraph)
         if contentEnd > paragraph.location, string.character(at: contentEnd - 1) == 0x0A { contentEnd -= 1 }
         let insertion = NSMutableAttributedString(string: "\n", attributes: storage.length > 0
-            ? storage.attributes(at: max(0, contentEnd - 1), effectiveRange: nil).filter { $0.key == .writerBlock || $0.key == .writerListLevel } : [:])
+            ? storage.attributes(at: max(0, contentEnd - 1), effectiveRange: nil).filter { WriterMarkdown.paragraphKeys.contains($0.key) } : [:])
         insertion.append(WriterMarkdown.attributedString(from: markdown.trimmingCharacters(in: .whitespacesAndNewlines)))
         let target = NSRange(location: contentEnd, length: 0)
         markPassage(nil)
@@ -416,7 +424,7 @@ extension WriterTextView {
         var text = ""
         var range: NSRange?
         for paragraph in WriterMarkdown.paragraphs(of: storage, in: scope) {
-            guard ![.code, .raw, .rule].contains(paragraph.block) else { continue }
+            guard ![.code, .raw, .rule, .image].contains(paragraph.block) else { continue }
             let part = NSIntersectionRange(paragraph.contentRange, scope)
             guard part.length > 0 else { continue }
             let piece = (storage.string as NSString).substring(with: part)

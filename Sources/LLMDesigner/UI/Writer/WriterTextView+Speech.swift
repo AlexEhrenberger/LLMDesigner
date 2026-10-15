@@ -143,7 +143,7 @@ extension WriterTextView {
 
         var script = SpeechScript()
         for paragraph in WriterMarkdown.paragraphs(of: storage, in: range) {
-            guard ![.code, .raw, .rule].contains(paragraph.block) else { continue }
+            guard ![.code, .raw, .rule, .image].contains(paragraph.block) else { continue }
             let part = NSIntersectionRange(paragraph.contentRange, range)
             guard part.length > 0 else { continue }
             var piece = (storage.string as NSString).substring(with: part)
@@ -181,6 +181,9 @@ extension WriterTextView {
     // MARK: Context menu
 
     override func menu(for event: NSEvent) -> NSMenu? {
+        // A right-click on a picture selects it and offers its own entries.
+        let pictureLocation = imageLocation(at: convert(event.locationInWindow, from: nil))
+        if let pictureLocation { selectImage(at: pictureLocation) }
         let menu = super.menu(for: event) ?? NSMenu()
         // The system's font and layout submenus would format past the Markdown meaning; the toolbar does that.
         let foreign: Set<Selector> = [#selector(NSFontManager.orderFrontFontPanel(_:)), #selector(NSTextView.alignLeft(_:)), #selector(NSResponder.makeBaseWritingDirectionNatural(_:)), #selector(NSTextView.changeLayoutOrientation(_:))]
@@ -205,6 +208,11 @@ extension WriterTextView {
         for (index, item) in assistantMenuItems(hasSelection: hasTextSelection).enumerated() {
             menu.insertItem(item, at: index)
         }
+        // Picture and table entries come first.
+        var own: [NSMenuItem] = []
+        if let pictureLocation { own += imageMenuItems(at: pictureLocation) }
+        if let table = tableMenu() { own += [table, .separator()] }
+        for (index, item) in own.enumerated() { menu.insertItem(item, at: index) }
         return menu
     }
 
