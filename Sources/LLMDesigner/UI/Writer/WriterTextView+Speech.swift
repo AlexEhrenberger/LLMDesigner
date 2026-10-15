@@ -189,6 +189,8 @@ extension WriterTextView {
         if let formulaLocation { selectFormula(at: formulaLocation) }
         let tocLocation = pictureLocation == nil && formulaLocation == nil ? tableOfContentsLocation(at: point) : nil
         if let tocLocation { selectEmbed(at: tocLocation) }
+        let citationLocation = pictureLocation == nil && formulaLocation == nil && tocLocation == nil ? self.citationLocation(at: point) : nil
+        if let citationLocation { selectCitation(at: citationLocation) }
         let menu = super.menu(for: event) ?? NSMenu()
         // The system's font and layout submenus would format past the Markdown meaning; the toolbar does that.
         let foreign: Set<Selector> = [#selector(NSFontManager.orderFrontFontPanel(_:)), #selector(NSTextView.alignLeft(_:)), #selector(NSResponder.makeBaseWritingDirectionNatural(_:)), #selector(NSTextView.changeLayoutOrientation(_:))]
@@ -218,6 +220,7 @@ extension WriterTextView {
         if let pictureLocation { own += imageMenuItems(at: pictureLocation) }
         if let formulaLocation { own += formulaMenuItems(at: formulaLocation) }
         if let tocLocation { own += tableOfContentsMenuItems(at: tocLocation) }
+        if let citationLocation { own += citationMenuItems(at: citationLocation) }
         if let table = tableMenu() { own += [table, .separator()] }
         own += insertMenuItems(hasSelection: hasSelection)
         for (index, item) in own.enumerated() { menu.insertItem(item, at: index) }
@@ -279,6 +282,14 @@ extension WriterTextView {
         let picture = ClosureMenuItem(title: "Bild hier generieren …") { [weak self] in self?.generateImageAtCaret() }
         picture.image = NSImage(systemSymbolName: "wand.and.stars", accessibilityDescription: nil)
         items.append(picture)
+        let cite = ClosureMenuItem(title: "Quelle zitieren … (⌘⇧K)") { [weak self] in self?.showCitationPicker() }
+        cite.image = NSImage(systemSymbolName: "quote.bubble", accessibilityDescription: nil)
+        items.append(cite)
+        if !hasBibliography {
+            let bibliography = ClosureMenuItem(title: "Literaturverzeichnis einfügen") { [weak self] in self?.insertBibliography() }
+            bibliography.image = NSImage(systemSymbolName: "books.vertical", accessibilityDescription: nil)
+            items.append(bibliography)
+        }
         items.append(.separator())
         return items
     }

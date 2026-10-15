@@ -60,11 +60,13 @@ extension AppModel {
         selectedDocumentID = id
     }
 
-    /// Citation Studio takes the main area; choosing a chat or a document closes it again.
-    func openCitationStudio() {
+    /// Citation Studio takes the main area; choosing a chat or a document closes it again. `showing` selects a
+    /// source there (from a citation in a document).
+    func openCitationStudio(showing sourceID: UUID? = nil) {
         closeDocument()
         showChats()
         citations.loadIfNeeded()
+        citationStudioRequest = sourceID
         citationStudioOpen = true
     }
 
@@ -277,8 +279,13 @@ extension AppModel {
                 if let url = WriterImageStore.url(for: reference.source) { figures[reference.source] = url }
                 if let url = WriterImageStore.printURL(for: reference) { printFigures[reference.source] = url }
             }
-            var part = LaTeXWriter.Part(text: markdown)
+            // Citations are set in APA for LaTeX and PDF; the Markdown keeps Pandoc's `[@key]`.
+            citations.loadIfNeeded()
+            let style = CitationStyle(sources: citations.sources, cited: CitationMarkup.keys(in: markdown))
+            let bibliography = style.bibliography(CitationMarkup.keys(in: markdown)).map(\.text)
+            var part = LaTeXWriter.Part(text: CitationExport.resolve(markdown, style: style))
             part.figures = printFigures
+            part.bibliography = bibliography
             if let contents = latexContents(of: current.outline, in: markdown) {
                 part.contents = contents.outline
                 part.blockAnchors = contents.anchors
@@ -297,7 +304,8 @@ extension AppModel {
                     }
                     let text: String
                     if format == .markdown {
-                        let exported = WriterMarkdownExport.expandTableOfContents(in: markdown, outline: current.outline)
+                        let exported = CitationExport.expandBibliography(in: WriterMarkdownExport.expandTableOfContents(in: markdown, outline: current.outline),
+                                                                         entries: bibliography)
                         text = folder.map { folder in
                             WriterImageStore.rewriteSources(in: exported) { figures[$0].map { folder + "/" + $0.lastPathComponent } }
                         } ?? exported

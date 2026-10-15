@@ -141,6 +141,18 @@ struct CitationSourceDetail: View {
             .fixedSize()
             citekey(source)
             Spacer()
+            Menu {
+                CitationFolderItems(shelf: .sources, current: source.folderID, library: library) { library.file(source: sourceID, in: $0) }
+            } label: {
+                Label(library.folderPath(source.folderID) ?? "Unsortiert", systemImage: source.folderID == nil ? "tray" : "folder")
+                    .font(.system(size: 11.5))
+                    .lineLimit(1)
+            }
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+            .foregroundStyle(Theme.textSecondary)
+            .fixedSize()
+            .help("Ordner der Quelle")
             Button {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString("[@\(source.citekey)]", forType: .string)
@@ -640,7 +652,22 @@ struct QuoteCard: View {
                     .help("Verweist auf \(quote.linkedQuoteIDs.count) andere\(quote.linkedQuoteIDs.count == 1 ? "s" : "") Zitat\(quote.linkedQuoteIDs.count == 1 ? "" : "e")")
             }
             Spacer()
+            if let path = library.folderPath(quote.folderID) {
+                Label(path, systemImage: "folder")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(Theme.textTertiary)
+                    .lineLimit(1)
+            }
             HStack(spacing: 10) {
+                Menu {
+                    CitationFolderItems(shelf: .quotes, current: quote.folderID, library: library) { library.file(quote: quote.id, in: $0) }
+                } label: {
+                    Image(systemName: "folder.badge.plus")
+                }
+                .menuStyle(.button)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("Wissensbaustein in einen Ordner legen")
                 Button {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(quote.formatted(with: library.source(quote.sourceID)), forType: .string)

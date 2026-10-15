@@ -62,6 +62,12 @@ final class WriterTextView: NSTextView {
     var onCancelImageGeneration: ((String) -> Void)?
     var onImageDefaults: (() -> GeneratedImageInfo)?
     var onDocumentTitle: (() -> String)?
+    /// Citation Studio's sources and quotes (see WriterTextView+Citations.swift), the style made from them for
+    /// this document, and opening a source there.
+    var citations: CitationLibrary?
+    var citationStyleCache: CitationStyle?
+    var lastCitedKeys: [String] = []
+    var onShowSource: ((UUID) -> Void)?
     /// The model's table of contents of the document; a dynamic table of contents block shows it.
     var dynamicOutline: DocumentOutline? {
         didSet { if oldValue != dynamicOutline { relayoutTablesOfContents() } }
@@ -637,6 +643,7 @@ final class WriterTextView: NSTextView {
         case [.command, .shift]:
             if key == "x" { toggle(.strikethrough); return true }
             switch event.keyCode {
+            case 40: showCitationPicker(); return true      // K
             case 26: setBlock(.numbered); return true     // 7
             case 28: setBlock(.bullet); return true       // 8
             case 25: setBlock(.quote); return true        // 9
@@ -890,6 +897,8 @@ final class WriterTextView: NSTextView {
             case is WriterImageAttachment: text = caption.isEmpty ? "[Bild]" : "[Bild: \(caption)]"
             case let formula as WriterMathAttachment: text = "$" + formula.latex + "$"
             case is WriterTOCAttachment: text = "[Inhaltsverzeichnis]"
+            case is WriterBibliographyAttachment: text = "[Literaturverzeichnis]"
+            case let citation as WriterCitationAttachment: text = citationStyle.inText(citation.items)
             default: text = "———"
             }
             plain.replaceCharacters(in: attachmentRange, with: text)

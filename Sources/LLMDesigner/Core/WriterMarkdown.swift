@@ -295,6 +295,9 @@ enum WriterMarkdown {
                     } else if let dynamic = WriterTOCAttachment.kind(of: line) {
                         addText()
                         add(NSAttributedString(attachment: WriterTOCAttachment(dynamic: dynamic)), block: .toc)
+                    } else if WriterBibliographyAttachment.isMarker(line) {
+                        addText()
+                        add(NSAttributedString(attachment: WriterBibliographyAttachment()), block: .toc)
                     } else {
                         lines.append(line)
                     }
@@ -516,6 +519,17 @@ enum WriterMarkdown {
                 let inWord = (before.isLetter || before.isNumber) && (after.isLetter || after.isNumber)
                 if !inWord, toggle(.italic, token: "_") { continue }
             }
+            // A citation: `[@key, S. 12]`, `[vgl. @a; @b]` (Pandoc), but not a link `[…](…)`.
+            if character == "[", let close = characters[(index + 1)...].firstIndex(where: { $0 == "]" || $0 == "[" || $0 == "\n" }),
+               characters[close] == "]", close + 1 >= characters.count || characters[close + 1] != "(",
+               characters[(index + 1)..<close].contains("@"), let items = CitationMarkup.parse(String(characters[(index + 1)..<close])) {
+                flush()
+                let citation = NSMutableAttributedString(attachment: WriterCitationAttachment(items: items))
+                citation.addAttributes(attributes(marks, link: link, bookmark: bookmark), range: NSRange(location: 0, length: citation.length))
+                result.append(citation)
+                index = close + 1
+                continue
+            }
             if character == "[", link == nil, let (text, url, end) = linkSyntax(in: characters, at: index) {
                 flush()
                 appendInline(text, marks: marks, link: url, bookmark: bookmark, to: result)
@@ -667,10 +681,12 @@ enum WriterMarkdown {
                 pending.append(formula.blockMarkdown)
             case .toc:
                 var toc: WriterTOCAttachment?
+                var bibliography = false
                 content.enumerateAttribute(.attachment, in: NSRange(location: 0, length: content.length)) { value, _, _ in
                     if let value = value as? WriterTOCAttachment { toc = value }
+                    if value is WriterBibliographyAttachment { bibliography = true }
                 }
-                pending.append(toc?.markdown ?? WriterTOCAttachment.marker)
+                pending.append(bibliography ? WriterBibliographyAttachment.marker : toc?.markdown ?? WriterTOCAttachment.marker)
             case .code:
                 if pendingKind == nil { currentLanguage = paragraph.language }
                 pending.append(plainString(content).replacingOccurrences(of: String(lineSeparator), with: "\n"))
@@ -778,17 +794,20 @@ enum WriterMarkdown {
 
         text.enumerateAttributes(in: NSRange(location: 0, length: text.length)) { attributes, range, _ in
             guard attributes[.writerDictationPreview] == nil else { return }
-            // Pictures and lines are paragraphs of their own; an inline formula is written as `$…$`.
+            // Pictures and lines are paragraphs of their own; an inline formula is written as `$…$`, a citation as
+            // `[@key, S. 12]`.
             let formula = attributes[.attachment] as? WriterMathAttachment
-            guard attributes[.attachment] == nil || formula != nil else { return }
-            let raw = formula.map { "$" + $0.latex + "$" } ?? (text.string as NSString).substring(with: range)
+            let citation = attributes[.attachment] as? WriterCitationAttachment
+            guard attributes[.attachment] == nil || formula != nil || citation != nil else { return }
+            let raw = formula.map { "$" + $0.latex + "$" } ?? citation?.markdown ?? (text.string as NSString).substring(with: range)
+            let isObject = formula != nil || citation != nil
             let marks = WriterInline(attributes)
             let link: String? = (attributes[.link] as? URL)?.absoluteString ?? attributes[.link] as? String
             let bookmark = attributes[.writerBookmark] as? WriterBookmark
 
-            let leading = formula != nil ? "" : String(raw.prefix(while: { $0 == " " || $0 == "\t" }))
+            let leading = isObject ? "" : String(raw.prefix(while: { $0 == " " || $0 == "\t" }))
             let rest = raw.dropFirst(leading.count)
-            let trailing = formula != nil ? "" : String(rest.reversed().prefix(while: { $0 == " " || $0 == "\t" }).reversed())
+            let trailing = isObject ? "" : String(rest.reversed().prefix(while: { $0 == " " || $0 == "\t" }).reversed())
             let core = String(rest.dropLast(trailing.count))
             guard !core.isEmpty else {
                 pendingSpace += raw
@@ -820,7 +839,7 @@ enum WriterMarkdown {
                 output += openingToken(mark)
                 open.append(mark)
             }
-            if formula != nil {
+            if isObject {
                 output += core
             } else if marks.contains(.code) {
                 let fence = core.contains("`") ? "`` " : "`"

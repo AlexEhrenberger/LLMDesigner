@@ -47,6 +47,34 @@ struct CitationStore: Sendable {
         return (sources, quotes)
     }
 
+    /// Groups and folders of both shelves, in one small file.
+    struct Collections: Codable {
+        var format = CitationStore.formatVersion
+        var groups: [CitationGroup] = []
+        var folders: [CitationFolder] = []
+    }
+
+    var collectionsURL: URL { directory.appendingPathComponent("Ordner.json") }
+
+    func loadCollections() -> Collections {
+        guard let data = try? Data(contentsOf: collectionsURL) else { return Collections() }
+        do {
+            return try Self.decoder.decode(Collections.self, from: data)
+        } catch {
+            print("LLMDesigner: Ordner der Zitate konnten nicht gelesen werden: \(error)")
+            return Collections()
+        }
+    }
+
+    func saveCollections(_ collections: Collections) {
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try Self.encoder.encode(collections).write(to: collectionsURL, options: .atomic)
+        } catch {
+            print("LLMDesigner: Ordner der Zitate konnten nicht gespeichert werden: \(error)")
+        }
+    }
+
     func save(_ source: CitationSource, quotes: [CitationQuote]) throws {
         try FileManager.default.createDirectory(at: sourcesDirectory, withIntermediateDirectories: true)
         let data = try Self.encoder.encode(Record(source: source, quotes: quotes))
@@ -134,6 +162,9 @@ final class CitationLibrary {
     private(set) var sources: [CitationSource] = []
     /// In the order they were made.
     private(set) var quotes: [CitationQuote] = []
+    /// Groups and folders of both shelves.
+    private(set) var groups: [CitationGroup] = []
+    private(set) var folders: [CitationFolder] = []
 
     @ObservationIgnored private let store: CitationStore
     @ObservationIgnored private var index = CitationSearchIndex(sources: [], quotes: [])
@@ -152,6 +183,9 @@ final class CitationLibrary {
         sources = loaded.sources.sorted { $0.createdAt > $1.createdAt }
         quotes = loaded.quotes.sorted { $0.createdAt < $1.createdAt }
         index = CitationSearchIndex(sources: sources, quotes: quotes)
+        let collections = store.loadCollections()
+        groups = collections.groups
+        folders = collections.folders.filter { folder in collections.groups.contains { $0.id == folder.groupID } }
     }
 
     // MARK: Reading
@@ -345,6 +379,124 @@ final class CitationLibrary {
             quotes[position].linkedQuoteIDs.removeAll(where: removed.contains)
             touchSource(quotes[position].sourceID)
         }
+    }
+
+    // MARK: Groups and folders
+
+    func groups(_ shelf: CitationShelf) -> [CitationGroup] {
+        loadIfNeeded()
+        return groups.filter { $0.shelf == shelf }.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    func folders(in groupID: UUID) -> [CitationFolder] {
+        folders.filter { $0.groupID == groupID }.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    func folder(_ id: UUID?) -> CitationFolder? {
+        guard let id else { return nil }
+        return folders.first { $0.id == id }
+    }
+
+    func group(_ id: UUID?) -> CitationGroup? {
+        guard let id else { return nil }
+        return groups.first { $0.id == id }
+    }
+
+    /// "Masterarbeit › Kapitel 2".
+    func folderPath(_ id: UUID?) -> String? {
+        guard let folder = folder(id) else { return nil }
+        return [group(folder.groupID)?.name, folder.name].compactMap { $0 }.joined(separator: " › ")
+    }
+
+    @discardableResult
+    func addGroup(_ shelf: CitationShelf, name: String = "Neue Gruppe") -> CitationGroup {
+        loadIfNeeded()
+        let group = CitationGroup(name: Self.unique(name, among: groups.filter { $0.shelf == shelf }.map(\.name)), shelf: shelf)
+        groups.append(group)
+        saveCollections()
+        return group
+    }
+
+    @discardableResult
+    func addFolder(in groupID: UUID, name: String = "Neuer Ordner") -> CitationFolder? {
+        guard let group = group(groupID) else { return nil }
+        let folder = CitationFolder(name: Self.unique(name, among: folders(in: groupID).map(\.name)), groupID: groupID, shelf: group.shelf)
+        folders.append(folder)
+        if let index = groups.firstIndex(where: { $0.id == groupID }) { groups[index].isCollapsed = false }
+        saveCollections()
+        return folder
+    }
+
+    func renameGroup(_ id: UUID, to name: String) {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, let index = groups.firstIndex(where: { $0.id == id }), groups[index].name != name else { return }
+        groups[index].name = name
+        saveCollections()
+    }
+
+    func renameFolder(_ id: UUID, to name: String) {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, let index = folders.firstIndex(where: { $0.id == id }), folders[index].name != name else { return }
+        folders[index].name = name
+        saveCollections()
+    }
+
+    func setCollapsed(group id: UUID, _ collapsed: Bool) {
+        guard let index = groups.firstIndex(where: { $0.id == id }), groups[index].isCollapsed != collapsed else { return }
+        groups[index].isCollapsed = collapsed
+        saveCollections()
+    }
+
+    func setCollapsed(folder id: UUID, _ collapsed: Bool) {
+        guard let index = folders.firstIndex(where: { $0.id == id }), folders[index].isCollapsed != collapsed else { return }
+        folders[index].isCollapsed = collapsed
+        saveCollections()
+    }
+
+    func moveFolder(_ id: UUID, to groupID: UUID) {
+        guard let index = folders.firstIndex(where: { $0.id == id }), let group = group(groupID), group.shelf == folders[index].shelf,
+              folders[index].groupID != groupID else { return }
+        folders[index].groupID = groupID
+        saveCollections()
+    }
+
+    /// Removes a folder; what was in it becomes unsorted (nothing is deleted).
+    func deleteFolder(_ id: UUID) {
+        guard folders.contains(where: { $0.id == id }) else { return }
+        for source in sources where source.folderID == id { updateSource(source.id) { $0.folderID = nil } }
+        for quote in quotes where quote.folderID == id { updateQuote(quote.id) { $0.folderID = nil } }
+        folders.removeAll { $0.id == id }
+        saveCollections()
+    }
+
+    /// Removes a group with its folders; their sources or quotes become unsorted.
+    func deleteGroup(_ id: UUID) {
+        for folder in folders where folder.groupID == id { deleteFolder(folder.id) }
+        groups.removeAll { $0.id == id }
+        saveCollections()
+    }
+
+    /// Files a source in a folder of the sources shelf (nil: unsorted).
+    func file(source id: UUID, in folderID: UUID?) {
+        if let folderID, folder(folderID)?.shelf != .sources { return }
+        updateSource(id) { $0.folderID = folderID }
+    }
+
+    /// Files a quote in a folder of the knowledge shelf (nil: unsorted).
+    func file(quote id: UUID, in folderID: UUID?) {
+        if let folderID, folder(folderID)?.shelf != .quotes { return }
+        updateQuote(id) { $0.folderID = folderID }
+    }
+
+    private func saveCollections() {
+        store.saveCollections(CitationStore.Collections(groups: groups, folders: folders))
+    }
+
+    private static func unique(_ name: String, among names: [String]) -> String {
+        guard names.contains(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) else { return name }
+        var number = 2
+        while names.contains(where: { $0.caseInsensitiveCompare("\(name) \(number)") == .orderedSame }) { number += 1 }
+        return "\(name) \(number)"
     }
 
     // MARK: Attachments

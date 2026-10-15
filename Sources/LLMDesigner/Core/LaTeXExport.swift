@@ -57,6 +57,8 @@ enum LaTeXWriter {
         /// Writer Studio: the model's table of contents, set where the `[TOC]{.dynamic}` marker stands. Its targets
         /// are labels in `blockAnchors`.
         var contents: Outline?
+        /// Writer Studio: the formatted reference list, set where the `[Literatur]` marker stands.
+        var bibliography: [StyledText]?
     }
 
     struct OutlineEntry {
@@ -95,12 +97,39 @@ enum LaTeXWriter {
             let structure = part.figures == nil ? nil : Structure(numbered: WriterHeadings.isFormal(part.text), chapters: hasChapters)
             section += part.isPlainText
                 ? plainText(part.text)
-                : blocks(part.text, math: math, anchors: part.blockAnchors, figures: part.figures, figureFolder: figureFolder, structure: structure, contents: part.contents)
+                : blocks(part.text, math: math, anchors: part.blockAnchors, figures: part.figures, figureFolder: figureFolder, structure: structure,
+                         contents: part.contents, bibliography: part.bibliography)
             body.append(section)
         }
         let contents = outline.map { tableOfContents($0, math: math) } ?? ""
         return preamble(paper, documentClass: hasChapters ? "report" : "article") + "\\begin{document}\n" + contents
             + body.joined(separator: "\n\n\\bigskip\n\n") + "\n\\end{document}\n"
+    }
+
+    /// The reference list: an unnumbered heading in the table of contents, entries with a hanging indent.
+    private static func referenceList(_ entries: [StyledText], chapters: Bool) -> String {
+        let command = chapters ? "chapter" : "section"
+        var output = "\\\(command)*{Literatur}\n\\addcontentsline{toc}{\(command)}{Literatur}\n"
+        guard !entries.isEmpty else { return output + "\\emph{Keine Quellenangaben im Dokument.}" }
+        output += "\\begin{list}{}{\\setlength{\\leftmargin}{1.5em}\\setlength{\\itemindent}{-1.5em}\\setlength{\\itemsep}{0.35em}\\setlength{\\parsep}{0pt}}\n"
+        for entry in entries {
+            output += "\\item " + entry.latex(referenceText) + "\n"
+        }
+        return output + "\\end{list}"
+    }
+
+    /// Text of a reference; its web addresses become breakable links.
+    private static func referenceText(_ text: String) -> String {
+        var output = ""
+        for word in text.split(separator: " ", omittingEmptySubsequences: false) {
+            if !output.isEmpty { output += " " }
+            if word.hasPrefix("http://") || word.hasPrefix("https://") {
+                output += "\\url{" + escapeURL(String(word)) + "}"
+            } else {
+                output += escape(String(word))
+            }
+        }
+        return output
     }
 
     /// How a Writer Studio document's headings are set: numbered (it has a table of contents) and with chapters.
@@ -201,7 +230,8 @@ enum LaTeXWriter {
     // MARK: - Blocks
 
     private static func blocks(_ markdown: String, math: MathMode, anchors: [Int: String] = [:], figures: [String: URL]? = nil,
-                               figureFolder: String? = nil, structure: Structure? = nil, contents: Outline? = nil) -> String {
+                               figureFolder: String? = nil, structure: Structure? = nil, contents: Outline? = nil,
+                               bibliography: [StyledText]? = nil) -> String {
         var output: [String] = []
         for (index, block) in MarkdownParser.parse(markdown).enumerated() {
             let start = output.count
@@ -215,7 +245,9 @@ enum LaTeXWriter {
             case .paragraph(let text):
                 let lines = text.components(separatedBy: "\n")
                 let images = lines.compactMap(WriterImageReference.parse)
-                if let structure, lines.count == 1, let dynamic = WriterTOCAttachment.kind(of: lines[0]) {
+                if structure != nil, lines.count == 1, WriterBibliographyAttachment.isMarker(lines[0]) {
+                    output.append(referenceList(bibliography ?? [], chapters: structure?.chapters == true))
+                } else if let structure, lines.count == 1, let dynamic = WriterTOCAttachment.kind(of: lines[0]) {
                     if !dynamic {
                         output.append("\\tableofcontents" + (structure.chapters ? "" : "\n\\bigskip"))
                     } else if let contents {

@@ -129,6 +129,31 @@ enum SourceType: String, Codable, CaseIterable, Identifiable, Sendable {
     }
 }
 
+/// Citation Studio has two shelves: sources, and the knowledge pieces (quotes). Each has its own groups and
+/// folders: a group holds folders, a folder holds sources or quotes.
+enum CitationShelf: String, Codable, Hashable, Sendable {
+    case sources, quotes
+}
+
+/// A group of folders ("Masterarbeit", "Projekt Küste").
+struct CitationGroup: Identifiable, Codable, Hashable, Sendable {
+    var id = UUID()
+    var name: String
+    var shelf: CitationShelf
+    var isCollapsed = false
+    var createdAt = Date()
+}
+
+/// A folder inside a group; it holds sources or quotes (each in at most one folder).
+struct CitationFolder: Identifiable, Codable, Hashable, Sendable {
+    var id = UUID()
+    var name: String
+    var groupID: UUID
+    var shelf: CitationShelf
+    var isCollapsed = false
+    var createdAt = Date()
+}
+
 /// A file that belongs to a source, inside the library (`Zitate/Anhänge/<Quelle>/…`).
 struct CitationAttachment: Codable, Hashable, Sendable {
     /// The file name inside the source's attachment folder.
@@ -173,6 +198,8 @@ struct CitationSource: Identifiable, Codable, Hashable, Sendable {
     /// Tags of the whole source; quotes have their own.
     var tags: [String] = []
     var attachments: [CitationAttachment] = []
+    /// The folder it is filed in (Citation Studio's groups and folders); nil: unsorted.
+    var folderID: UUID?
     var createdAt = Date()
     var updatedAt = Date()
 
@@ -203,6 +230,8 @@ struct CitationQuote: Identifiable, Codable, Hashable, Sendable {
     var page = ""
     var tags: [String] = []
     var linkedQuoteIDs: [UUID] = []
+    /// The folder among the knowledge pieces; nil: unsorted. Independent of the source's folder.
+    var folderID: UUID?
     var createdAt = Date()
     var updatedAt = Date()
 
@@ -305,7 +334,7 @@ extension PersonName {
 extension CitationSource {
     private enum CodingKeys: String, CodingKey {
         case id, citekey, type, title, subtitle, authors, editors, year, date, container, publisher, place, edition, volume, issue,
-             pages, doi, isbn, url, arxiv, accessed, language, abstract, notes, tags, attachments, createdAt, updatedAt
+             pages, doi, isbn, url, arxiv, accessed, language, abstract, notes, tags, attachments, folderID, createdAt, updatedAt
     }
 
     init(from decoder: Decoder) throws {
@@ -337,6 +366,7 @@ extension CitationSource {
         notes = c.value(.notes, "")
         tags = c.value(.tags, [])
         attachments = c.value(.attachments, [])
+        folderID = c.value(.folderID, UUID?.none)
         createdAt = c.value(.createdAt, Date())
         updatedAt = c.value(.updatedAt, createdAt)
     }
@@ -369,13 +399,14 @@ extension CitationSource {
         try c.text(notes, .notes)
         try c.list(tags, .tags)
         try c.list(attachments, .attachments)
+        try c.encodeIfPresent(folderID, forKey: .folderID)
         try c.encode(createdAt, forKey: .createdAt)
         try c.encode(updatedAt, forKey: .updatedAt)
     }
 }
 
 extension CitationQuote {
-    private enum CodingKeys: String, CodingKey { case id, sourceID, exactText, paraphrase, page, tags, linkedQuoteIDs, createdAt, updatedAt }
+    private enum CodingKeys: String, CodingKey { case id, sourceID, exactText, paraphrase, page, tags, linkedQuoteIDs, folderID, createdAt, updatedAt }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -386,6 +417,7 @@ extension CitationQuote {
         page = c.value(.page, "")
         tags = c.value(.tags, [])
         linkedQuoteIDs = c.value(.linkedQuoteIDs, [])
+        folderID = c.value(.folderID, UUID?.none)
         createdAt = c.value(.createdAt, Date())
         updatedAt = c.value(.updatedAt, createdAt)
     }
@@ -399,6 +431,7 @@ extension CitationQuote {
         try c.text(page, .page)
         try c.list(tags, .tags)
         try c.list(linkedQuoteIDs, .linkedQuoteIDs)
+        try c.encodeIfPresent(folderID, forKey: .folderID)
         try c.encode(createdAt, forKey: .createdAt)
         try c.encode(updatedAt, forKey: .updatedAt)
     }

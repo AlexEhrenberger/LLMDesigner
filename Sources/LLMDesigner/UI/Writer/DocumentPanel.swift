@@ -21,6 +21,9 @@ struct DocumentPanel: View {
                 PanelTab(title: "Lesezeichen", count: bookmarks.count, isSelected: app.documentPanelTab == .bookmarks) {
                     app.documentPanelTab = .bookmarks
                 }
+                PanelTab(title: "Quellen", count: CitationMarkup.keys(in: document.markdown).count, isSelected: app.documentPanelTab == .sources) {
+                    app.documentPanelTab = .sources
+                }
                 Spacer(minLength: 0)
                 if app.documentPanelTab == .contents, mode == .dynamic {
                     if isGenerating {
@@ -55,19 +58,23 @@ struct DocumentPanel: View {
                 .help("Dynamisch: das Modell gliedert den Text in Themen. Überschriften: deine Kapitel und Überschriften.")
             }
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    switch app.documentPanelTab {
-                    case .bookmarks: bookmarkList(bookmarks)
-                    case .contents:
-                        if mode == .headings { headingList } else { dynamicContents(isGenerating: isGenerating) }
+            if app.documentPanelTab == .sources {
+                DocumentSourcesPanel(document: document, controller: controller, library: app.citations)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        switch app.documentPanelTab {
+                        case .bookmarks: bookmarkList(bookmarks)
+                        case .contents, .sources:
+                            if mode == .headings { headingList } else { dynamicContents(isGenerating: isGenerating) }
+                        }
                     }
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .padding(.horizontal, 12)
-                .padding(.bottom, 16)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .scrollIndicators(.automatic)
             }
-            .scrollIndicators(.automatic)
 
             if app.documentPanelTab == .contents, mode == .dynamic, let outline = document.outline {
                 footer(outline, isGenerating: isGenerating)

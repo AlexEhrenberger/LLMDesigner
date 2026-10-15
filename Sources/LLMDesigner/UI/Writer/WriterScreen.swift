@@ -503,7 +503,12 @@ private struct WriterToolbar: View {
                     controller.editFormula()
                 }
             }
-            group(22) { TableOfContentsMenu(controller: controller, isActive: state.block == .toc) }
+            group(22) {
+                HStack(spacing: 0) {
+                    TableOfContentsMenu(controller: controller, isActive: state.block == .toc)
+                    CitationMenu(controller: controller)
+                }
+            }
             divider(23)
             group(24) {
                 ToolbarButton(
@@ -584,6 +589,39 @@ private struct TableOfContentsMenu: View {
         .fixedSize()
         .onHover { hovering = $0 }
         .help("Inhaltsverzeichnis einfügen – aus den Überschriften (nummeriert wie im Export) oder dynamisch vom Modell")
+    }
+}
+
+/// Citations from Citation Studio: the search at the caret (⌘⇧K), the reference list, the sources panel.
+private struct CitationMenu: View {
+    @Environment(AppModel.self) private var app
+    let controller: WriterEditorController
+    @State private var hovering = false
+
+    var body: some View {
+        Menu {
+            Button("Quelle zitieren … (⌘⇧K)", systemImage: "quote.bubble") { controller.showCitationPicker() }
+            Button("Literaturverzeichnis einfügen", systemImage: "books.vertical") { controller.insertBibliography() }
+            Divider()
+            Button("Quellen in der Seitenleiste", systemImage: "sidebar.right") {
+                app.documentPanelTab = .sources
+                if !app.outlinePanelVisible { app.toggleOutlinePanel() }
+            }
+            Button("Citation Studio öffnen", systemImage: "arrow.up.forward.app") { app.openCitationStudio() }
+        } label: {
+            Image(systemName: "quote.bubble")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(hovering ? Theme.textPrimary : Theme.textSecondary)
+                .frame(width: 30, height: 28)
+                .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(hovering ? Theme.hover : .clear))
+                .contentShape(Rectangle())
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .onHover { hovering = $0 }
+        .help("Zitieren – Quellen und Zitate aus Citation Studio (⌘⇧K), Literaturverzeichnis")
     }
 }
 

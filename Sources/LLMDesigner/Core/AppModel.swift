@@ -10,6 +10,8 @@ enum ConnectionState: Equatable {
 
 enum SidePanelTab: Hashable {
     case contents, bookmarks
+    /// Writer Studio only: Citation Studio's sources and quotes, ready to insert.
+    case sources
 }
 
 /// What the sidebar lists, and with it what the main area shows: chats, the skill library or the personas.
@@ -323,6 +325,8 @@ final class AppModel {
     var selectedDocumentID: WriterDocument.ID?
     /// Citation Studio is shown in the main area.
     var citationStudioOpen = false
+    /// A source Citation Studio should show when it opens.
+    var citationStudioRequest: UUID?
     /// Writer Studio shows a white sheet instead of the dark one.
     var writerLightPaper: Bool {
         didSet { settings.set(writerLightPaper, forKey: Keys.writerLightPaper) }

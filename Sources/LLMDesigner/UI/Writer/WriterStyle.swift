@@ -245,7 +245,7 @@ enum WriterStyler {
                 let attachment = storage.attribute(.attachment, at: paragraph.range.location, effectiveRange: nil)
                 let hasRule = attachment is WriterRuleAttachment
                 let hasImage = attachment is WriterImageAttachment
-                let hasTOC = attachment is WriterTOCAttachment
+                let hasTOC = attachment is WriterTOCAttachment || attachment is WriterBibliographyAttachment
                 let hasMath = attachment is WriterMathAttachment && paragraph.contentRange.length == 1
                 if (block == .rule && !hasRule) || (block == .image && !hasImage) || (block == .toc && !hasTOC)
                     || (block == .math && !hasMath) { block = .paragraph }

@@ -11,7 +11,8 @@ extension WriterTextView {
         guard let storage = textStorage, location >= 0, location < storage.length,
               WriterStyler.block(in: storage, at: location).isEmbed else { return nil }
         let attachment = storage.attribute(.attachment, at: location, effectiveRange: nil) as? NSTextAttachment
-        return attachment is WriterImageAttachment || attachment is WriterMathAttachment || attachment is WriterTOCAttachment ? attachment : nil
+        return attachment is WriterImageAttachment || attachment is WriterMathAttachment || attachment is WriterTOCAttachment
+            || attachment is WriterBibliographyAttachment ? attachment : nil
     }
 
     /// The embedded block when it is selected on its own.

@@ -27,6 +27,17 @@ final class WriterEditorController {
     func setTableOfContents(dynamic: Bool) { perform { $0.setTableOfContents(dynamic: dynamic) } }
     func editFormula() { perform { $0.editFormulaAtCaret() } }
     func generateImage() { perform { $0.generateImageAtCaret() } }
+
+    // MARK: Citations
+
+    func showCitationPicker() { perform { $0.showCitationPicker() } }
+    func insertBibliography() { perform { $0.insertBibliography() } }
+    func insertQuote(_ quote: CitationQuote, source: CitationSource, as insertion: CitationInsertion) {
+        perform { $0.insertQuote(quote, source: source, as: insertion) }
+    }
+    func insertCitation(_ source: CitationSource) {
+        perform { $0.insertCitation([CitationItem(key: source.citekey)]) }
+    }
     func toggleBookmark() {
         perform { textView in
             if let bookmark = textView.bookmarkAtCaret, textView.selectedRange().length == 0 {
@@ -178,6 +189,8 @@ struct WriterEditor: NSViewRepresentable {
         textView.onStopReading = { [weak app] in app?.stopReadingDocument() }
         textView.onNotice = { [weak app] in app?.showNotice($0) }
         textView.onFormula = { [weak controller] request in controller?.formulaRequest = request }
+        textView.citations = app.citations
+        textView.onShowSource = { [weak app] id in app?.openCitationStudio(showing: id) }
         textView.onImageGeneration = { [weak controller] request in controller?.imageRequest = request }
         textView.onGenerateImage = { [weak app] source, info in app?.imageGeneration.generate(source: source, info: info) }
         textView.onCancelImageGeneration = { [weak app] source in app?.imageGeneration.cancel(source) }
@@ -251,6 +264,10 @@ struct WriterEditor: NSViewRepresentable {
             documentID = document.id
             isDirty = false
             textView.dynamicOutline = document.outline
+            // Citations are drawn in the style of this document's sources.
+            textView.citations?.loadIfNeeded()
+            textView.citationStyleCache = nil
+            textView.lastCitedKeys = []
             textView.load(markdown: document.markdown, family: document.font, palette: palette)
             controller?.state = textView.state
             updateGenerationTimer()
@@ -261,6 +278,8 @@ struct WriterEditor: NSViewRepresentable {
         }
 
         func textDidChange(_ notification: Notification) {
+            textView?.citationsChanged()
+            textView?.checkCiteTrigger()
             isDirty = true
             pending?.cancel()
             pending = Task { [weak self] in

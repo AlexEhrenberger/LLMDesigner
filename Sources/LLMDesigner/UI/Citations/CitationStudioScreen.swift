@@ -48,6 +48,18 @@ final class CitationStudioModel {
     /// The quick-add sheet for a quote from any source (⇧⌘N).
     var showsQuickAdd = false
 
+    /// Which knowledge pieces the right side shows.
+    enum QuoteFilter: Hashable {
+        case all, unsorted
+        case folder(UUID)
+    }
+
+    var quoteFilter: QuoteFilter = .all
+    /// Where new and imported sources are filed (the folder last opened or of the selected source).
+    var activeSourceFolder: UUID?
+    /// A group or folder whose name is being edited.
+    var renamingID: UUID?
+
     func select(_ id: UUID?, in library: CitationLibrary) {
         guard id != selectedSourceID else { return }
         // A new source left without any entry goes away again.
@@ -55,12 +67,14 @@ final class CitationStudioModel {
             library.deleteSource(previous)
         }
         selectedSourceID = id
+        if let id, let source = library.source(id) { activeSourceFolder = source.folderID }
     }
 
     func newSource(_ type: SourceType, in library: CitationLibrary) {
         var source = CitationSource()
         source.type = type
         if type == .web { source.accessed = Date() }
+        source.folderID = library.folder(activeSourceFolder) != nil ? activeSourceFolder : nil
         let added = library.addSource(source)
         mode = .sources
         searchText = ""
@@ -94,6 +108,8 @@ final class CitationStudioModel {
     }
 
     func accept(_ source: CitationSource, in library: CitationLibrary) {
+        var source = source
+        source.folderID = library.folder(activeSourceFolder) != nil ? activeSourceFolder : nil
         let added = library.addSource(source)
         pendingImport = nil
         mode = .sources
@@ -180,7 +196,12 @@ struct CitationStudioScreen: View {
         }
         .onAppear {
             library.loadIfNeeded()
-            if model.selectedSourceID == nil, let first = library.sources.first { model.select(first.id, in: library) }
+            if let requested = app.citationStudioRequest, library.source(requested) != nil {
+                model.select(requested, in: library)
+                app.citationStudioRequest = nil
+            } else if model.selectedSourceID == nil, let first = library.sources.first {
+                model.select(first.id, in: library)
+            }
         }
         .onDisappear {
             if let id = model.selectedSourceID, let source = library.source(id), source.isBlank, library.quotes(of: id).isEmpty {
@@ -341,227 +362,7 @@ private struct DuplicateBanner: View {
     }
 }
 
-// MARK: - Source list
-
-private struct CitationSourceList: View {
-    @Bindable var model: CitationStudioModel
-    let library: CitationLibrary
-    @FocusState private var searchFocused: Bool
-
-    var body: some View {
-        let sources = model.visibleSources(library)
-        let quoteCounts = Dictionary(grouping: library.quotes, by: \.sourceID).mapValues(\.count)
-        VStack(spacing: 10) {
-            Picker("", selection: $model.mode) {
-                ForEach(CitationStudioModel.Mode.allCases, id: \.self) { Text($0.label).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .padding(.horizontal, 12)
-            searchField
-            tagChips
-            ScrollView {
-                LazyVStack(spacing: 2) {
-                    ForEach(sources) { source in
-                        SourceRow(source: source, quoteCount: quoteCounts[source.id] ?? 0,
-                                  isSelected: model.mode == .sources && model.selectedSourceID == source.id) {
-                            model.mode = .sources
-                            model.select(source.id, in: library)
-                        }
-                    }
-                    if sources.isEmpty, !library.sources.isEmpty {
-                        Text("Nichts gefunden")
-                            .font(.system(size: 12))
-                            .foregroundStyle(Theme.textTertiary)
-                            .padding(.top, 20)
-                    }
-                }
-                .padding(.horizontal, 8)
-            }
-            footer(count: sources.count)
-        }
-        .padding(.top, 2)
-        .background(Theme.sidebar.opacity(0.5))
-    }
-
-    private var searchField: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 11))
-                .foregroundStyle(Theme.textTertiary)
-            TextField("Suchen – #tag  @autor  2021  typ:buch", text: $model.searchText)
-                .textFieldStyle(.plain)
-                .font(.system(size: 12.5))
-                .focused($searchFocused)
-            if !model.searchText.isEmpty {
-                Button {
-                    model.searchText = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill").foregroundStyle(Theme.textTertiary)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(.horizontal, 9)
-        .frame(height: 28)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white.opacity(0.05)))
-        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(searchFocused ? Theme.accent.opacity(0.5) : Theme.border))
-        .padding(.horizontal, 12)
-    }
-
-    @ViewBuilder
-    private var tagChips: some View {
-        let tags = library.allTags.prefix(14)
-        if !tags.isEmpty {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 5) {
-                    ForEach(Array(tags), id: \.tag) { item in
-                        let active = model.isTagActive(item.tag)
-                        Button {
-                            model.toggleTag(item.tag)
-                        } label: {
-                            Text("#\(item.tag)")
-                                .font(.system(size: 11, weight: active ? .semibold : .regular))
-                                .foregroundStyle(active ? Theme.accent : Theme.textSecondary)
-                                .padding(.horizontal, 8)
-                                .frame(height: 21)
-                                .background(Capsule().fill(active ? Theme.accent.opacity(0.18) : Color.white.opacity(0.05)))
-                        }
-                        .buttonStyle(.plain)
-                        .help("\(item.count)× verwendet")
-                    }
-                }
-                .padding(.horizontal, 12)
-            }
-        }
-    }
-
-    private func footer(count: Int) -> some View {
-        HStack {
-            Menu {
-                ForEach(SourceType.allCases) { type in
-                    Button(type.label, systemImage: type.symbol) { model.newSource(type, in: library) }
-                }
-            } label: {
-                Label("Neue Quelle", systemImage: "plus")
-                    .font(.system(size: 12, weight: .medium))
-            }
-            .menuStyle(.button)
-            .buttonStyle(.plain)
-            .foregroundStyle(Theme.accent)
-            .fixedSize()
-            Spacer()
-            Menu {
-                Picker("Sortieren", selection: $model.sort) {
-                    ForEach(CitationStudioModel.Sort.allCases, id: \.self) { Text($0.label).tag($0) }
-                }
-                .pickerStyle(.inline)
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "arrow.up.arrow.down")
-                    Text(model.sort.label)
-                }
-                .font(.system(size: 11.5))
-                .foregroundStyle(Theme.textSecondary)
-            }
-            .menuStyle(.button)
-            .buttonStyle(.plain)
-            .menuIndicator(.hidden)
-            .fixedSize()
-        }
-        .padding(.horizontal, 14)
-        .frame(height: 34)
-        .overlay(alignment: .top) { Rectangle().fill(Theme.border).frame(height: 1) }
-    }
-}
-
-private struct SourceRow: View {
-    let source: CitationSource
-    let quoteCount: Int
-    let isSelected: Bool
-    let action: () -> Void
-    @State private var hovering = false
-
-    var body: some View {
-        Button(action: action) {
-            HStack(alignment: .top, spacing: 9) {
-                Image(systemName: source.type.symbol)
-                    .font(.system(size: 12))
-                    .foregroundStyle(isSelected ? Theme.accent : Theme.textTertiary)
-                    .frame(width: 16)
-                    .padding(.top, 2)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(source.title.isEmpty ? "Ohne Titel" : source.fullTitle)
-                        .font(.system(size: 12.5, weight: .medium))
-                        .foregroundStyle(source.title.isEmpty ? Theme.textTertiary : Theme.textPrimary)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                    HStack(spacing: 6) {
-                        Text(source.shortReference)
-                            .lineLimit(1)
-                        if !source.container.isEmpty, !source.creators.isEmpty {
-                            Text("· " + source.container).lineLimit(1)
-                        }
-                    }
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(Theme.textSecondary)
-                }
-                Spacer(minLength: 4)
-                if quoteCount > 0 {
-                    Text("\(quoteCount)")
-                        .font(.system(size: 10.5, weight: .semibold).monospacedDigit())
-                        .foregroundStyle(Theme.textSecondary)
-                        .padding(.horizontal, 6)
-                        .frame(height: 17)
-                        .background(Capsule().fill(Color.white.opacity(0.07)))
-                        .help("\(quoteCount) Zitat\(quoteCount == 1 ? "" : "e")")
-                }
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 7)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(isSelected ? Theme.selection : (hovering ? Theme.hover : .clear)))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering = $0 }
-    }
-}
-
-// MARK: - Knowledge (all quotes)
-
-/// All quotes that fit the search, as cards; each names its source.
-private struct KnowledgeView: View {
-    let model: CitationStudioModel
-    let library: CitationLibrary
-
-    var body: some View {
-        let ids = library.search(model.searchText).quoteIDs
-        let quotes = ids.compactMap { library.quote($0) }.reversed()
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 10) {
-                Text(model.searchText.isEmpty ? "Alle Wissensbausteine" : "Wissensbausteine zu „\(model.searchText)“")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Theme.textPrimary)
-                    .padding(.bottom, 4)
-                if quotes.isEmpty {
-                    Text(library.quotes.isEmpty ? "Noch keine Zitate. Wähle eine Quelle und füge ihr Zitate hinzu." : "Kein Zitat passt zur Suche.")
-                        .font(.system(size: 12.5))
-                        .foregroundStyle(Theme.textSecondary)
-                }
-                ForEach(Array(quotes)) { quote in
-                    QuoteCard(quote: quote, library: library, showsSource: true) {
-                        model.mode = .sources
-                        model.select(quote.sourceID, in: library)
-                    }
-                }
-            }
-            .padding(24)
-            .frame(maxWidth: 760, alignment: .leading)
-            .frame(maxWidth: .infinity)
-        }
-    }
-}
+// MARK: - Left column (see CitationShelves.swift)
 
 // MARK: - Quick add
 
