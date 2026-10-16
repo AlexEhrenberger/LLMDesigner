@@ -445,7 +445,7 @@ enum ContentAnalysisBuilder {
         LMStudioError.server("Das Modell hat dazu nichts Verwertbares geliefert.")
     }
 
-    private static func jsonObject(in answer: String) -> String {
+    static func jsonObject(in answer: String) -> String {
         let trimmed = answer.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let start = trimmed.firstIndex(of: "{"), let end = trimmed.lastIndex(of: "}") else { return trimmed }
         return String(trimmed[start...end])

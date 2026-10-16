@@ -252,6 +252,13 @@ struct WriterEditor: NSViewRepresentable {
             return
         }
         guard let textView = coordinator.textView else { return }
+        // The slide was changed elsewhere (the model made the presentation, a slide came back): show its new text,
+        // unless the user is typing.
+        if let slide, slide.markdown != coordinator.knownMarkdown, !coordinator.hasPendingEdits, !textView.isAIWriting {
+            textView.slideLayout = slide.layout
+            coordinator.load(document, slide: slide, palette: palette)
+            return
+        }
         textView.dynamicOutline = document.outline
         if let slide, textView.slideLayout != slide.layout {
             textView.slideLayout = slide.layout
@@ -277,7 +284,10 @@ struct WriterEditor: NSViewRepresentable {
         private(set) var documentID: WriterDocument.ID?
         /// The slide shown, in Presenter Studio.
         private(set) var slideID: PresentationSlide.ID?
+        /// The text last loaded or reported; anything else in the model was changed elsewhere.
+        private(set) var knownMarkdown: String?
         private var isDirty = false
+        var hasPendingEdits: Bool { isDirty }
         private var pending: Task<Void, Never>?
         private var resizeObserver: NSObjectProtocol?
         private var scrollObserver: NSObjectProtocol?
@@ -289,6 +299,7 @@ struct WriterEditor: NSViewRepresentable {
             guard let textView else { return }
             documentID = document.id
             slideID = slide?.id
+            knownMarkdown = slide?.markdown ?? document.markdown
             isDirty = false
             textView.dynamicOutline = document.outline
             // Citations are drawn in the style of this document's sources.
@@ -332,7 +343,9 @@ struct WriterEditor: NSViewRepresentable {
             pending = nil
             guard isDirty, let documentID, let textView else { return }
             isDirty = false
-            onChange?(documentID, textView.markdown)
+            let markdown = textView.markdown
+            knownMarkdown = markdown
+            onChange?(documentID, markdown)
         }
 
         /// The sheet reaches down to the bottom of the window, even for a short text.

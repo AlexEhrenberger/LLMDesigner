@@ -16,8 +16,9 @@ enum PresenterPrompts {
     - Titelfolie: Begrüßung und worum es in der Präsentation geht, 2 bis 4 Sätze.
     - Kapitelfolie: ein kurzer Übergang in das neue Kapitel, 1 bis 3 Sätze.
     - Inhaltsfolie: 3 bis 6 Sätze, höchstens etwa 110 Wörter.
-    - Schließe an die vorige Moderatorenkarte an, ohne sie zu wiederholen. Leite, wenn es passt, zur nächsten \
-    Folie über, ohne „auf der nächsten Folie“ zu sagen.
+    - Beginne direkt mit dem Inhalt dieser Folie. Fang nicht mit Rückblicken an („Genau“, „Wie wir gesehen \
+    haben“, „Nachdem wir …“, „Nun“) und wiederhole nichts von der vorigen Folie. Jede Karte beginnt anders.
+    - Am Ende darf ein kurzer Satz zur nächsten Folie überleiten, ohne „auf der nächsten Folie“ zu sagen.
     - Erfinde keine Zahlen, Namen, Zitate oder Quellen, die nicht auf den Folien stehen.
     - Kein Markdown, keine Aufzählungen, keine Überschrift, keine Regieanweisungen in Klammern. Gib nur den \
     Sprechtext aus, ohne Anführungszeichen drumherum.
@@ -39,8 +40,9 @@ enum PresenterPrompts {
         let text = plainText(of: slide)
         lines.append("\"\"\"\n\(text.isEmpty ? "(die Folie hat keinen Text)" : text)\n\"\"\"")
         if slideIndex > 0 {
-            let previous = deck.slides[slideIndex - 1].notes.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !previous.isEmpty { lines.append("\nVorige Moderatorenkarte:\n\"\"\"\n\(previous)\n\"\"\"") }
+            // Only the previous slide's title: given its card (even only its last sentence), small models copy it.
+            let previous = deck.slides[slideIndex - 1]
+            lines.append("\nVorige Folie: „\(previous.title.isEmpty ? "(ohne Titel)" : previous.title)“")
         }
         if slideIndex + 1 < deck.slides.count {
             let next = deck.slides[slideIndex + 1]
@@ -66,6 +68,27 @@ enum PresenterPrompts {
         return lines.joined(separator: "\n")
     }
 
+    /// Drops sentences the model copied from the previous card.
+    static func removingCopies(of previous: String, from notes: String) -> String {
+        let previous = previous.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard previous.count > 40 else { return notes }
+        if notes.contains(previous) {
+            return notes.replacingOccurrences(of: previous, with: "").trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        var known = Set<String>()
+        previous.enumerateSubstrings(in: previous.startIndex..., options: .bySentences) { sentence, _, _, _ in
+            if let sentence, sentence.count > 30 { known.insert(sentence.trimmingCharacters(in: .whitespacesAndNewlines)) }
+        }
+        var kept: [String] = []
+        notes.enumerateSubstrings(in: notes.startIndex..., options: .bySentences) { sentence, _, _, _ in
+            guard let sentence else { return }
+            let trimmed = sentence.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !known.contains(trimmed) { kept.append(trimmed) }
+        }
+        let result = kept.joined(separator: " ")
+        return result.isEmpty ? notes : result
+    }
+
     /// The model's answer as the text to speak: without reasoning, Markdown and surrounding quotes.
     static func cleanNotes(_ answer: String) -> String {
         var text = answer
@@ -85,6 +108,98 @@ enum PresenterPrompts {
             text = text.trimmingCharacters(in: quotes).trimmingCharacters(in: .whitespacesAndNewlines)
         }
         return text
+    }
+
+    // MARK: A whole presentation
+
+    /// The outline the model makes first: the title, then chapters with their slides.
+    struct Outline: Decodable {
+        struct Chapter: Decodable {
+            let titel: String
+            let folien: [Slide]
+        }
+
+        struct Slide: Decodable {
+            let titel: String
+            let inhalt: String
+        }
+
+        let titel: String
+        let untertitel: String
+        let kapitel: [Chapter]
+    }
+
+    static let outlineSchema = ContentAnalysisBuilder.Schema.object([
+        ("titel", .string),
+        ("untertitel", .string),
+        ("kapitel", .array(.object([
+            ("titel", .string),
+            ("folien", .array(.object([("titel", .string), ("inhalt", .string)]), max: 6)),
+        ]), max: 6)),
+    ])
+
+    static let outlineSystemPrompt = """
+    Du entwirfst die Gliederung einer Präsentation. Der Nutzer sagt in eigenen Worten, worüber sie gehen soll;     oft ist das diktiert und klingt locker. Danach werden die Folien einzeln ausgearbeitet.
+
+    Regeln:
+    - Sprache: die der Anweisung (meist Deutsch).
+    - „titel“: der Titel der Präsentation, kurz und klar. „untertitel“: eine Zeile, worum es geht.
+    - Gliedere in 2 bis 4 Kapitel mit je 2 bis 4 Folien, zusammen 6 bis 12 Folien – außer der Nutzer nennt eine     Zahl oder einen Umfang; dann halte dich daran.
+    - Ein guter Aufbau: hinführen und Begriffe klären, das Thema Schritt für Schritt entwickeln, Beispiele oder     Anwendungen zeigen, mit Grenzen, offenen Fragen oder einem Fazit enden.
+    - Kapiteltitel und Folientitel: höchstens 6 Wörter, ohne Nummern, ohne Doppelpunkt am Ende.
+    - „inhalt“: ein Satz, was die Folie zeigen soll und was dort neu ist. Keine Folie wiederholt eine andere.
+    - Bleib sachlich richtig. Erfinde keine Studien, Zahlen oder Namen.
+    - Gibt es schon Folien, setze die Präsentation fort, ohne sie zu wiederholen.
+    """
+
+    static func outlineMessages(instruction: String, existing: [PresentationSlide], presentationTitle: String) -> [ChatPayloadMessage] {
+        var lines = ["Anweisung des Nutzers: „\(instruction)“"]
+        let titled = existing.filter { !$0.title.isEmpty }
+        if !titled.isEmpty {
+            lines.append("")
+            lines.append("Die Präsentation „\(presentationTitle)“ hat schon diese Folien:")
+            for slide in titled { lines.append("- \(slide.title) (\(slide.role.label))") }
+        }
+        return [
+            ChatPayloadMessage(role: "system", content: outlineSystemPrompt),
+            ChatPayloadMessage(role: "user", content: lines.joined(separator: "\n")),
+        ]
+    }
+
+    /// The content of one slide: its points.
+    struct SlideContent: Decodable {
+        let punkte: [String]
+    }
+
+    static let slideSchema = ContentAnalysisBuilder.Schema.object([("punkte", .array(.string, max: 5))])
+
+    static let slideSystemPrompt = """
+    Du arbeitest eine Folie einer Präsentation aus. Auf die Folie kommen 3 bis 5 Stichpunkte; das Erklären     übernimmt später der Vortragende.
+
+    Regeln:
+    - Sprache: die der Präsentation (meist Deutsch).
+    - Jeder Stichpunkt höchstens 12 Wörter, ohne Punkt am Ende, ohne Aufzählungszeichen und ohne Nummer.
+    - Konkret und inhaltlich: Begriffe, Zusammenhänge, Beispiele. Keine Füllsätze wie „Wichtiges Thema“.
+    - Nichts, was auf anderen Folien der Gliederung steht. Erfinde keine Studien, Zahlen oder Namen.
+    - Höchstens zwei Begriffe der ganzen Folie dürfen **fett** sein, nur die wichtigsten.
+    """
+
+    static func slideMessages(outline: Outline, chapter: String, slide: Outline.Slide) -> [ChatPayloadMessage] {
+        var lines = ["Präsentation: „\(outline.titel)“ – \(outline.untertitel)", "", "Gliederung:"]
+        for part in outline.kapitel {
+            lines.append("• \(part.titel)")
+            for other in part.folien {
+                lines.append("   – \(other.titel)" + (other.titel == slide.titel && part.titel == chapter ? "   ← diese Folie" : ""))
+            }
+        }
+        lines.append("")
+        lines.append("Kapitel: „\(chapter)“")
+        lines.append("Folie: „\(slide.titel)“")
+        lines.append("Was die Folie zeigen soll: \(slide.inhalt)")
+        return [
+            ChatPayloadMessage(role: "system", content: slideSystemPrompt),
+            ChatPayloadMessage(role: "user", content: lines.joined(separator: "\n")),
+        ]
     }
 
     // MARK: Background pictures

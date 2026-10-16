@@ -315,7 +315,8 @@ extension AppModel {
             temperature: 0.7,
             maxTokens: 1500
         )
-        let notes = PresenterPrompts.cleanNotes(answer)
+        var notes = PresenterPrompts.cleanNotes(answer)
+        if index > 0 { notes = PresenterPrompts.removingCopies(of: deck.slides[index - 1].notes, from: notes) }
         guard !notes.isEmpty else { throw LMStudioError.server("Das Modell hat keinen Text geliefert.") }
         setSlideNotes(id, slideID, notes)
         return notes

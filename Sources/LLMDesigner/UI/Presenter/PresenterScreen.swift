@@ -39,6 +39,16 @@ struct PresenterScreen: View {
             .onAppear {
                 app.presentationPlayer.app = app
                 SlideDesignLibrary.shared.reloadIfNeeded()
+                // "Erstelle eine Präsentation über …", "Schreib Moderatorenkarten" in the bar act on the whole presentation.
+                assistant.isPresentation = true
+                assistant.onPresentationIntent = { [weak app] intent, instruction in
+                    guard let app, let presentation = app.selectedPresentation else { return }
+                    var text = instruction
+                    if intent.kind == .createDeck, text.isEmpty {
+                        text = "Eine Präsentation zum Thema „\(presentation.displayTitle)“"
+                    }
+                    app.runPresenterIntent(intent, instruction: text, in: presentation.id)
+                }
                 withAnimation(.easeOut(duration: 0.35)) { appeared = true }
             }
             .onDisappear {
@@ -77,6 +87,7 @@ struct PresenterScreen: View {
                     .frame(width: 188)
                 VStack(spacing: 10) {
                     canvas(document, deck: deck, slide: slide)
+                    DeckActivityCard(document: document)
                     WriterAudioStatus(controller: controller)
                     WriterAssistantDock(assistant: assistant, state: controller.state)
                     if app.presenterNotesVisible {
@@ -680,6 +691,103 @@ private struct SlideStripRow: View {
             Button("Folie löschen", systemImage: "trash", role: .destructive) { app.deleteSlide(document.id, slide.id) }
                 .disabled(deck.slides.count <= 1)
         }
+    }
+}
+
+/// What the model does with the whole presentation: making it from the bar's instruction (with "Rückgängig"
+/// afterwards), or writing the speaker notes of many slides.
+private struct DeckActivityCard: View {
+    @Environment(AppModel.self) private var app
+    let document: WriterDocument
+
+    var body: some View {
+        let generation = app.deckGeneration?.documentID == document.id ? app.deckGeneration : nil
+        let slides = document.deck?.slides ?? []
+        let writingNotes = slides.filter { app.notesWriting.contains($0.id) }.count
+        if generation != nil || writingNotes > 1 {
+            VStack(alignment: .leading, spacing: 8) {
+                if let generation { row(for: generation, slides: slides, writingNotes: writingNotes) }
+                if writingNotes > 1 || (writingNotes > 0 && generation != nil) {
+                    HStack(spacing: 10) {
+                        ProgressView().controlSize(.small)
+                        Text("Die KI schreibt Moderatorenkarten – noch \(writingNotes) von \(slides.count) Folien")
+                            .font(.system(size: 12.5, weight: .medium))
+                            .foregroundStyle(Theme.textPrimary)
+                        Spacer(minLength: 8)
+                        SmallActionButton(title: "Abbrechen", symbol: "stop.fill") { app.cancelSpeakerNotes() }
+                    }
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.surface))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Theme.accent.opacity(generation?.isRunning == true ? 0.45 : 0.2)))
+            .frame(maxWidth: 760)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+    }
+
+    @ViewBuilder
+    private func row(for generation: DeckGeneration, slides: [PresentationSlide], writingNotes: Int) -> some View {
+        HStack(spacing: 10) {
+            switch generation.phase {
+            case .outlining:
+                ProgressView().controlSize(.small)
+                text("Die KI entwirft die Gliederung …", "Danach erscheinen die Folien und werden eine nach der anderen gefüllt.")
+                Spacer(minLength: 8)
+                SmallActionButton(title: "Stopp", symbol: "stop.fill") { app.stopDeckGeneration() }
+            case .filling(let done, let total):
+                ProgressView(value: Double(done), total: Double(max(total, 1)))
+                    .progressViewStyle(.circular)
+                    .controlSize(.small)
+                text("Die KI füllt die Folien – \(min(done + 1, total)) von \(total)", "Du kannst schon durch die Folien gehen; Fertiges bleibt stehen.")
+                Spacer(minLength: 8)
+                SmallActionButton(title: "Stopp", symbol: "stop.fill") { app.stopDeckGeneration() }
+            case .finished, .stopped:
+                Image(systemName: generation.phase == .finished ? "checkmark.circle.fill" : "pause.circle.fill")
+                    .font(.system(size: 15))
+                    .foregroundStyle(generation.phase == .finished ? Theme.success : Theme.warning)
+                text(
+                    (generation.phase == .finished ? "Präsentation erstellt: " : "Angehalten: ") + count(generation.created.count),
+                    generation.replacedEmpty ? "Alles lässt sich wie gewohnt bearbeiten." : "Die neuen Folien stehen am Ende."
+                )
+                Spacer(minLength: 8)
+                let missingNotes = slides.filter { generation.created.contains($0.id) && $0.notes.isEmpty }.map(\.id)
+                if !missingNotes.isEmpty, writingNotes == 0 {
+                    SmallActionButton(title: "Moderatorenkarten schreiben", symbol: "text.bubble") {
+                        app.writeSpeakerNotes(document.id, slides: missingNotes)
+                    }
+                }
+                SmallActionButton(title: "Rückgängig", symbol: "arrow.uturn.backward") { app.undoDeckGeneration() }
+                IconButton(systemName: "xmark", help: "Ausblenden", size: 10.5, frameSize: 22) { app.deckGeneration = nil }
+            case .failed(let message):
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Theme.warning)
+                text("Die Präsentation ließ sich nicht erstellen", message)
+                Spacer(minLength: 8)
+                if !generation.created.isEmpty {
+                    SmallActionButton(title: "Rückgängig", symbol: "arrow.uturn.backward") { app.undoDeckGeneration() }
+                }
+                IconButton(systemName: "xmark", help: "Ausblenden", size: 10.5, frameSize: 22) { app.deckGeneration = nil }
+            }
+        }
+    }
+
+    private func text(_ title: String, _ detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.system(size: 12.5, weight: .semibold))
+                .foregroundStyle(Theme.textPrimary)
+            Text(detail)
+                .font(.system(size: 11.5))
+                .foregroundStyle(Theme.textTertiary)
+                .lineLimit(2)
+        }
+    }
+
+    private func count(_ number: Int) -> String {
+        number == 1 ? "1 Folie" : "\(number) Folien"
     }
 }
 

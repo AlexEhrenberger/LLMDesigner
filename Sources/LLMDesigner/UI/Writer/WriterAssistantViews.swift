@@ -86,10 +86,20 @@ private struct InstructionBar: View {
     }
 
     private func placeholder(_ mode: WriterPrompts.Mode) -> String {
+        if let intent = assistant.forcedPresentationIntent {
+            switch intent.kind {
+            case .createDeck: return "Worüber soll die Präsentation gehen? z. B. „Predictive Coding, 8 Folien“"
+            case .speakerNotes: return "Wünsche an die Moderatorenkarten (optional), dann ⏎"
+            case .present: return "⏎ startet den Vortrag"
+            }
+        }
+        if assistant.isPresentation, mode == .write {
+            return "Anweisung an die KI, z. B. „Erstelle eine Präsentation über Predictive Coding“ oder „Schreib Moderatorenkarten“ (⌘J)"
+        }
         switch mode {
-        case .write: "Anweisung an die KI, z. B. „Schreib einen Absatz über die Gründung von Paris“ (⌘J)"
-        case .rewrite: "Was soll mit der Markierung passieren? z. B. „Mach daraus eine Liste“"
-        case .answer: state.selectionLength > 0 ? "Frage zur Markierung, z. B. „Stimmt das so?“" : "Frage zum Dokument"
+        case .write: return "Anweisung an die KI, z. B. „Schreib einen Absatz über die Gründung von Paris“ (⌘J)"
+        case .rewrite: return "Was soll mit der Markierung passieren? z. B. „Mach daraus eine Liste“"
+        case .answer: return state.selectionLength > 0 ? "Frage zur Markierung, z. B. „Stimmt das so?“" : "Frage zum Dokument"
         }
     }
 
@@ -135,6 +145,7 @@ private struct InstructionBar: View {
             }
         } else {
             let canSend = !app.writerInstruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || (assistant.forcedPresentationIntent != nil && assistant.forcedPresentationIntent?.kind != .createDeck)
             Button { assistant.send() } label: {
                 Image(systemName: "arrow.up")
                     .font(.system(size: 13, weight: .bold))
@@ -173,9 +184,16 @@ private struct ModeMenu: View {
         Menu {
             Section("Was passiert mit der Anweisung?") {
                 choice(nil, "Automatisch", "wand.and.stars")
-                choice(.write, "Am KI-Cursor schreiben", "character.cursor.ibeam")
+                choice(.write, assistant.isPresentation ? "Auf die Folie schreiben" : "Am KI-Cursor schreiben", "character.cursor.ibeam")
                 choice(.rewrite, "Markierung überarbeiten", "arrow.triangle.2.circlepath")
                 choice(.answer, "Nur antworten", "bubble.left")
+            }
+            if assistant.isPresentation {
+                Section("Ganze Präsentation") {
+                    presentationChoice(PresenterIntent(kind: .createDeck), "Präsentation erstellen – Folien zum Thema")
+                    presentationChoice(PresenterIntent(kind: .speakerNotes), "Moderatorenkarten für alle Folien")
+                    presentationChoice(PresenterIntent(kind: .present, presents: true), "KI präsentiert")
+                }
             }
             Section {
                 Toggle("Antworten vorlesen", isOn: $app.writerReadsAnswers)
@@ -191,7 +209,7 @@ private struct ModeMenu: View {
                     .font(.system(size: 7, weight: .bold))
                     .foregroundStyle(Theme.textTertiary)
             }
-            .foregroundStyle(assistant.forcedMode == nil ? (hovering ? Theme.textPrimary : Theme.textSecondary) : Theme.accent)
+            .foregroundStyle(assistant.forcedMode == nil && assistant.forcedPresentationIntent == nil ? (hovering ? Theme.textPrimary : Theme.textSecondary) : Theme.accent)
             .padding(.horizontal, 8)
             .frame(height: 24)
             .background(Capsule().fill(Color.white.opacity(hovering ? 0.08 : 0.04)))
@@ -205,27 +223,46 @@ private struct ModeMenu: View {
         .help("Wie die KI die Anweisung umsetzt")
     }
 
+    private var intent: PresenterIntent? {
+        assistant.presentationIntent(for: app.writerInstruction)
+    }
+
     private var label: String {
+        if let intent { return intent.label }
         switch mode {
-        case .write: "schreibt am KI-Cursor"
-        case .rewrite: "überarbeitet Markierung"
-        case .answer: "antwortet"
+        case .write: return assistant.isPresentation ? "schreibt auf die Folie" : "schreibt am KI-Cursor"
+        case .rewrite: return "überarbeitet Markierung"
+        case .answer: return "antwortet"
         }
     }
 
     private var symbol: String {
+        if let intent { return intent.symbol }
         switch mode {
-        case .write: "character.cursor.ibeam"
-        case .rewrite: "arrow.triangle.2.circlepath"
-        case .answer: "bubble.left"
+        case .write: return "character.cursor.ibeam"
+        case .rewrite: return "arrow.triangle.2.circlepath"
+        case .answer: return "bubble.left"
         }
     }
 
     private func choice(_ value: WriterPrompts.Mode?, _ title: String, _ symbol: String) -> some View {
-        Button { assistant.forcedMode = value } label: {
-            if assistant.forcedMode == value { Label(title, systemImage: "checkmark") } else { Label(title, systemImage: symbol) }
+        Button {
+            assistant.forcedMode = value
+            if value == nil { assistant.forcedPresentationIntent = nil }
+        } label: {
+            let isOn = assistant.forcedMode == value && (value != nil || assistant.forcedPresentationIntent == nil)
+            if isOn { Label(title, systemImage: "checkmark") } else { Label(title, systemImage: symbol) }
         }
         .disabled(value == .rewrite && !hasSelection)
+    }
+
+    private func presentationChoice(_ intent: PresenterIntent, _ title: String) -> some View {
+        Button {
+            assistant.forcedPresentationIntent = intent
+            assistant.requestFocus()
+        } label: {
+            if assistant.forcedPresentationIntent?.kind == intent.kind { Label(title, systemImage: "checkmark") } else { Label(title, systemImage: intent.symbol) }
+        }
     }
 }
 

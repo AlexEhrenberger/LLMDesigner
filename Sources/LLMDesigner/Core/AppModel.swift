@@ -393,6 +393,9 @@ final class AppModel {
     }
     /// Plays the open presentation (tab "Abspielen" and full screen).
     @ObservationIgnored let presentationPlayer = PresentationPlayer()
+    /// The model making a whole presentation from the assistant bar (see AppModel+PresenterGeneration.swift).
+    var deckGeneration: DeckGeneration?
+    @ObservationIgnored var deckGenerationTask: Task<Void, Never>?
 
     init() {
         let defaults = settings

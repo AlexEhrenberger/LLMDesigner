@@ -16,7 +16,17 @@ final class WriterAssistant {
     }
 
     /// How the next instruction is used; `nil` decides by the instruction and the selection.
-    var forcedMode: WriterPrompts.Mode?
+    var forcedMode: WriterPrompts.Mode? {
+        didSet { if forcedMode != nil { forcedPresentationIntent = nil } }
+    }
+    /// Presenter Studio: instructions about the whole presentation ("Erstelle eine Präsentation über …",
+    /// "Schreib Moderatorenkarten") go to the presentation instead of the slide.
+    var isPresentation = false
+    /// The presentation instruction chosen in the bar's menu instead of the one detected.
+    var forcedPresentationIntent: PresenterIntent? {
+        didSet { if forcedPresentationIntent != nil { forcedMode = nil } }
+    }
+    @ObservationIgnored var onPresentationIntent: ((PresenterIntent, String) -> Void)?
     private(set) var activity: Activity = .idle
     var answer: Answer?
     var proposal: Proposal?
@@ -71,6 +81,12 @@ final class WriterAssistant {
 
     // MARK: Instructions from the bar
 
+    /// The presentation instruction the bar's text would be (Presenter Studio only).
+    func presentationIntent(for instruction: String) -> PresenterIntent? {
+        guard isPresentation, forcedMode == nil else { return nil }
+        return forcedPresentationIntent ?? PresenterIntent.detect(instruction)
+    }
+
     /// What the bar's instruction would do right now.
     func mode(for instruction: String) -> WriterPrompts.Mode {
         let hasSelection = textView?.hasTextSelection ?? false
@@ -93,8 +109,14 @@ final class WriterAssistant {
             return
         }
         let instruction = app.writerInstruction.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !instruction.isEmpty else { return }
+        guard !instruction.isEmpty || forcedPresentationIntent != nil else { return }
         app.writerInstruction = ""
+        if let intent = presentationIntent(for: instruction), let onPresentationIntent {
+            forcedPresentationIntent = nil
+            onPresentationIntent(intent, instruction)
+            return
+        }
+        guard !instruction.isEmpty else { return }
         switch mode(for: instruction) {
         case .write: write(instruction)
         case .rewrite: rewrite(title: "Überarbeitung", instruction: instruction)
@@ -395,6 +417,7 @@ final class WriterAssistant {
         isPanelShown = false
         error = nil
         forcedMode = nil
+        forcedPresentationIntent = nil
         activity = .idle
     }
 
