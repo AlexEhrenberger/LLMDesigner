@@ -86,6 +86,12 @@ extension WriterTextView {
             return
         }
 
+        // On a slide: a free picture.
+        if slideLayout != nil, let onSlideGeneratedImage {
+            onSlideGeneratedImage(info, caption, generate)
+            return
+        }
+
         // A new placeholder at the caret.
         let source = WriterImageStore.newGeneratedSource()
         WriterImageStore.saveGenerationInfo(info, for: source)

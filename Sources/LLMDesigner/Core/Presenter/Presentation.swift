@@ -152,6 +152,133 @@ struct RoleBackgrounds: Codable, Hashable, Sendable {
     }
 }
 
+/// A picture placed freely on a slide, outside the text: it can be moved and resized with the mouse. Its frame is
+/// stored in fractions of the slide, so it keeps its place at every size (editor, slide list, presentation, PDF).
+struct SlideImage: Identifiable, Hashable, Codable, Sendable {
+    /// How the picture and the slide's text share the slide.
+    enum Placement: String, Codable, CaseIterable, Sendable {
+        /// The text flows around the picture.
+        case wrap = "umfliessen"
+        /// Over the text, which runs on underneath.
+        case front = "vorne"
+        /// Under the text, like a part of the background.
+        case behind = "hinten"
+
+        var label: String {
+            switch self {
+            case .wrap: "Text umfließt das Bild"
+            case .front: "Vor dem Text"
+            case .behind: "Hinter dem Text"
+            }
+        }
+
+        var symbol: String {
+            switch self {
+            case .wrap: "text.wrap"
+            case .front: "square.2.layers.3d.top.filled"
+            case .behind: "square.2.layers.3d.bottom.filled"
+            }
+        }
+    }
+
+    var id = UUID()
+    /// The picture's place, as in the documents (`Bilder/….png`).
+    var source: String
+    var caption = ""
+    /// The frame, top left origin, in fractions of the slide's width and height.
+    var x: Double
+    var y: Double
+    var width: Double
+    var height: Double
+    var placement: Placement = .wrap
+    /// Made with Draw Things; until its file exists, a placeholder shows its progress.
+    var generated = false
+
+    /// The smallest side, in fractions of the slide's width.
+    static let minimumWidth = 0.04
+
+    init(source: String, caption: String = "", frame: CGRect, placement: Placement = .wrap, generated: Bool = false) {
+        self.source = source
+        self.caption = caption
+        x = 0
+        y = 0
+        width = 0
+        height = 0
+        self.placement = placement
+        self.generated = generated
+        self.frame = frame
+    }
+
+    /// The frame on the slide canvas (720 × 405 points, see `WriterTextView.SlideLayout`).
+    var frame: CGRect {
+        get {
+            let canvas = SlideImage.canvas
+            return CGRect(x: x * canvas.width, y: y * canvas.height, width: width * canvas.width, height: height * canvas.height)
+        }
+        set {
+            let canvas = SlideImage.canvas
+            x = Double(newValue.minX / canvas.width)
+            y = Double(newValue.minY / canvas.height)
+            width = Double(newValue.width / canvas.width)
+            height = Double(newValue.height / canvas.height)
+        }
+    }
+
+    static let canvas = CGSize(width: 720, height: 405)
+
+    /// Where a new picture of this aspect (width / height) goes: centred on `center` (a point on the canvas), else
+    /// at the right of the slide, below the title. `offset` moves several pictures apart.
+    static func defaultFrame(aspect: Double, center: CGPoint? = nil, offset: Int = 0) -> CGRect {
+        let aspect = max(0.2, min(5, aspect.isFinite && aspect > 0 ? aspect : 1.5))
+        var width = canvas.width * 0.4
+        var height = width / aspect
+        let maxHeight = canvas.height * 0.62
+        if height > maxHeight {
+            height = maxHeight
+            width = height * aspect
+        }
+        let shift = CGFloat(offset) * 18
+        let middle = center.map { CGPoint(x: $0.x + shift, y: $0.y + shift) }
+            ?? CGPoint(x: canvas.width - 40 - width / 2 - shift, y: max(84 + height / 2, canvas.height * 0.56) + shift)
+        var frame = CGRect(x: middle.x - width / 2, y: middle.y - height / 2, width: width, height: height)
+        frame.origin.x = min(max(0, frame.minX), canvas.width - width)
+        frame.origin.y = min(max(0, frame.minY), canvas.height - height)
+        return frame
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, source = "quelle", caption = "text", x, y, width = "b", height = "h", placement = "lage", generated = "generiert"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = (try? container.decodeIfPresent(UUID.self, forKey: .id)) ?? UUID()
+        source = try container.decode(String.self, forKey: .source)
+        caption = (try? container.decodeIfPresent(String.self, forKey: .caption)) ?? ""
+        x = (try? container.decodeIfPresent(Double.self, forKey: .x)) ?? 0.5
+        y = (try? container.decodeIfPresent(Double.self, forKey: .y)) ?? 0.25
+        width = max(Self.minimumWidth, (try? container.decodeIfPresent(Double.self, forKey: .width)) ?? 0.4)
+        height = max(Self.minimumWidth, (try? container.decodeIfPresent(Double.self, forKey: .height)) ?? 0.4)
+        placement = (try? container.decodeIfPresent(Placement.self, forKey: .placement)) ?? .wrap
+        generated = (try? container.decodeIfPresent(Bool.self, forKey: .generated)) ?? false
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(source, forKey: .source)
+        if !caption.isEmpty { try container.encode(caption, forKey: .caption) }
+        // Four digits are a tenth of a point on the canvas.
+        func rounded(_ value: Double) -> Double { (value * 10000).rounded() / 10000 }
+        try container.encode(rounded(x), forKey: .x)
+        try container.encode(rounded(y), forKey: .y)
+        try container.encode(rounded(width), forKey: .width)
+        try container.encode(rounded(height), forKey: .height)
+        if placement != .wrap { try container.encode(placement, forKey: .placement) }
+        if generated { try container.encode(true, forKey: .generated) }
+    }
+}
+
 /// One slide: its text (Writer Studio's Markdown), what the presenter says to it, its role and maybe a background
 /// of its own.
 struct PresentationSlide: Identifiable, Hashable, Codable, Sendable {
@@ -162,6 +289,8 @@ struct PresentationSlide: Identifiable, Hashable, Codable, Sendable {
     var notes = ""
     /// nil: the presentation's background for the slide's role.
     var background: SlideBackground?
+    /// Pictures placed freely on the slide, the last one on top.
+    var images: [SlideImage] = []
 
     /// The first line of the slide, for the slide list and the contents.
     var title: String {
@@ -170,6 +299,7 @@ struct PresentationSlide: Identifiable, Hashable, Codable, Sendable {
 
     var isEmpty: Bool {
         markdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && images.isEmpty
     }
 }
 
@@ -251,7 +381,7 @@ struct PresentationDeck: Hashable, Sendable {
     /// Each slide begins with a comment line that carries its role and background; the speaker notes follow its text
     /// in a comment of their own. Other Markdown programs show the slides' text and hide the rest.
     ///
-    ///     <!-- folie {"id":"…","rolle":"titel"} -->
+    ///     <!-- folie {"id":"…","rolle":"titel","bilder":[{"quelle":"Bilder/….png","x":0.5,…}]} -->
     ///
     ///     # Titel {.chapter}
     ///
@@ -262,6 +392,7 @@ struct PresentationDeck: Hashable, Sendable {
         slides.map { slide in
             var meta: [String: Any] = ["id": slide.id.uuidString, "rolle": slide.role.rawValue]
             if let background = slide.background, let object = Self.jsonObject(background) { meta["hintergrund"] = object }
+            if !slide.images.isEmpty, let object = Self.jsonObject(slide.images) { meta["bilder"] = object }
             var parts = ["<!-- folie \(Self.jsonLine(meta)) -->"]
             let text = slide.markdown.trimmingCharacters(in: .whitespacesAndNewlines)
             if !text.isEmpty { parts.append(text) }
@@ -337,6 +468,9 @@ struct PresentationDeck: Hashable, Sendable {
         if let role = (object["rolle"] as? String).flatMap(SlideRole.init(rawValue:)) { slide.role = role }
         if let background = object["hintergrund"], let data = try? JSONSerialization.data(withJSONObject: background) {
             slide.background = try? JSONDecoder().decode(SlideBackground.self, from: data)
+        }
+        if let images = object["bilder"], let data = try? JSONSerialization.data(withJSONObject: images) {
+            slide.images = (try? JSONDecoder().decode([SlideImage].self, from: data)) ?? []
         }
         return slide
     }

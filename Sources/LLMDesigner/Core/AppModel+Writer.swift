@@ -190,11 +190,11 @@ extension AppModel {
         deleteAnalysis(id)
         documentSaveTasks[id]?.cancel()
         documentSaveTasks[id] = nil
-        let pictures = document(id).map { WriterImageStore.sources(in: $0.markdown) } ?? []
+        let pictures = document(id)?.pictureSources ?? []
         documents.removeAll { $0.id == id }
         documentStore.delete(id)
-        // Its pictures go too, unless another document shows them (copied and pasted).
-        WriterImageStore.removeUnused(pictures, stillUsedIn: documents.map(\.markdown))
+        // Its pictures go too, unless another document shows them (copied and pasted, or taken into a handout).
+        WriterImageStore.removeUnused(pictures, stillUsedIn: documents.map(\.pictureSources))
         if selectedDocumentID == id { selectedDocumentID = nil }
     }
 

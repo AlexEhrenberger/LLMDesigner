@@ -23,6 +23,17 @@ struct WriterDocument: Identifiable, Hashable, Sendable {
 
     var isPresentation: Bool { deck != nil }
 
+    /// Every picture the document uses: in its text, and a presentation's free pictures and backgrounds.
+    var pictureSources: [String] {
+        var sources = WriterImageStore.sources(in: markdown)
+        if let deck {
+            let backgrounds = [deck.backgrounds.titel, deck.backgrounds.kapitel, deck.backgrounds.folie] + deck.slides.map(\.background)
+            sources += backgrounds.compactMap { $0?.image }
+            sources += deck.slides.flatMap { $0.images.map(\.source) }
+        }
+        return sources
+    }
+
     static func newPresentation() -> WriterDocument {
         var document = WriterDocument()
         document.deck = .new()

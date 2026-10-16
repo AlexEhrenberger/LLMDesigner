@@ -108,7 +108,7 @@ final class WriterEditorController {
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
         panel.prompt = "Einfügen"
-        panel.message = "Bilder für das Dokument auswählen"
+        panel.message = textView?.slideLayout != nil ? "Bilder für die Folie auswählen – danach frei verschieben und skalieren" : "Bilder für das Dokument auswählen"
         panel.beginSheetModal(for: window) { [weak self] response in
             guard response == .OK else { return }
             let sources = panel.urls.map { AttachmentStore.Source.file($0) }
@@ -218,6 +218,29 @@ struct WriterEditor: NSViewRepresentable {
             coordinator?.documentID.flatMap { app?.document($0)?.title } ?? ""
         }
         coordinator.observeImageGeneration()
+        if slide != nil {
+            // Pictures lie freely on the slide.
+            textView.onSlideImages = { [weak app, weak coordinator, weak textView] sources, point in
+                guard let app, let coordinator, let id = coordinator.documentID, let slideID = coordinator.slideID else { return }
+                let added = app.addSlideImages(id, slideID, sources: sources, at: point, undoManager: textView?.undoManager)
+                if let last = added.last { coordinator.selectSlideImage(last) }
+            }
+            textView.onSlideGeneratedImage = { [weak app, weak coordinator, weak textView] info, caption, generate in
+                guard let app, let coordinator, let id = coordinator.documentID, let slideID = coordinator.slideID else { return }
+                if let added = app.addGeneratedSlideImage(id, slideID, info: info, caption: caption, generate: generate, undoManager: textView?.undoManager) {
+                    coordinator.selectSlideImage(added)
+                }
+            }
+            textView.onDetachSlideImage = { [weak app, weak coordinator, weak textView] reference, frame in
+                guard let app, let coordinator, let id = coordinator.documentID, let slideID = coordinator.slideID,
+                      let slide = app.document(id)?.deck?.slide(slideID) else { return }
+                coordinator.flush()
+                let image = SlideImage(source: reference.source, caption: reference.caption, frame: frame, generated: reference.generated)
+                app.setSlideImages(id, slideID, slide.images + [image], undoManager: textView?.undoManager, actionName: "Bild frei platzieren")
+                coordinator.selectSlideImage(image.id)
+            }
+            textView.onFocus = { [weak app] in app?.selectedSlideImageID = nil }
+        }
         // A dynamic table of contents put into the text: the model makes the topics if there are none yet.
         textView.onDynamicTOCNeeded = { [weak app, weak coordinator] in
             guard let app, let id = coordinator?.documentID, let document = app.document(id) else { return }
@@ -259,10 +282,17 @@ struct WriterEditor: NSViewRepresentable {
             coordinator.load(document, slide: slide, palette: palette)
             return
         }
+        // A document changed elsewhere (the model writes out a handout): its new text, where the reader was.
+        if slide == nil, document.markdown != coordinator.knownMarkdown, !coordinator.hasPendingEdits, !textView.isAIWriting,
+           textView.window?.firstResponder !== textView || !textView.hasMarkedText() {
+            coordinator.reload(document, palette: palette)
+            return
+        }
         textView.dynamicOutline = document.outline
         if let slide, textView.slideLayout != slide.layout {
+            let restyles = !slide.layout.sameText(as: textView.slideLayout)
             textView.slideLayout = slide.layout
-            if textView.palette == palette { textView.restyleAll() }
+            if restyles, textView.palette == palette { textView.restyleAll() }
         }
         if textView.palette != palette || textView.family != document.font {
             textView.family = document.font
@@ -313,6 +343,29 @@ struct WriterEditor: NSViewRepresentable {
                 guard let textView else { return }
                 textView.window?.makeFirstResponder(textView)
             }
+        }
+
+        /// A free picture is selected: the text gives up the keyboard, so ⌫ and the arrows act on the picture.
+        func selectSlideImage(_ id: SlideImage.ID) {
+            textView?.window?.makeFirstResponder(nil)
+            controller?.app?.selectedSlideImageID = id
+        }
+
+        /// The same document with text changed elsewhere: loaded again, keeping the scroll position and the caret.
+        func reload(_ document: WriterDocument, palette: WriterPalette) {
+            guard let textView else { return }
+            let visible = textView.visibleRect.origin
+            let selection = textView.selectedRange()
+            let hadFocus = textView.window?.firstResponder === textView
+            knownMarkdown = document.markdown
+            isDirty = false
+            textView.dynamicOutline = document.outline
+            textView.load(markdown: document.markdown, family: document.font, palette: palette)
+            let length = textView.textStorage?.length ?? 0
+            textView.setSelectedRange(NSRange(location: min(selection.location, length), length: 0))
+            textView.scroll(visible)
+            controller?.state = textView.state
+            if !hadFocus, textView.window?.firstResponder === textView { textView.window?.makeFirstResponder(nil) }
         }
 
         func textDidChange(_ notification: Notification) {

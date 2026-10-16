@@ -81,6 +81,10 @@ extension WriterTextView {
 
     /// Copies the pictures into the document folder and puts them below the current paragraph.
     func insertImages(_ sources: [AttachmentStore.Source]) {
+        if slideLayout != nil, let onSlideImages {
+            onSlideImages(sources, slideDropPoint)
+            return
+        }
         var references: [WriterImageReference] = []
         for source in sources {
             do {
@@ -259,7 +263,26 @@ extension WriterTextView {
         reveal.isEnabled = WriterImageStore.url(for: reference.source) != nil
         let delete = ClosureMenuItem(title: "Bild entfernen") { [weak self] in self?.deleteImage(at: location) }
         delete.image = NSImage(systemSymbolName: "trash", accessibilityDescription: nil)
-        return plotItems + [size, caption, reveal, delete, .separator()]
+        var slideItems: [NSMenuItem] = []
+        if slideLayout != nil, onDetachSlideImage != nil {
+            let detach = ClosureMenuItem(title: "Frei auf der Folie platzieren") { [weak self] in self?.detachImageToSlide(at: location) }
+            detach.image = NSImage(systemSymbolName: "arrow.up.and.down.and.arrow.left.and.right", accessibilityDescription: nil)
+            slideItems.append(detach)
+        }
+        return slideItems + plotItems + [size, caption, reveal, delete, .separator()]
+    }
+
+    /// Presenter Studio: the picture leaves the text and lies freely on the slide, where it was.
+    func detachImageToSlide(at location: Int? = nil) {
+        guard let location = location ?? selectedImage?.location, let attachment = image(at: location), let onDetachSlideImage else { return }
+        let reference = attachment.reference
+        var frame = imageFrame(at: location) ?? attachmentFrame(at: location) ?? .zero
+        if let url = WriterImageStore.url(for: reference.source), let size = WriterImageStore.naturalSize(of: url), size.height > 0, frame.width > 0 {
+            // Without its caption: the picture's own shape.
+            frame.size.height = frame.width * size.height / size.width
+        }
+        deleteEmbed(at: location)
+        onDetachSlideImage(reference, frame)
     }
 }
 

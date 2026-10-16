@@ -58,6 +58,15 @@ final class WriterTextView: NSTextView {
     /// Pictures made with Draw Things (see WriterTextView+Generation.swift): opens the sheet, starts and cancels
     /// a picture, and gives the choices of the last picture and the document's title.
     var onImageGeneration: ((WriterImageGenerationRequest) -> Void)?
+    /// Presenter Studio: pictures inserted, pasted or dropped (at this point of the canvas) become free pictures on
+    /// the slide instead of paragraphs; the same for a new picture from Draw Things and a picture taken out of the text.
+    var onSlideImages: (([AttachmentStore.Source], CGPoint?) -> Void)?
+    var onSlideGeneratedImage: ((GeneratedImageInfo, String, Bool) -> Void)?
+    var onDetachSlideImage: ((WriterImageReference, CGRect) -> Void)?
+    /// Where pictures are being dropped, while they are.
+    var slideDropPoint: CGPoint?
+    /// The text gets the keyboard (a free picture is then no longer selected).
+    var onFocus: (() -> Void)?
     var onGenerateImage: ((String, GeneratedImageInfo) -> Void)?
     var onCancelImageGeneration: ((String) -> Void)?
     var onImageDefaults: (() -> GeneratedImageInfo)?
@@ -109,11 +118,26 @@ final class WriterTextView: NSTextView {
         /// What an empty slide shows where its first line goes, and in which block.
         var placeholder = ""
         var firstBlock: WriterBlock = .heading1
+        /// Free pictures the text flows around, on the canvas.
+        var obstacles: [CGRect] = []
+        /// The room kept between such a picture and the text.
+        static let obstacleGap: CGFloat = 10
 
         init(role: SlideRole) {
             centersVertically = role != .content
             placeholder = role.placeholder
             firstBlock = role.firstBlock
+        }
+
+        init(slide: PresentationSlide, images: [SlideImage]? = nil) {
+            self.init(role: slide.role)
+            obstacles = (images ?? slide.images).filter { $0.placement == .wrap }.map(\.frame)
+        }
+
+        /// The same but for the pictures: changing only them needs no restyling.
+        func sameText(as other: SlideLayout?) -> Bool {
+            guard let other else { return false }
+            return centersVertically == other.centersVertically && placeholder == other.placeholder && firstBlock == other.firstBlock
         }
     }
 
@@ -203,16 +227,26 @@ final class WriterTextView: NSTextView {
     /// A title or chapter slide keeps its text in the middle of the canvas; any slide reports when its text runs over.
     func updateSlideCentering() {
         guard let layout = slideLayout, let layoutManager, let container = textContainer else {
+            if textContainer?.exclusionPaths.isEmpty == false { textContainer?.exclusionPaths = [] }
             if slideCenterOffset != 0 {
                 slideCenterOffset = 0
                 invalidateTextContainerOrigin()
             }
             return
         }
-        layoutManager.ensureLayout(for: container)
-        let used = layoutManager.usedRect(for: container).height
         let room = SlideLayout.canvas.height - 2 * SlideLayout.margin.height
-        let offset = layout.centersVertically ? max(0, floor((room - used) / 2)) : 0
+        // The pictures' frames depend on where the text starts, and a centred text's start on its height with
+        // them: a few rounds settle it.
+        var offset = slideCenterOffset
+        var used: CGFloat = 0
+        for _ in 0..<3 {
+            applySlideObstacles(layout.obstacles, offset: offset)
+            layoutManager.ensureLayout(for: container)
+            used = layoutManager.usedRect(for: container).height
+            let next = layout.centersVertically ? max(0, floor((room - used) / 2)) : 0
+            if abs(next - offset) <= 0.5 { break }
+            offset = next
+        }
         if abs(offset - slideCenterOffset) > 0.5 {
             slideCenterOffset = offset
             invalidateTextContainerOrigin()
@@ -228,6 +262,37 @@ final class WriterTextView: NSTextView {
         setFrameSize(frame.size)
         // A slide that fits never stays scrolled.
         if !overflows, visibleRect.minY != 0 { scroll(.zero) }
+    }
+
+    /// The free pictures as exclusion paths of the text container (whose origin is the text's top left).
+    private func applySlideObstacles(_ obstacles: [CGRect], offset: CGFloat) {
+        guard let container = textContainer else { return }
+        let origin = CGPoint(x: SlideLayout.margin.width, y: SlideLayout.margin.height + offset)
+        let paths = obstacles.map { frame -> NSBezierPath in
+            var rect = frame.insetBy(dx: -SlideLayout.obstacleGap, dy: -SlideLayout.obstacleGap)
+            // The text passes the picture on one side only, the wider one: lines aren't torn in two.
+            if frame.midX >= SlideLayout.canvas.width / 2 {
+                rect = CGRect(x: rect.minX, y: rect.minY, width: SlideLayout.canvas.width + 100 - rect.minX, height: rect.height)
+            } else {
+                rect = CGRect(x: -100, y: rect.minY, width: rect.maxX + 100, height: rect.height)
+            }
+            return NSBezierPath(rect: rect.offsetBy(dx: -origin.x, dy: -origin.y))
+        }
+        let old = container.exclusionPaths.map(\.bounds)
+        if old != paths.map(\.bounds) { container.exclusionPaths = paths }
+    }
+
+    override func becomeFirstResponder() -> Bool {
+        let became = super.becomeFirstResponder()
+        if became { onFocus?() }
+        return became
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        guard slideLayout != nil else { return super.performDragOperation(sender) }
+        slideDropPoint = convert(sender.draggingLocation, from: nil)
+        defer { slideDropPoint = nil }
+        return super.performDragOperation(sender)
     }
 
     override func didChangeText() {
@@ -1135,9 +1200,11 @@ final class WriterLayoutManager: NSLayoutManager {
                 let glyph = glyphIndexForCharacter(at: paragraph.range.location)
                 guard glyph < numberOfGlyphs else { continue }
                 let fragment = lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
-                let baseline = location(forGlyphAt: glyph).y
+                let position = location(forGlyphAt: glyph)
                 let marker = marker(for: paragraph, in: storage)
-                drawMarker(marker, block: paragraph.block, level: paragraph.level, fragment: fragment, baseline: baseline, origin: origin, view: view)
+                // Where the item's text begins: past a free picture on a slide the line starts further right.
+                drawMarker(marker, block: paragraph.block, level: paragraph.level, fragment: fragment, baseline: position.y, origin: origin, view: view,
+                           textStart: fragment.minX + position.x)
             default:
                 break
             }
@@ -1156,13 +1223,15 @@ final class WriterLayoutManager: NSLayoutManager {
         }
     }
 
-    private func drawMarker(_ marker: String, block: WriterBlock, level: Int, fragment: NSRect, baseline: CGFloat, origin: NSPoint, view: WriterTextView) {
+    private func drawMarker(_ marker: String, block: WriterBlock, level: Int, fragment: NSRect, baseline: CGFloat, origin: NSPoint, view: WriterTextView,
+                            textStart: CGFloat? = nil) {
         let font = WriterStyler.blockFont(.paragraph, family: view.family, bold: block == .numbered)
         let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: view.palette.secondaryText]
         let size = (marker as NSString).size(withAttributes: attributes)
         let indent = WriterStyler.listIndent + CGFloat(level) * WriterStyler.listStep
+        let start = max(indent, textStart ?? indent)
         let point = NSPoint(
-            x: origin.x + indent - size.width - 8,
+            x: origin.x + start - size.width - 8,
             y: origin.y + fragment.minY + baseline - font.ascender
         )
         (marker as NSString).draw(at: point, withAttributes: attributes)

@@ -9,6 +9,10 @@ struct PresenterScreen: View {
     @State private var assistant = WriterAssistant()
     @State private var analysisScrollTarget: ContentAnalysisModule?
     @State private var appeared = false
+    /// The free pictures while one is dragged (see `SlideImageEditor`).
+    @State private var dragImages: [SlideImage]?
+    /// The free picture the Draw Things sheet is open for.
+    @State private var regeneratingImage: (slideID: PresentationSlide.ID, imageID: SlideImage.ID)?
 
     var body: some View {
         if let document = app.selectedPresentation, let deck = document.deck,
@@ -67,8 +71,16 @@ struct PresenterScreen: View {
             }
             .sheet(item: Binding(get: { controller.imageRequest }, set: { if $0 == nil, controller.imageRequest != nil { controller.cancelImageGeneration() } })) { request in
                 ImageGeneratorSheet(request: request) { info, caption, generate in
-                    controller.applyGeneratedImage(info: info, caption: caption, generate: generate, isExisting: request.isExisting)
+                    if let target = regeneratingImage {
+                        regeneratingImage = nil
+                        controller.imageRequest = nil
+                        app.updateGeneratedSlideImage(document.id, target.slideID, target.imageID, info: info, caption: caption, generate: generate,
+                                                      undoManager: controller.textView?.undoManager)
+                    } else {
+                        controller.applyGeneratedImage(info: info, caption: caption, generate: generate, isExisting: request.isExisting)
+                    }
                 } onCancel: {
+                    regeneratingImage = nil
                     controller.cancelImageGeneration()
                 }
                 .environment(app)
@@ -141,8 +153,10 @@ struct PresenterScreen: View {
     private func canvas(_ document: WriterDocument, deck: PresentationDeck, slide: PresentationSlide) -> some View {
         let background = deck.background(of: slide)
         let palette = SlideLook.palette(background, role: slide.role)
+        let images = dragImages ?? slide.images
         return ZStack {
             SlideBackgroundView(background: background, role: slide.role)
+            SlideImagesLayer(images: images, placements: [.behind])
             WriterEditor(
                 app: app,
                 document: document,
@@ -151,8 +165,11 @@ struct PresenterScreen: View {
                 assistant: assistant,
                 isReadingAloud: app.speakingDocumentID != nil,
                 isDictating: app.dictationIntoDocument,
-                slide: WriterSlideContent(id: slide.id, markdown: slide.markdown, layout: WriterTextView.SlideLayout(role: slide.role))
+                slide: WriterSlideContent(id: slide.id, markdown: slide.markdown, layout: WriterTextView.SlideLayout(slide: slide, images: images))
             )
+            SlideImageEditor(document: document, slide: slide, controller: controller, dragImages: $dragImages) { image in
+                regenerate(image, on: slide, in: document)
+            }
         }
         .aspectRatio(16 / 9, contentMode: .fit)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -172,6 +189,18 @@ struct PresenterScreen: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .layoutPriority(1)
+    }
+
+    /// Opens the Draw Things sheet for a free picture.
+    private func regenerate(_ image: SlideImage, on slide: PresentationSlide, in document: WriterDocument) {
+        app.selectedSlideImageID = image.id
+        regeneratingImage = (slide.id, image.id)
+        var info = WriterImageStore.generationInfo(for: image.source) ?? app.imageGeneration.defaults
+        info.seed = nil
+        controller.imageRequest = WriterImageGenerationRequest(
+            info: info, caption: image.caption, isExisting: true, source: image.source,
+            documentTitle: document.displayTitle, context: PresenterPrompts.plainText(of: slide)
+        )
     }
 
     // MARK: Analysis
@@ -232,6 +261,7 @@ private struct PresenterTopBar: View {
                 .padding(.leading, 10)
                 .layoutPriority(1)
             Spacer(minLength: 12)
+            PresenterExportMenu(document: document)
             Text(slideCount)
                 .font(.system(size: 11.5).monospacedDigit())
                 .foregroundStyle(Theme.textTertiary)

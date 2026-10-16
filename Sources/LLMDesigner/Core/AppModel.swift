@@ -380,6 +380,8 @@ final class AppModel {
 
     /// The slide open in the editor of the open presentation.
     var selectedSlideID: PresentationSlide.ID?
+    /// The free picture selected on the open slide (moved with the mouse, deleted with ⌫).
+    var selectedSlideImageID: SlideImage.ID?
     /// A slide that was just deleted and can still be brought back.
     var deletedSlide: DeletedSlide?
     @ObservationIgnored var deletedSlideTask: Task<Void, Never>?
@@ -396,6 +398,9 @@ final class AppModel {
     /// The model making a whole presentation from the assistant bar (see AppModel+PresenterGeneration.swift).
     var deckGeneration: DeckGeneration?
     @ObservationIgnored var deckGenerationTask: Task<Void, Never>?
+    /// The model writing out a handout made from a presentation (see AppModel+PresenterExport.swift).
+    var handoutGeneration: HandoutGeneration?
+    @ObservationIgnored var handoutTask: Task<Void, Never>?
 
     init() {
         let defaults = settings

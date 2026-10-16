@@ -253,8 +253,8 @@ enum WriterImageStore {
     }
 
     /// Deletes the pictures of a deleted document that no other document uses (with a plot's dark and PDF versions).
-    static func removeUnused(_ sources: [String], stillUsedIn documents: [String]) {
-        let used = Set(documents.flatMap(Self.sources(in:)))
+    static func removeUnused(_ sources: [String], stillUsedIn documents: [[String]]) {
+        let used = Set(documents.joined())
         for source in Set(sources) where source.hasPrefix(folderName + "/") && !used.contains(source) {
             for variant in [source, darkVariant(of: source), pdfVariant(of: source), infoVariant(of: source)] {
                 if let url = url(for: variant) { try? FileManager.default.removeItem(at: url) }

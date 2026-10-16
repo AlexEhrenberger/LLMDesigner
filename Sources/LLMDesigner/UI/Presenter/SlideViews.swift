@@ -287,13 +287,17 @@ struct SlideStageView: View {
             SlideBackgroundView(background: background, role: slide.role, live: live)
                 // The same background on the next slide stays where it is, without fading.
                 .id(backgroundKey(background))
-            SlideTextView(
-                markdown: slide.markdown,
-                family: family,
-                palette: SlideLook.palette(background, role: slide.role),
-                layout: WriterTextView.SlideLayout(role: slide.role),
-                citations: app.citations
-            )
+            ZStack {
+                SlideImagesLayer(images: slide.images, placements: [.behind])
+                SlideTextView(
+                    markdown: slide.markdown,
+                    family: family,
+                    palette: SlideLook.palette(background, role: slide.role),
+                    layout: WriterTextView.SlideLayout(slide: slide),
+                    citations: app.citations
+                )
+                SlideImagesLayer(images: slide.images, placements: [.wrap, .front])
+            }
             .id(slide.id)
             .transition(.opacity)
         }
@@ -316,14 +320,14 @@ enum SlideThumbnailRenderer {
     /// A text view kept for drawing.
     private static var textView: WriterTextView?
 
-    static func image(markdown: String, family: WriterFont, palette: WriterPalette, role: SlideRole, citations: CitationLibrary?, scale: CGFloat = 0.6) -> NSImage? {
-        let key = "\(role.rawValue)|\(family.rawValue)|\(palette.isLight)|\(palette.accent.hashValue)|\(scale)|\(markdown)"
+    static func image(markdown: String, family: WriterFont, palette: WriterPalette, layout: WriterTextView.SlideLayout, citations: CitationLibrary?, scale: CGFloat = 0.6) -> NSImage? {
+        let key = "\(layout.centersVertically)|\(layout.obstacles)|\(family.rawValue)|\(palette.isLight)|\(palette.accent.hashValue)|\(scale)|\(markdown)"
         if let image = cache[key] { return image }
         guard !markdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         let canvas = WriterTextView.SlideLayout.canvas
         let view = textView ?? WriterTextView.make()
         textView = view
-        view.slideLayout = WriterTextView.SlideLayout(role: role)
+        view.slideLayout = layout
         view.citations = citations
         view.frame = NSRect(origin: .zero, size: canvas)
         view.load(markdown: markdown, family: family, palette: palette)
@@ -356,16 +360,92 @@ struct SlideThumbnail: View {
         let background = deck.background(of: slide)
         ZStack {
             SlideBackgroundView(background: background, role: slide.role)
+            SlideImagesLayer(images: slide.images, placements: [.behind])
             if let image = SlideThumbnailRenderer.image(
                 markdown: slide.markdown, family: family, palette: SlideLook.palette(background, role: slide.role),
-                role: slide.role, citations: app.citations
+                layout: WriterTextView.SlideLayout(slide: slide), citations: app.citations
             ) {
                 Image(nsImage: image)
                     .resizable()
                     .interpolation(.high)
             }
+            SlideImagesLayer(images: slide.images, placements: [.wrap, .front])
         }
         .aspectRatio(16 / 9, contentMode: .fit)
         .clipped()
+    }
+}
+
+// MARK: Free pictures
+
+/// A slide's free pictures of some placements, drawn at the size there is (the canvas scaled to it).
+struct SlideImagesLayer: View {
+    let images: [SlideImage]
+    let placements: Set<SlideImage.Placement>
+
+    var body: some View {
+        let shown = images.filter { placements.contains($0.placement) }
+        if !shown.isEmpty {
+            GeometryReader { geometry in
+                let scale = geometry.size.width / SlideImage.canvas.width
+                ForEach(shown) { image in
+                    let frame = image.frame
+                    SlideImageView(image: image)
+                        .frame(width: frame.width * scale, height: frame.height * scale)
+                        .position(x: frame.midX * scale, y: frame.midY * scale)
+                }
+            }
+            .allowsHitTesting(false)
+        }
+    }
+}
+
+/// One free picture filling its frame (cut to it when the frame has another shape); while Draw Things makes it,
+/// a placeholder with its progress.
+struct SlideImageView: View {
+    @Environment(AppModel.self) private var app
+    let image: SlideImage
+
+    var body: some View {
+        let phase = app.imageGeneration.phase(for: image.source)
+        if phase == nil, let picture = SlideImageCache.image(image.source) {
+            Image(nsImage: picture)
+                .resizable()
+                .interpolation(.high)
+                .aspectRatio(contentMode: .fill)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
+        } else {
+            GeometryReader { geometry in
+                let size = max(7, min(geometry.size.width, geometry.size.height * 1.6) / 22)
+                ZStack {
+                    LinearGradient(colors: [Color(hex: 0x2A2740), Color(hex: 0x15141F)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                    VStack(spacing: size * 0.5) {
+                        Image(systemName: phase == nil ? "photo" : "wand.and.stars")
+                            .font(.system(size: size * 1.8, weight: .light))
+                        Group {
+                            switch phase {
+                            case .running(let started):
+                                TimelineView(.periodic(from: .now, by: 1)) { context in
+                                    let seconds = Int(context.date.timeIntervalSince(started))
+                                    Text("Draw Things malt … \(seconds / 60):\(String(format: "%02d", seconds % 60))")
+                                }
+                            case .queued:
+                                Text("Wartet auf Draw Things")
+                            case .failed(let message):
+                                Text(message).lineLimit(2)
+                            case nil:
+                                Text(image.generated ? "Noch nicht generiert" : "Bild fehlt")
+                            }
+                        }
+                        .font(.system(size: size, weight: .medium))
+                        .multilineTextAlignment(.center)
+                    }
+                    .foregroundStyle(Color.white.opacity(0.6))
+                    .padding(size)
+                }
+                .overlay(Rectangle().strokeBorder(Color.white.opacity(0.25), style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
+            }
+        }
     }
 }

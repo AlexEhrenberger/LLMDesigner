@@ -100,6 +100,7 @@ struct WriterScreen: View {
                             .transition(.opacity)
                         }
                         VStack(spacing: 10) {
+                            HandoutActivityCard(document: document)
                             WriterAudioStatus(controller: controller)
                             if !showsAnalysis {
                                 WriterAssistantDock(assistant: assistant, state: controller.state)

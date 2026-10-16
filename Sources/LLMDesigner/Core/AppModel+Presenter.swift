@@ -357,3 +357,82 @@ enum SlideImageTone {
         return SlideBackground.tone(forLuminance: total / Double(side * side))
     }
 }
+
+// MARK: Free pictures
+
+extension AppModel {
+    /// The slide's free pictures, replaced as one step that ⌘Z takes back.
+    func setSlideImages(_ id: WriterDocument.ID, _ slideID: PresentationSlide.ID, _ images: [SlideImage], undoManager: UndoManager?, actionName: String) {
+        guard let old = document(id)?.deck?.slide(slideID)?.images, old != images else { return }
+        modifyDeck(id) { deck in
+            guard let index = deck.index(of: slideID) else { return false }
+            deck.slides[index].images = images
+            return true
+        }
+        guard let undoManager else { return }
+        undoManager.registerUndo(withTarget: self) { app in
+            app.setSlideImages(id, slideID, old, undoManager: undoManager, actionName: actionName)
+            if app.selectedDocumentID == id { app.selectedSlideID = slideID }
+        }
+        undoManager.setActionName(actionName)
+    }
+
+    /// Copies pictures into the library and puts them on the slide: around `center` (a point on the canvas), else
+    /// at the right below the title. Returns the new pictures' ids.
+    @discardableResult
+    func addSlideImages(_ id: WriterDocument.ID, _ slideID: PresentationSlide.ID, sources: [AttachmentStore.Source], at center: CGPoint?, undoManager: UndoManager?) -> [SlideImage.ID] {
+        guard let slide = document(id)?.deck?.slide(slideID) else { return [] }
+        var images = slide.images
+        var added: [SlideImage.ID] = []
+        for source in sources {
+            do {
+                let stored = try WriterImageStore.importImage(source)
+                let size = WriterImageStore.url(for: stored).flatMap(WriterImageStore.naturalSize(of:))
+                let aspect = size.map { Double($0.width / max(1, $0.height)) } ?? 1.5
+                let image = SlideImage(source: stored, frame: SlideImage.defaultFrame(aspect: aspect, center: center, offset: added.count))
+                images.append(image)
+                added.append(image.id)
+            } catch {
+                showNotice(error.localizedDescription)
+            }
+        }
+        setSlideImages(id, slideID, images, undoManager: undoManager, actionName: added.count == 1 ? "Bild einfügen" : "Bilder einfügen")
+        return added
+    }
+
+    /// A picture Draw Things makes for the slide: its placeholder goes on the slide right away.
+    @discardableResult
+    func addGeneratedSlideImage(_ id: WriterDocument.ID, _ slideID: PresentationSlide.ID, info: GeneratedImageInfo, caption: String, generate: Bool, undoManager: UndoManager?) -> SlideImage.ID? {
+        guard let slide = document(id)?.deck?.slide(slideID) else { return nil }
+        let source = WriterImageStore.newGeneratedSource()
+        WriterImageStore.saveGenerationInfo(info, for: source)
+        let image = SlideImage(source: source, caption: caption, frame: SlideImage.defaultFrame(aspect: info.format.aspect), generated: true)
+        setSlideImages(id, slideID, slide.images + [image], undoManager: undoManager, actionName: generate ? "Bild generieren" : "Bildplatzhalter")
+        if generate { imageGeneration.generate(source: source, info: info) }
+        return image.id
+    }
+
+    /// The sheet's result for a free picture made with Draw Things: a new file (the old one stays for ⌘Z) or only
+    /// the kept recipe.
+    func updateGeneratedSlideImage(_ id: WriterDocument.ID, _ slideID: PresentationSlide.ID, _ imageID: SlideImage.ID, info: GeneratedImageInfo, caption: String, generate: Bool, undoManager: UndoManager?) {
+        guard let slide = document(id)?.deck?.slide(slideID), let index = slide.images.firstIndex(where: { $0.id == imageID }) else { return }
+        var images = slide.images
+        let old = images[index]
+        images[index].caption = caption
+        if generate {
+            imageGeneration.cancel(old.source)
+            var next = info
+            let hasPicture = WriterImageStore.url(for: old.source) != nil
+            next.previous = hasPicture ? old.source : WriterImageStore.generationInfo(for: old.source)?.previous
+            let source = WriterImageStore.newGeneratedSource()
+            WriterImageStore.saveGenerationInfo(next, for: source)
+            images[index].source = source
+            images[index].generated = true
+            setSlideImages(id, slideID, images, undoManager: undoManager, actionName: "Bild neu generieren")
+            imageGeneration.generate(source: source, info: next)
+        } else {
+            WriterImageStore.saveGenerationInfo(info, for: old.source)
+            setSlideImages(id, slideID, images, undoManager: undoManager, actionName: "Bildbeschreibung")
+        }
+    }
+}
