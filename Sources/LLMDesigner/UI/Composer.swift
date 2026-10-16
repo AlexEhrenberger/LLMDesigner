@@ -412,6 +412,8 @@ struct ComposerTextView: NSViewRepresentable {
         coordinator.parent = self
         guard let textView = coordinator.textView else { return }
         if textView.string != text {
+            // Sent or replaced from outside: the typing that led here can't be undone any more.
+            textView.removeUndoActions()
             textView.string = text
             coordinator.recalculateHeight()
         }
@@ -524,5 +526,10 @@ final class SubmittingTextView: NSTextView {
         let widthChanged = abs(newSize.width - frame.width) > 0.5
         super.setFrameSize(newSize)
         if widthChanged { onWidthChange?() }
+    }
+
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        removeUndoActionsIfLeaving(for: newWindow)
+        super.viewWillMove(toWindow: newWindow)
     }
 }

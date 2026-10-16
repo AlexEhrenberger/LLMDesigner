@@ -288,6 +288,11 @@ final class WriterTextView: NSTextView {
         return became
     }
 
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        removeUndoActionsIfLeaving(for: newWindow)
+        super.viewWillMove(toWindow: newWindow)
+    }
+
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
         guard slideLayout != nil else { return super.performDragOperation(sender) }
         slideDropPoint = convert(sender.draggingLocation, from: nil)
