@@ -230,6 +230,9 @@ extension WriterTextView {
         }
         copy.image = NSImage(systemSymbolName: "doc.on.doc", accessibilityDescription: nil)
         var items: [NSMenuItem] = [edit]
+        let python = ClosureMenuItem(title: "In Python-Code übersetzen") { [weak self] in self?.insertPython(forFormulaAt: location) }
+        python.image = NSImage(systemSymbolName: "chevron.left.forwardslash.chevron.right", accessibilityDescription: nil)
+        items.append(python)
         if isDisplayFormula(at: location) {
             let hasPlot = plotBelow(formulaAt: location) != nil
             let plot = ClosureMenuItem(title: hasPlot ? "Plot bearbeiten …" : "Plot hinzufügen …") { [weak self] in self?.editFormula(at: location) }

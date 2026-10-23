@@ -240,6 +240,9 @@ enum LaTeXWriter {
         \fancyhf{}
         \renewcommand{\headrulewidth}{0pt}
         \fancyfoot[C]{\ifnum\getpagerefnumber{LastPage}>1 \thepage\fi}
+        \def\llmdBS{\char`\\}
+        \def\llmdOB{\char`\{}
+        \def\llmdCB{\char`\}}
         \providecommand{\R}{\mathbb{R}}
         \providecommand{\N}{\mathbb{N}}
         \providecommand{\Z}{\mathbb{Z}}
@@ -294,8 +297,8 @@ enum LaTeXWriter {
                 }
                 let command = ["section", "subsection", "subsubsection"][min(max(level, 1), 3) - 1]
                 output.append(level > 3 ? "\\paragraph*{\(inline(text, math: math))}" : "\\\(command)*{\(inline(text, math: math))}")
-            case .code(_, let code):
-                output.append(verbatim(code))
+            case .code(let language, let code):
+                output.append(verbatim(code, language: language))
             case .list(let items):
                 output.append(list(items, math: math))
             case .quote(let text):
@@ -320,8 +323,18 @@ enum LaTeXWriter {
             .joined(separator: "\n\n")
     }
 
-    private static func verbatim(_ code: String) -> String {
+    private static func verbatim(_ code: String, language fence: String? = nil) -> String {
         let cleaned = String(code.replacingOccurrences(of: "\t", with: "    ").filter { !isEmoji($0) })
+        // Python and SQL are set in colours (the light theme: the paper is white). Lines break at spaces only: breaking
+        // anywhere doesn't work inside the colour groups.
+        if let language = fence.flatMap({ CodeLanguage(fence: $0) }) ?? (fence?.isEmpty == false ? nil : CodeLanguage.detect(cleaned)),
+           !cleaned.contains("\\end{Verbatim}") {
+            return """
+            \\begin{Verbatim}[commandchars=\\\\\\{\\},breaklines,fontsize=\\small,frame=leftline,framerule=0.6pt,rulecolor=\\color{gray!60},xleftmargin=0.8em]
+            \(colouredCode(cleaned, language: language))
+            \\end{Verbatim}
+            """
+        }
         guard !cleaned.contains("\\end{Verbatim}") else {
             let lines = cleaned.components(separatedBy: "\n").map { escape($0) }
             return "{\\ttfamily\\small\\raggedright\n" + lines.joined(separator: "\\newline\n") + "\\par}"
@@ -331,6 +344,43 @@ enum LaTeXWriter {
         \(cleaned)
         \\end{Verbatim}
         """
+    }
+
+    /// Code with its tokens in colours, for a Verbatim environment whose command characters are `\`, `{` and `}`: those
+    /// three are written with macros of the preamble, and a token that spans lines is coloured line by line.
+    static func colouredCode(_ code: String, language: CodeLanguage) -> String {
+        let units = Array(code.utf16)
+        let tokens = CodeHighlighter.tokens(in: code, language: language).sorted { $0.range.location < $1.range.location }
+        var output = ""
+
+        func emit(_ range: Range<Int>, kind: CodeTokenKind) {
+            let text = String(utf16CodeUnits: Array(units[range]), count: range.count)
+            output += text.components(separatedBy: "\n").map { line -> String in
+                guard !line.isEmpty else { return "" }
+                var escaped = ""
+                for character in line {
+                    switch character {
+                    case "\\": escaped += "\\llmdBS{}"
+                    case "{": escaped += "\\llmdOB{}"
+                    case "}": escaped += "\\llmdCB{}"
+                    default: escaped.append(character)
+                    }
+                }
+                guard let hex = CodeTheme.hex(kind, light: true) else { return escaped }
+                return "\\textcolor[HTML]{\(String(format: "%06X", hex))}{\(escaped)}"
+            }.joined(separator: "\n")
+        }
+
+        var position = 0
+        for token in tokens {
+            let start = token.range.location, end = NSMaxRange(token.range)
+            guard start >= position else { continue }
+            if start > position { emit(position..<start, kind: .plain) }
+            emit(start..<end, kind: token.kind)
+            position = end
+        }
+        if position < units.count { emit(position..<units.count, kind: .plain) }
+        return output
     }
 
     private static func list(_ items: [MarkdownBlock.ListItem], math: MathMode) -> String {

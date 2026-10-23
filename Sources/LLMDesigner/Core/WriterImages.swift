@@ -15,14 +15,20 @@ struct WriterImageReference: Equatable, Sendable {
     /// Made with Draw Things (`.generated`); its recipe is in a JSON file next to it. Until the file exists, the
     /// picture is a placeholder that says what will be there.
     var generated = false
+    /// A flow chart of code (`.diagram`): like a plot it has a version for the dark sheet and a PDF for LaTeX.
+    var isDiagram = false
 
-    init(source: String, caption: String, width: Int?, plot: PlotSpec? = nil, generated: Bool = false) {
+    init(source: String, caption: String, width: Int?, plot: PlotSpec? = nil, generated: Bool = false, isDiagram: Bool = false) {
         self.source = source
         self.caption = caption
         self.width = width
         self.plot = plot
         self.generated = generated
+        self.isDiagram = isDiagram
     }
+
+    /// Has a version for the dark sheet and a vector version for print (plots and diagrams).
+    var hasVariants: Bool { plot != nil || isDiagram }
 
     /// A generated picture whose file isn't there (yet).
     var isPlaceholder: Bool { generated && WriterImageStore.url(for: source) == nil }
@@ -83,12 +89,14 @@ struct WriterImageReference: Equatable, Sendable {
         var width: Int?
         var plot: PlotSpec?
         var generated = false
+        var isDiagram = false
         let rest = String(characters[index...]).trimmingCharacters(in: .whitespaces)
         if !rest.isEmpty {
             guard rest.hasPrefix("{"), rest.hasSuffix("}") else { return nil }
             let attributes = rest.dropFirst().dropLast().split(separator: " ")
             if attributes.contains(".plot") { plot = PlotSpec() }
             generated = attributes.contains(".generated")
+            isDiagram = attributes.contains(".diagram")
             for attribute in attributes {
                 let pair = attribute.split(separator: "=", maxSplits: 1).map(String.init)
                 guard pair.count == 2 else { continue }
@@ -99,7 +107,7 @@ struct WriterImageReference: Equatable, Sendable {
                 }
             }
         }
-        return WriterImageReference(source: source, caption: caption, width: width, plot: plot, generated: generated)
+        return WriterImageReference(source: source, caption: caption, width: width, plot: plot, generated: generated, isDiagram: isDiagram)
     }
 
     var markdown: String {
@@ -113,6 +121,7 @@ struct WriterImageReference: Equatable, Sendable {
         var attributes = width.map { ["width=\($0)%"] } ?? []
         attributes += plot?.markdownAttributes ?? []
         if generated { attributes.append(".generated") }
+        if isDiagram { attributes.append(".diagram") }
         return "![\(caption)](\(destination))" + (attributes.isEmpty ? "" : "{" + attributes.joined(separator: " ") + "}")
     }
 }
@@ -285,9 +294,19 @@ enum WriterImageStore {
         return folderName + "/" + name + ".png"
     }
 
-    /// The file LaTeX should print for a picture: a plot's PDF when there is one.
+    /// Stores a flow chart: its PNG for white paper, for the dark sheet, and its PDF. Returns the Markdown source.
+    static func storeDiagram(light: Data, dark: Data, pdf: Data) throws -> String {
+        let name = "ablauf-" + UUID().uuidString.prefix(13).lowercased()
+        let folder = directory
+        try light.write(to: folder.appendingPathComponent(name + ".png"), options: .atomic)
+        try dark.write(to: folder.appendingPathComponent(name + "-dark.png"), options: .atomic)
+        try pdf.write(to: folder.appendingPathComponent(name + ".pdf"), options: .atomic)
+        return folderName + "/" + name + ".png"
+    }
+
+    /// The file LaTeX should print for a picture: the PDF of a plot or diagram when there is one.
     static func printURL(for reference: WriterImageReference) -> URL? {
-        if reference.plot != nil, let pdf = url(for: pdfVariant(of: reference.source)) { return pdf }
+        if reference.hasVariants, let pdf = url(for: pdfVariant(of: reference.source)) { return pdf }
         return url(for: reference.source)
     }
 }

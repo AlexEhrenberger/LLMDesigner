@@ -63,8 +63,8 @@ struct PresenterScreen: View {
                 if tab != .document { NSApp.keyWindow?.makeFirstResponder(nil) }
             }
             .sheet(item: Binding(get: { controller.formulaRequest }, set: { if $0 == nil, controller.formulaRequest != nil { controller.cancelFormula() } })) { request in
-                FormulaEditorSheet(request: request) { latex, display, plot in
-                    controller.applyFormula(latex: latex, display: display, plot: plot, isExisting: request.isExisting)
+                FormulaEditorSheet(request: request) { latex, display, plot, python in
+                    controller.applyFormula(latex: latex, display: display, plot: plot, isExisting: request.isExisting, python: python)
                 } onCancel: {
                     controller.cancelFormula()
                 }
@@ -375,6 +375,7 @@ private struct PresenterToolbar: View {
             divider
             FontMenu(controller: controller, document: document)
             BlockMenu(controller: controller, current: state.block)
+            if state.block == .code { CodeLanguageMenu(controller: controller, state: state) }
             divider
             markButton("bold", .bold, "Fett (⌘B)", state)
             markButton("italic", .italic, "Kursiv (⌘I)", state)

@@ -81,6 +81,7 @@ enum ContentAnalysisBuilder {
         case .argumentation: 2_400
         case .narrative: 2_400
         case .structure: 2_200
+        case .code: 0
         }
     }
 
@@ -116,6 +117,8 @@ enum ContentAnalysisBuilder {
             - „handlung“: die wichtigsten Ereignisse in der Reihenfolge des Textes (3 bis 10), je ein Satz mit höchstens 12 Wörtern, mit den beteiligten Figuren und dem Ort (ein Name aus „schauplaetze“).
             - „erzaehlperspektive“, „zeit“ (wann die Handlung spielt) und „konflikt“ (der zentrale Konflikt): je ein kurzer Satz. „motive“: wiederkehrende Motive oder Themen in Stichworten.
             """
+        case .code:
+            ""
         case .structure:
             """
             Zeige, wie das Dokument seinen Gegenstand gliedert.
@@ -201,6 +204,8 @@ enum ContentAnalysisBuilder {
                 ("konflikt", .string),
                 ("motive", .array(.string, max: 6)),
             ])
+        case .code:
+            .object([])
         case .structure:
             .object([
                 ("gegenstand", .string),
@@ -404,6 +409,8 @@ enum ContentAnalysisBuilder {
                 motifs: unique(answer.motive.map(clean))
             )
 
+        case .code:
+            break
         case .structure:
             let answer = try decoder.decode(StructureAnswer.self, from: data)
             let aspects = answer.aspekte.compactMap { aspect -> StructureAnalysis.Aspect? in

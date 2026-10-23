@@ -222,6 +222,7 @@ extension WriterTextView {
         if let tocLocation { own += tableOfContentsMenuItems(at: tocLocation) }
         if let citationLocation { own += citationMenuItems(at: citationLocation) }
         if let table = tableMenu() { own += [table, .separator()] }
+        own += codeMenuItems()
         own += insertMenuItems(hasSelection: hasSelection)
         for (index, item) in own.enumerated() { menu.insertItem(item, at: index) }
         return menu

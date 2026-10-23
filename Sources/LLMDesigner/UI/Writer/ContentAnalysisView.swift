@@ -57,6 +57,10 @@ struct ContentAnalysisView: View {
                 VStack(alignment: .leading, spacing: 30) {
                     if analysis == nil, progress == nil {
                         AnalysisStart(document: document, colors: colors)
+                        if hasCode {
+                            section(.code, analysis: nil, progress: nil)
+                                .id(ContentAnalysisModule.code)
+                        }
                     } else {
                         notes(analysis, isRunning: progress != nil)
                         OverviewSection(analysis: analysis?.overview, progress: progress, error: errors[.overview], colors: colors, document: document)
@@ -94,9 +98,13 @@ struct ContentAnalysisView: View {
     /// The parts after the overview: those the analysis has and those being made.
     private func sections(_ analysis: ContentAnalysis?, _ progress: ContentAnalysisProgress?) -> [ContentAnalysisModule] {
         ContentAnalysisModule.allCases.filter { module in
-            module != .overview && (analysis?.contains(module) == true || progress?.includes(module) == true || errors[module] != nil)
+            if module == .code { return hasCode }
+            return module != .overview && (analysis?.contains(module) == true || progress?.includes(module) == true || errors[module] != nil)
         }
     }
+
+    /// The document has Python or SQL code, which gets flow charts without the model.
+    private var hasCode: Bool { !CodeSnippet.snippets(in: document.markdown).isEmpty }
 
     @ViewBuilder
     private func notes(_ analysis: ContentAnalysis?, isRunning: Bool) -> some View {
@@ -151,6 +159,8 @@ struct ContentAnalysisView: View {
                 } else {
                     PendingCard(module: module, isRunning: isRunning, colors: colors)
                 }
+            case .code:
+                CodeFlowSection(document: document, colors: colors, onJump: onJump)
             }
         }
         .opacity(isRunning && analysisHas(module, analysis) ? 0.55 : 1)
@@ -158,7 +168,7 @@ struct ContentAnalysisView: View {
     }
 
     private func analysisHas(_ module: ContentAnalysisModule, _ analysis: ContentAnalysis?) -> Bool {
-        analysis?.contains(module) == true
+        module == .code ? hasCode : analysis?.contains(module) == true
     }
 }
 

@@ -262,3 +262,41 @@ struct PopoverActionRow: View {
         .onHover { hovering = $0 }
     }
 }
+
+// MARK: Code
+
+/// With the caret in a code block: its language, and tidying the code.
+struct CodeLanguageMenu: View {
+    let controller: WriterEditorController
+    let state: WriterTextView.State
+    @State private var hovering = false
+
+    var body: some View {
+        Menu {
+            Section("Sprache des Codes") {
+                Button {
+                    controller.setCodeLanguage(nil)
+                } label: {
+                    if state.isCodeLanguageExplicit { Text("Automatisch erkennen") } else { Label("Automatisch erkennen", systemImage: "checkmark") }
+                }
+                ForEach(CodeLanguage.allCases) { language in
+                    Button {
+                        controller.setCodeLanguage(language)
+                    } label: {
+                        if state.isCodeLanguageExplicit && state.codeLanguage == language { Label(language.label, systemImage: "checkmark") } else { Text(language.label) }
+                    }
+                }
+            }
+            Button("Code formatieren (⌥⇧⌘F)", systemImage: "text.alignleft") { controller.formatCode() }
+                .disabled(state.codeLanguage == nil)
+        } label: {
+            MenuLabel(symbol: "chevron.left.forwardslash.chevron.right", title: state.codeLanguage?.label ?? "Code", hovering: hovering)
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .onHover { hovering = $0 }
+        .help("Sprache des Code-Blocks (Python, SQL) – der Code wird dafür eingefärbt, eingerückt und lässt sich formatieren")
+    }
+}

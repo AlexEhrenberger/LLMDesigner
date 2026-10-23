@@ -343,6 +343,7 @@ enum WriterStyler {
                 storage.addAttributes(displayAttributes(for: attributes, block: block, family: family, palette: palette), range: run)
             }
         }
+        highlightCode(storage, in: NSRange(location: start, length: end - start), palette: palette)
     }
 
     static func restyleAll(_ storage: NSTextStorage, family: WriterFont, palette: WriterPalette) {

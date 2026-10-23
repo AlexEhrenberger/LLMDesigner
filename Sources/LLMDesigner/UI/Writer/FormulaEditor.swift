@@ -19,6 +19,19 @@ final class FormulaEditorModel {
     var commandBuffer: String?
     var message: String?
 
+    /// Python code written below the formula.
+    var pythonEnabled = false
+    /// The formula as Python; nil while it can't be translated.
+    var pythonCode: PythonCode? {
+        _ = version
+        return try? MathPythonTranslator.translate(latex: editing.latex)
+    }
+    var pythonError: String? {
+        _ = version
+        guard !editing.formula.isEmpty else { return nil }
+        do { _ = try MathPythonTranslator.translate(latex: editing.latex); return nil } catch { return error.localizedDescription }
+    }
+
     // Plot
     var plotEnabled: Bool
     var plot: PlotSpec
@@ -440,10 +453,10 @@ struct FormulaEditorSheet: View {
     @State private var showsSource = false
     @State private var isCommitting = false
     @FocusState private var sourceFocused: Bool
-    let onCommit: (_ latex: String, _ display: Bool, _ plot: WriterImageReference?) -> Void
+    let onCommit: (_ latex: String, _ display: Bool, _ plot: WriterImageReference?, _ python: Bool) -> Void
     let onCancel: () -> Void
 
-    init(request: WriterFormulaRequest, onCommit: @escaping (String, Bool, WriterImageReference?) -> Void, onCancel: @escaping () -> Void) {
+    init(request: WriterFormulaRequest, onCommit: @escaping (String, Bool, WriterImageReference?, Bool) -> Void, onCancel: @escaping () -> Void) {
         _model = State(initialValue: FormulaEditorModel(request: request))
         self.onCommit = onCommit
         self.onCancel = onCancel
@@ -459,6 +472,7 @@ struct FormulaEditorSheet: View {
             hints
             sourceSection
             if model.display { plotSection }
+            pythonSection
             footer
         }
         .padding(20)
@@ -561,6 +575,51 @@ struct FormulaEditorSheet: View {
                     .onSubmit(commit)
             }
         }
+    }
+
+    /// The formula as Python, written below it when the switch is on.
+    private var pythonSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Toggle(isOn: Binding(get: { model.pythonEnabled }, set: { model.pythonEnabled = $0 })) {
+                HStack(spacing: 6) {
+                    Image(systemName: "chevron.left.forwardslash.chevron.right").foregroundStyle(Theme.accent)
+                    Text("Python-Code unter der Formel").font(.system(size: 12.5, weight: .semibold))
+                    Text("– die Formel als Funktion, einfach zu kopieren und auszuführen")
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(Theme.textTertiary)
+                }
+            }
+            .toggleStyle(.switch)
+            .controlSize(.small)
+            if model.pythonEnabled {
+                if let code = model.pythonCode {
+                    ScrollView {
+                        Text(Self.highlighted(code.text))
+                            .font(.system(size: 12, design: .monospaced))
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(10)
+                    }
+                    .frame(maxHeight: 150)
+                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.black.opacity(0.25)))
+                } else {
+                    Label(model.pythonError ?? "Die Formel ist noch leer.", systemImage: "exclamationmark.triangle")
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(Theme.textSecondary)
+                }
+            }
+        }
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.white.opacity(0.035)))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Theme.border))
+    }
+
+    private static func highlighted(_ code: String) -> AttributedString {
+        let text = NSMutableAttributedString(string: code, attributes: [.foregroundColor: NSColor(hex: 0xE8E8EC)])
+        for token in CodeHighlighter.tokens(in: code, language: .python) {
+            if let color = CodeTheme.color(token.kind, light: false) { text.addAttribute(.foregroundColor, value: color, range: token.range) }
+        }
+        return AttributedString(text)
     }
 
     private var plotSection: some View {
@@ -824,7 +883,7 @@ struct FormulaEditorSheet: View {
         Task {
             do {
                 let plot = model.latex.isEmpty ? nil : try await model.finalPlot()
-                onCommit(model.latex, model.display, plot)
+                onCommit(model.latex, model.display, plot, model.pythonEnabled && model.pythonCode != nil)
             } catch {
                 model.message = "Der Plot fehlt noch: " + (error.localizedDescription)
             }

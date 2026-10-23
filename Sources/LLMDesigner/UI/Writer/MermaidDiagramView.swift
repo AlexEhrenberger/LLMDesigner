@@ -49,7 +49,7 @@ struct DiagramCard: View {
 }
 
 /// The diagram in a big window: zoom with the trackpad, scroll in all directions.
-private struct EnlargedDiagram: View {
+struct EnlargedDiagram: View {
     let diagram: MermaidDiagram
     let colors: AnalysisColors
     let onNode: (String) -> Void
@@ -84,7 +84,7 @@ private struct EnlargedDiagram: View {
     }
 }
 
-private struct CardIconButton: View {
+struct CardIconButton: View {
     let symbol: String
     let help: String
     let colors: AnalysisColors

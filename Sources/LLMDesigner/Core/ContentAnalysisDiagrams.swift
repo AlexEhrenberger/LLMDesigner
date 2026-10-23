@@ -125,7 +125,7 @@ struct MermaidPalette: Hashable, Sendable {
 enum ContentAnalysisDiagrams {
     static func diagrams(for module: ContentAnalysisModule, in analysis: ContentAnalysis, palette: MermaidPalette) -> [MermaidDiagram] {
         switch module {
-        case .overview: return []
+        case .overview, .code: return []
         case .argumentation:
             guard let argumentation = analysis.argumentation, !argumentation.arguments.isEmpty else { return [] }
             return [argumentMap(argumentation, palette: palette)]

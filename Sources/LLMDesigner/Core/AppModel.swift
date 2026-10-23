@@ -294,6 +294,10 @@ final class AppModel {
 
     /// Message or chat IDs whose PDF is currently being typeset.
     var exportingIDs: Set<UUID> = []
+    /// Flow charts being put into a document (see `adoptFlowchart`), by document and chart.
+    var adoptingFlowcharts: Set<String> = []
+    /// Flow charts that went into the document or presentation in this session, to show "übernommen".
+    var adoptedFlowcharts: Set<String> = []
     var exportError: String?
 
     // MARK: Models

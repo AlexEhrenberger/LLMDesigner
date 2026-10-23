@@ -4,8 +4,13 @@ import Foundation
 /// the user can add the others by hand.
 enum ContentAnalysisModule: String, Codable, CaseIterable, Identifiable, Sendable {
     case overview, argumentation, narrative, structure
+    /// Flow charts of the document's Python and SQL code. Not made by the model: the code is read as it is.
+    case code
 
     var id: String { rawValue }
+
+    /// Made by the model (everything but the code's flow charts, which come from the code itself).
+    var isModelWork: Bool { self != .code }
 
     var label: String {
         switch self {
@@ -13,6 +18,7 @@ enum ContentAnalysisModule: String, Codable, CaseIterable, Identifiable, Sendabl
         case .argumentation: "Argumentation"
         case .narrative: "Figuren & Handlung"
         case .structure: "Gliederung"
+        case .code: "Code-Ablauf"
         }
     }
 
@@ -22,6 +28,7 @@ enum ContentAnalysisModule: String, Codable, CaseIterable, Identifiable, Sendabl
         case .argumentation: "point.3.connected.trianglepath.dotted"
         case .narrative: "person.2"
         case .structure: "list.bullet.indent"
+        case .code: "flowchart"
         }
     }
 
@@ -32,6 +39,7 @@ enum ContentAnalysisModule: String, Codable, CaseIterable, Identifiable, Sendabl
         case .argumentation: "Zerlegt die Argumente in Prämissen und Konklusionen …"
         case .narrative: "Sucht Figuren, Beziehungen und Handlung …"
         case .structure: "Gliedert den Inhalt …"
+        case .code: "Liest den Code …"
         }
     }
 
@@ -41,6 +49,7 @@ enum ContentAnalysisModule: String, Codable, CaseIterable, Identifiable, Sendabl
         case .argumentation: "Hauptthese, Argumente mit Prämissen und Konklusion, Einwände – als Argumentkarte."
         case .narrative: "Figuren, ihre Beziehungen und der Verlauf der Handlung – als Diagramme."
         case .structure: "Bereiche, Aufzählungen, Abläufe und Zusammenhänge – als Mindmap und Ablauf."
+        case .code: "Was passiert im Code? Flussdiagramme der Python- und SQL-Blöcke, die sich ins Dokument übernehmen lassen."
         }
     }
 }
@@ -230,6 +239,7 @@ struct ContentAnalysis: Codable, Hashable, Sendable {
         case .argumentation: argumentation != nil
         case .narrative: narrative != nil
         case .structure: structure != nil
+        case .code: false
         }
     }
 }

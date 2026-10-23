@@ -463,6 +463,9 @@ final class WriterTextView: NSTextView {
         var isFormulaSelected = false
         /// The caret is in a bookmarked passage.
         var bookmarkID: String?
+        /// The caret is in a code block: its language (nil: none known) and whether the document says it.
+        var codeLanguage: CodeLanguage?
+        var isCodeLanguageExplicit = false
 
         struct ImageState: Equatable {
             var width: Int?
@@ -519,6 +522,10 @@ final class WriterTextView: NSTextView {
         state.isFormulaSelected = selectedFormula != nil
         state.bookmarkID = bookmarkAtCaret?.id
         state.table = tableState
+        if state.block == .code, let code = codeLanguageAtCaret {
+            state.codeLanguage = code.language
+            state.isCodeLanguageExplicit = code.isExplicit
+        }
         return state
     }
 
@@ -830,6 +837,8 @@ final class WriterTextView: NSTextView {
         case [.command, .option] where event.keyCode == 11:   // B
             if let bookmark = bookmarkAtCaret, selectedRange().length == 0 { removeBookmark(bookmark.id) } else { addBookmark() }
             return true
+        case [.command, .option, .shift] where event.keyCode == 3:   // F
+            if codeRunAtCaret != nil { formatCode(); return true }
         case [.command, .shift]:
             if key == "x" { toggle(.strikethrough); return true }
             switch event.keyCode {
@@ -874,11 +883,16 @@ final class WriterTextView: NSTextView {
         let location = selectedRange().location
         switch paragraph.block {
         case .bullet, .numbered, .quote, .code:
-            // Return in an empty item ends the list (or quote, or code block).
-            if paragraph.contentRange.length == 0 {
+            // Return in an empty item ends the list (or quote, or code block); so does a code line of only indentation.
+            if paragraph.contentRange.length == 0 || (paragraph.block == .code && isIndentOnlyLine(paragraph)) {
                 if paragraph.block.isList, paragraph.level > 0 { return changeListLevel(by: -1) }
+                if paragraph.block == .code, paragraph.contentRange.length > 0, shouldChangeText(in: paragraph.contentRange, replacementString: "") {
+                    textStorage?.replaceCharacters(in: paragraph.contentRange, with: "")
+                    didChangeText()
+                }
                 return setBlock(.paragraph, toggle: false)
             }
+            if paragraph.block == .code { return codeNewline(in: paragraph) }
             super.insertNewline(sender)
         case _ where paragraph.block.isEmbed && location == paragraph.contentRange.location:
             // Return in front of a picture pushes it down.
@@ -904,12 +918,14 @@ final class WriterTextView: NSTextView {
     override func insertTab(_ sender: Any?) {
         if tableCellAtCaret != nil { return moveToAdjacentCell(forward: true) }
         if state.block.isList { return changeListLevel(by: 1) }
+        if currentParagraph?.block == .code { return indentCode(by: 1) }
         super.insertTab(sender)
     }
 
     override func insertBacktab(_ sender: Any?) {
         if tableCellAtCaret != nil { return moveToAdjacentCell(forward: false) }
         if state.block.isList { return changeListLevel(by: -1) }
+        if currentParagraph?.block == .code { return indentCode(by: -1) }
         super.insertBacktab(sender)
     }
 

@@ -21,6 +21,8 @@ final class WriterEditorController {
     func toggle(_ mark: WriterInline) { perform { $0.toggle(mark) } }
     func setTextColor(_ hex: String?) { perform { $0.setTextColor(hex) } }
     func setTextFont(_ font: WriterFont?) { perform { $0.setTextFont(font) } }
+    func setCodeLanguage(_ language: CodeLanguage?) { perform { $0.setCodeLanguage(language) } }
+    func formatCode() { perform { $0.formatCode() } }
     /// macOS's palette of special characters, symbols and emoji; what is chosen goes in at the caret.
     func showCharacterPalette() { perform { _ in NSApp.orderFrontCharacterPalette(nil) } }
     func setBlock(_ block: WriterBlock, toggle: Bool = true) { perform { $0.setBlock(block, toggle: toggle) } }
@@ -56,9 +58,16 @@ final class WriterEditorController {
 
     // MARK: Formula editor
 
-    func applyFormula(latex: String, display: Bool, plot: WriterImageReference?, isExisting: Bool) {
+    func applyFormula(latex: String, display: Bool, plot: WriterImageReference?, isExisting: Bool, python: Bool = false) {
         formulaRequest = nil
-        perform { $0.applyFormula(latex: latex, display: display, plot: plot, isExisting: isExisting) }
+        perform { textView in
+            textView.applyFormula(latex: latex, display: display, plot: plot, isExisting: isExisting)
+            // The code goes below the formula that was just made or changed.
+            guard python, !latex.isEmpty else { return }
+            if let location = textView.selectedFormula?.location ?? textView.formulaBeforeCaret {
+                textView.insertPython(forFormulaAt: location)
+            }
+        }
     }
 
     func cancelFormula() {

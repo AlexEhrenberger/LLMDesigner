@@ -280,8 +280,11 @@ enum WriterMarkdown {
         }
 
         var endsWithTable = false
+        var previousWasCode = false
         for block in MarkdownParser.parse(markdown) {
             endsWithTable = false
+            let followsCode = previousWasCode
+            previousWasCode = false
             switch block {
             case .paragraph(let text):
                 // A line that is only a picture becomes a picture of its own.
@@ -312,9 +315,13 @@ enum WriterMarkdown {
                 if classes.contains("chapter") { block = .chapter }
                 add(inline(title), block: block)
             case .code(let language, let code):
+                // Two code blocks in a row stay two: an empty paragraph keeps them apart (consecutive code paragraphs are
+                // one block, with one language).
+                if followsCode { add(NSAttributedString(), block: .paragraph) }
                 for line in code.components(separatedBy: "\n") {
                     add(NSAttributedString(string: line), block: .code, language: language)
                 }
+                previousWasCode = true
             case .list(let items):
                 for item in items {
                     let text = item.text.replacingOccurrences(of: "\n", with: String(lineSeparator))

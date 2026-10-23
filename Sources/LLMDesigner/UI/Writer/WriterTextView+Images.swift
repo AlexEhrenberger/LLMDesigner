@@ -409,11 +409,11 @@ final class WriterImageCell: NSTextAttachmentCell {
         (attachment as? WriterImageAttachment)?.reference ?? WriterImageReference(source: "", caption: "", width: nil)
     }
 
-    /// A plot on the dark sheet shows its dark version.
+    /// A plot or diagram on the dark sheet shows its dark version.
     @MainActor
     private func displayImage(_ view: WriterTextView?) -> NSImage? {
         let reference = reference
-        if reference.plot != nil, view?.palette.isLight == false,
+        if reference.hasVariants, view?.palette.isLight == false,
            let dark = WriterImageStore.displayImage(for: WriterImageStore.darkVariant(of: reference.source)) {
             return dark
         }

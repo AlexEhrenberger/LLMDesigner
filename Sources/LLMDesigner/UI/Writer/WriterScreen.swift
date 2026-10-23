@@ -39,8 +39,8 @@ struct WriterScreen: View {
                 app.refreshDocumentOutline(document.id)
             }
             .sheet(item: Binding(get: { controller.formulaRequest }, set: { if $0 == nil, controller.formulaRequest != nil { controller.cancelFormula() } })) { request in
-                FormulaEditorSheet(request: request) { latex, display, plot in
-                    controller.applyFormula(latex: latex, display: display, plot: plot, isExisting: request.isExisting)
+                FormulaEditorSheet(request: request) { latex, display, plot, python in
+                    controller.applyFormula(latex: latex, display: display, plot: plot, isExisting: request.isExisting, python: python)
                 } onCancel: {
                     controller.cancelFormula()
                 }
@@ -450,6 +450,9 @@ private struct WriterToolbar: View {
             group(0) { FontMenu(controller: controller, document: document) }
             divider(1)
             group(2) { BlockMenu(controller: controller, current: state.block) }
+            if state.block == .code {
+                group(2) { CodeLanguageMenu(controller: controller, state: state) }
+            }
             divider(3)
             group(4) { markButton("bold", .bold, "Fett (⌘B)", state) }
             group(5) { markButton("italic", .italic, "Kursiv (⌘I)", state) }

@@ -91,6 +91,8 @@ struct ContentAnalysisToolbar: View {
     let document: WriterDocument
     @Binding var scrollTarget: ContentAnalysisModule?
 
+    private var hasCode: Bool { !CodeSnippet.snippets(in: document.markdown).isEmpty }
+
     var body: some View {
         let analysis = app.analysis(of: document.id)
         let progress = app.analysisProgress[document.id]
@@ -100,8 +102,8 @@ struct ContentAnalysisToolbar: View {
                 .font(.system(size: 11.5, weight: .medium))
                 .foregroundStyle(Theme.textTertiary)
                 .padding(.leading, 6)
-            ForEach(ContentAnalysisModule.allCases) { module in
-                let state: PartChip.Phase = progress?.current == module ? .running
+            ForEach(ContentAnalysisModule.allCases.filter { $0.isModelWork || hasCode }) { module in
+                let state: PartChip.Phase = module == .code ? .present : progress?.current == module ? .running
                     : progress?.pending.contains(module) == true ? .waiting
                     : analysis?.contains(module) == true ? .present : .missing
                 PartChip(module: module, state: state, isDisabled: isRunning && state == .missing) {

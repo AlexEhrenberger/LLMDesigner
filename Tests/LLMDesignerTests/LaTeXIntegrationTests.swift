@@ -34,4 +34,37 @@ struct LaTeXIntegrationTests {
             }
         }
     }
+
+    @Test func codeCompilesWithColours() async throws {
+        let markdown = """
+        # Code
+
+        ```python
+        import math
+
+
+        def f(x, a):
+            r\"\"\"f(x) = a x^2 % Test\"\"\"
+            data = {"key": [1, 2.5], 'b': "tab\\n"}  # Kommentar mit {Klammern} und \\ Backslash
+            return a * x ** 2 + math.sqrt(x) if x > 0 else float('nan')
+        ```
+
+        ```sql
+        -- Umsatz pro Kunde
+        SELECT k.name, COUNT(*) AS n, 'it''s' AS s
+        FROM kunden k
+        WHERE k.alter >= 18 AND k.note LIKE '100%'; /* Ende */
+        ```
+
+        ```
+        Code ohne Sprache { } \\ bleibt einfach grau
+        ```
+
+        """
+        guard let pdf = try await typeset(markdown, typeface: .serif) else { return }
+        #expect(pdf.count > 5_000)
+        if let directory = ProcessInfo.processInfo.environment["LLMD_PDF_OUT"] {
+            try pdf.write(to: URL(fileURLWithPath: directory).appendingPathComponent("code.pdf"))
+        }
+    }
 }
