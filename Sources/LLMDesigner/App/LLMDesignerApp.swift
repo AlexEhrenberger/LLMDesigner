@@ -106,6 +106,17 @@ struct AppCommands: Commands {
                 .keyboardShortcut("n", modifiers: [.command, .shift])
                 .disabled(app.sidebarMode == .personas)
         }
+        CommandGroup(after: .textEditing) {
+            Menu("Suchen") {
+                Button("Suchen …") { app.findInDocument(.show) }
+                    .keyboardShortcut("f")
+                Button("Weitersuchen") { app.findInDocument(.next) }
+                    .keyboardShortcut("g")
+                Button("Rückwärts suchen") { app.findInDocument(.previous) }
+                    .keyboardShortcut("g", modifiers: [.command, .shift])
+            }
+            .disabled(!app.canFindInDocument)
+        }
         CommandGroup(replacing: .printItem) {
             Button("Drucken …") { app.printOpenDocument() }
                 .keyboardShortcut("p")

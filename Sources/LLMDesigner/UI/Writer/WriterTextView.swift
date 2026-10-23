@@ -23,6 +23,9 @@ final class WriterTextView: NSTextView {
     var isDictating = false
     /// Esc while the document is read aloud stops the voice.
     var onStopReading: (() -> Void)?
+    /// The places the find bar found here, in order, and the one the reader is at (see WriterTextView+Find.swift).
+    var findMatches: [NSRange] = []
+    var currentFindMatch: NSRange?
 
     // MARK: Assistant state (see WriterTextView+Assistant.swift)
 
@@ -181,8 +184,8 @@ final class WriterTextView: NSTextView {
         isAutomaticSpellingCorrectionEnabled = false
         isContinuousSpellCheckingEnabled = true
         isGrammarCheckingEnabled = false
-        usesFindBar = true
-        isIncrementalSearchingEnabled = true
+        // ⌘F opens the app's own find bar (`DocumentFind`), which also searches the other slides and speaker cards.
+        usesFindBar = false
         isVerticallyResizable = true
         isHorizontallyResizable = false
         autoresizingMask = [.width]
@@ -396,10 +399,13 @@ final class WriterTextView: NSTextView {
         let text = WriterMarkdown.attributedString(from: markdown)
         trackedRanges = [:]
         untrackedKeys = []
+        findMatches = []
+        currentFindMatch = nil
         aiPlacement = nil
         isAIWriting = false
         restyler.isLoading = true
         storage.setAttributedString(text)
+        layoutManager?.removeTemporaryAttribute(.foregroundColor, forCharacterRange: NSRange(location: 0, length: storage.length))
         WriterStyler.restyleAll(storage, family: family, palette: palette)
         restyler.isLoading = false
         outlineCache = nil
@@ -1248,6 +1254,8 @@ final class WriterLayoutManager: NSLayoutManager {
             let baseline = (extra.height - lineHeight) / 2 + font.ascender
             drawMarker(marker, block: block, level: level, fragment: extra, baseline: baseline, origin: origin, view: view)
         }
+        // Over code blocks and the selection, so every place found shows.
+        view.drawFindMatches(in: characters, layoutManager: self, container: container, origin: origin)
     }
 
     private func drawMarker(_ marker: String, block: WriterBlock, level: Int, fragment: NSRect, baseline: CGFloat, origin: NSPoint, view: WriterTextView,

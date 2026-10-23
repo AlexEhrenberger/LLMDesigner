@@ -340,6 +340,8 @@ final class AppModel {
     @ObservationIgnored var documentSaveTasks: [WriterDocument.ID: Task<Void, Never>] = [:]
     /// Set by the open editor: hands over edits it hasn't reported yet.
     @ObservationIgnored var writerFlush: (() -> Void)?
+    /// The find bar of the open document or presentation (⌘F).
+    @ObservationIgnored weak var documentFind: DocumentFind?
     /// The document the running dictation writes into instead of the composer.
     var dictationDocumentID: WriterDocument.ID?
     var dictationIntoDocument: Bool { dictationDocumentID != nil }

@@ -15,8 +15,22 @@ final class WriterEditorController {
     var recentBookmarkID: String?
     /// Presenter Studio: the slide's text is longer than the slide.
     var slideOverflows = false
+    /// ⌘F: the find bar over the text.
+    let find = DocumentFind()
     @ObservationIgnored weak var textView: WriterTextView?
     @ObservationIgnored weak var app: AppModel?
+    /// Presenter Studio: the slide whose text the editor holds.
+    @ObservationIgnored private(set) var shownSlideID: PresentationSlide.ID?
+
+    init() {
+        find.controller = self
+    }
+
+    /// A document or slide was put into the text view.
+    func textLoaded(slideID: PresentationSlide.ID?) {
+        shownSlideID = slideID
+        find.textLoaded()
+    }
 
     func toggle(_ mark: WriterInline) { perform { $0.toggle(mark) } }
     func setTextColor(_ hex: String?) { perform { $0.setTextColor(hex) } }
@@ -351,9 +365,12 @@ struct WriterEditor: NSViewRepresentable {
             textView.lastCitedKeys = []
             textView.load(markdown: slide?.markdown ?? document.markdown, family: document.font, palette: palette)
             controller?.state = textView.state
+            controller?.textLoaded(slideID: slide?.id)
             updateGenerationTimer()
-            DispatchQueue.main.async { [weak textView] in
+            DispatchQueue.main.async { [weak textView, weak controller] in
                 guard let textView else { return }
+                // Going from slide to slide with the find bar: the keyboard stays in its field.
+                if controller?.find.fieldHasFocus == true { return }
                 textView.window?.makeFirstResponder(textView)
             }
         }
@@ -378,10 +395,12 @@ struct WriterEditor: NSViewRepresentable {
             textView.setSelectedRange(NSRange(location: min(selection.location, length), length: 0))
             textView.scroll(visible)
             controller?.state = textView.state
+            controller?.textLoaded(slideID: slideID)
             if !hadFocus, textView.window?.firstResponder === textView { textView.window?.makeFirstResponder(nil) }
         }
 
         func textDidChange(_ notification: Notification) {
+            controller?.find.textChanged()
             textView?.citationsChanged()
             textView?.checkCiteTrigger()
             isDirty = true

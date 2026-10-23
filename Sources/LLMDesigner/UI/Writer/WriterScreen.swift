@@ -24,10 +24,22 @@ struct WriterScreen: View {
                 }
             }
             .background(Theme.background)
-            .onAppear(perform: playOpening)
+            .background {
+                // ⌃F opens the find bar as well as ⌘F (the menu).
+                Button("") { app.findInDocument(.show) }
+                    .keyboardShortcut("f", modifiers: .control)
+                    .opacity(0)
+                    .allowsHitTesting(false)
+            }
+            .onAppear {
+                controller.find.isPresentation = false
+                app.documentFind = controller.find
+                playOpening()
+            }
             .onDisappear {
                 app.writerFlush = nil
                 app.writerDictation = nil
+                if app.documentFind === controller.find { app.documentFind = nil }
             }
             // The dynamic table of contents follows the text while it is shown (in the panel or in the document):
             // a moment after the user stopped writing, if enough changed.
@@ -109,6 +121,13 @@ struct WriterScreen: View {
                         .frame(maxHeight: .infinity, alignment: .bottom)
                         .padding(.bottom, 16)
                         .opacity(showsContent ? 1 : 0)
+                        if controller.find.isShown, !showsAnalysis {
+                            DocumentFindBar(find: controller.find)
+                                .padding(.top, 10)
+                                .padding(.trailing, 18)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                                .transition(.move(edge: .top).combined(with: .opacity))
+                        }
                         if showsGlow {
                             UnfoldingFrame(progress: unfold, lightPaper: app.writerLightPaper)
                                 .allowsHitTesting(false)
@@ -122,6 +141,7 @@ struct WriterScreen: View {
                 }
                 .animation(.spring(response: 0.38, dampingFraction: 0.88), value: assistant.isPanelShown)
                 .animation(.easeInOut(duration: 0.2), value: showsAnalysis)
+                .animation(.spring(response: 0.3, dampingFraction: 0.86), value: controller.find.isShown)
             }
             .onChange(of: showsAnalysis) { _, isShown in
                 // The hidden editor must not keep the keyboard.

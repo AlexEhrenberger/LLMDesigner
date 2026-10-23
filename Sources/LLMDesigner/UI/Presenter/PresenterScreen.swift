@@ -42,6 +42,8 @@ struct PresenterScreen: View {
             .scaleEffect(appeared ? 1 : 0.985)
             .onAppear {
                 app.presentationPlayer.app = app
+                controller.find.isPresentation = true
+                app.documentFind = controller.find
                 SlideDesignLibrary.shared.reloadIfNeeded()
                 // "Erstelle eine Präsentation über …", "Schreib Moderatorenkarten" in the bar act on the whole presentation.
                 assistant.isPresentation = true
@@ -58,10 +60,13 @@ struct PresenterScreen: View {
             .onDisappear {
                 app.writerFlush = nil
                 app.writerDictation = nil
+                if app.documentFind === controller.find { app.documentFind = nil }
             }
             .onChange(of: app.writerTab) { _, tab in
                 if tab != .document { NSApp.keyWindow?.makeFirstResponder(nil) }
             }
+            // The find bar follows slides and cards changed elsewhere (the model, moving slides, typing on the card).
+            .onChange(of: deck) { _, _ in controller.find.deckChanged() }
             .sheet(item: Binding(get: { controller.formulaRequest }, set: { if $0 == nil, controller.formulaRequest != nil { controller.cancelFormula() } })) { request in
                 FormulaEditorSheet(request: request) { latex, display, plot, python in
                     controller.applyFormula(latex: latex, display: display, plot: plot, isExisting: request.isExisting, python: python)
@@ -95,15 +100,20 @@ struct PresenterScreen: View {
             PresenterToolbar(controller: controller, document: document, deck: deck, slide: slide)
                 .padding(.bottom, 8)
             HStack(spacing: 0) {
-                SlideStrip(document: document, deck: deck, currentSlideID: slide.id)
+                SlideStrip(document: document, deck: deck, currentSlideID: slide.id, find: controller.find)
                     .frame(width: 188)
                 VStack(spacing: 10) {
+                    if controller.find.isShown {
+                        DocumentFindBar(find: controller.find)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                    }
                     canvas(document, deck: deck, slide: slide)
                     DeckActivityCard(document: document)
                     WriterAudioStatus(controller: controller)
                     WriterAssistantDock(assistant: assistant, state: controller.state)
                     if app.presenterNotesVisible {
-                        SpeakerNotesCard(document: document, deck: deck, slide: slide)
+                        SpeakerNotesCard(document: document, deck: deck, slide: slide, find: controller.find)
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
                 }
@@ -119,6 +129,7 @@ struct PresenterScreen: View {
             }
             .animation(.spring(response: 0.38, dampingFraction: 0.88), value: assistant.isPanelShown)
             .animation(.spring(response: 0.35, dampingFraction: 0.88), value: app.presenterNotesVisible)
+            .animation(.spring(response: 0.3, dampingFraction: 0.86), value: controller.find.isShown)
         }
         .overlay(alignment: .bottomLeading) {
             if let deleted = app.deletedSlide, deleted.documentID == document.id {
@@ -138,6 +149,9 @@ struct PresenterScreen: View {
                     .keyboardShortcut(.downArrow, modifiers: [.command, .option])
                 Button("") { step(by: -1, in: deck, from: slide.id) }
                     .keyboardShortcut(.upArrow, modifiers: [.command, .option])
+                // ⌃F opens the find bar as well as ⌘F (the menu).
+                Button("") { app.findInDocument(.show) }
+                    .keyboardShortcut("f", modifiers: .control)
             }
             .opacity(0)
             .allowsHitTesting(false)
@@ -583,6 +597,7 @@ private struct SlideStrip: View {
     let document: WriterDocument
     let deck: PresentationDeck
     let currentSlideID: PresentationSlide.ID
+    let find: DocumentFind
     @State private var dropTarget: Int?
 
     var body: some View {
@@ -593,7 +608,8 @@ private struct SlideStrip: View {
                         ForEach(Array(deck.slides.enumerated()), id: \.element.id) { index, slide in
                             SlideStripRow(
                                 document: document, deck: deck, slide: slide, number: index + 1,
-                                isSelected: slide.id == currentSlideID, showsDropMark: dropTarget == index
+                                isSelected: slide.id == currentSlideID, showsDropMark: dropTarget == index,
+                                foundCount: find.count(on: slide.id)
                             )
                             .id(slide.id)
                             .draggable(SlideDrag(slideID: slide.id)) {
@@ -662,6 +678,8 @@ private struct SlideStripRow: View {
     let number: Int
     let isSelected: Bool
     let showsDropMark: Bool
+    /// Places the find bar found on this slide and its card.
+    var foundCount = 0
     @State private var hovering = false
 
     var body: some View {
@@ -693,6 +711,19 @@ private struct SlideStripRow: View {
                         .strokeBorder(isSelected ? Theme.accent : Color.white.opacity(hovering ? 0.25 : 0.1), lineWidth: isSelected ? 2 : 1)
                         .padding(isSelected ? -2 : 0)
                 )
+                .overlay(alignment: .topTrailing) {
+                    if foundCount > 0 {
+                        Text("\(foundCount)")
+                            .font(.system(size: 10, weight: .bold).monospacedDigit())
+                            .foregroundStyle(Color(nsColor: FindColors.currentText))
+                            .padding(.horizontal, 5)
+                            .frame(minWidth: 17, minHeight: 17)
+                            .background(Capsule().fill(Color(nsColor: FindColors.current)))
+                            .padding(4)
+                            .help(foundCount == 1 ? "1 Treffer auf dieser Folie" : "\(foundCount) Treffer auf dieser Folie")
+                            .transition(.scale.combined(with: .opacity))
+                    }
+                }
         }
         .padding(.vertical, 4)
         .padding(.leading, slide.role == .content && deck.chapter(of: slide.id) != nil ? 4 : 0)
@@ -856,6 +887,7 @@ private struct SpeakerNotesCard: View {
     let document: WriterDocument
     let deck: PresentationDeck
     let slide: PresentationSlide
+    let find: DocumentFind
 
     var body: some View {
         let isWriting = app.notesWriting.contains(slide.id)
@@ -923,11 +955,10 @@ private struct SpeakerNotesCard: View {
                 }
             }
             ZStack(alignment: .topLeading) {
-                TextEditor(text: Binding(get: { slide.notes }, set: { app.setSlideNotes(document.id, slide.id, $0) }))
-                    .font(.system(size: 14))
-                    .foregroundStyle(Theme.textPrimary)
-                    .scrollContentBackground(.hidden)
-                    .disabled(isWriting)
+                SpeakerNotesEditor(text: slide.notes, slideID: slide.id, isEditable: !isWriting, find: find) { notes in
+                    app.setSlideNotes(document.id, slide.id, notes)
+                }
+                .opacity(isWriting ? 0.6 : 1)
                 if slide.notes.isEmpty, !isWriting {
                     Text("Was zu dieser Folie gesagt wird … Schreib es selbst oder lass es die KI schreiben. Beim Vorführen liest die KI diese Karte vor.")
                         .font(.system(size: 14))
@@ -952,6 +983,81 @@ private struct SpeakerNotesCard: View {
         // About 130 spoken words a minute.
         let seconds = max(5, Int((Double(words) / 130 * 60).rounded()))
         return "\(words) Wörter · ca. \(seconds < 60 ? "\(seconds) s" : "\(seconds / 60):\(String(format: "%02d", seconds % 60)) min")"
+    }
+}
+
+/// The speaker card's text: a plain text view, so the find bar can mark its places.
+private struct SpeakerNotesEditor: NSViewRepresentable {
+    let text: String
+    let slideID: PresentationSlide.ID
+    let isEditable: Bool
+    let find: DocumentFind
+    let onChange: (String) -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let textView = NSTextView(usingTextLayoutManager: false)
+        textView.isRichText = false
+        textView.allowsUndo = true
+        textView.drawsBackground = false
+        textView.font = .systemFont(ofSize: 14)
+        textView.textColor = NSColor(Theme.textPrimary)
+        textView.insertionPointColor = NSColor(Theme.textPrimary)
+        textView.typingAttributes = [.font: NSFont.systemFont(ofSize: 14), .foregroundColor: NSColor(Theme.textPrimary)]
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.autoresizingMask = [.width]
+        textView.textContainer?.widthTracksTextView = true
+        textView.isContinuousSpellCheckingEnabled = true
+        textView.delegate = context.coordinator
+
+        let scrollView = NSScrollView()
+        scrollView.drawsBackground = false
+        scrollView.borderType = .noBorder
+        scrollView.hasVerticalScroller = true
+        scrollView.autohidesScrollers = true
+        scrollView.documentView = textView
+        context.coordinator.textView = textView
+        context.coordinator.onChange = onChange
+        show(text, of: slideID, in: textView, context: context)
+        return scrollView
+    }
+
+    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        let coordinator = context.coordinator
+        coordinator.onChange = onChange
+        guard let textView = coordinator.textView else { return }
+        textView.isEditable = isEditable
+        // Another slide, or the card was written elsewhere (the model); never while letters are being composed.
+        if coordinator.slideID != slideID || (textView.string != text && !textView.hasMarkedText()) {
+            show(text, of: slideID, in: textView, context: context)
+        }
+    }
+
+    private func show(_ text: String, of slideID: PresentationSlide.ID, in textView: NSTextView, context: Context) {
+        let isSameSlide = context.coordinator.slideID == slideID
+        let selection = textView.selectedRange()
+        context.coordinator.slideID = slideID
+        if textView.string != text {
+            textView.string = text
+            textView.textColor = NSColor(Theme.textPrimary)
+            let length = (text as NSString).length
+            textView.setSelectedRange(isSameSlide ? NSRange(location: min(selection.location, length), length: 0) : NSRange(location: 0, length: 0))
+        }
+        find.attachNotes(textView, slideID: slideID)
+    }
+
+    @MainActor
+    final class Coordinator: NSObject, NSTextViewDelegate {
+        weak var textView: NSTextView?
+        var slideID: PresentationSlide.ID?
+        var onChange: ((String) -> Void)?
+
+        func textDidChange(_ notification: Notification) {
+            guard let textView else { return }
+            onChange?(textView.string)
+        }
     }
 }
 

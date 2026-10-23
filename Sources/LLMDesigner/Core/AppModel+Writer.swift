@@ -28,6 +28,17 @@ extension AppModel {
         return document.isPresentation ? .presenter : .writer
     }
 
+    /// ⌘F, ⌘G and ⇧⌘G work in an open document or presentation, also from its analysis or the play tab.
+    var canFindInDocument: Bool {
+        activeApplication == .writer || activeApplication == .presenter
+    }
+
+    func findInDocument(_ command: DocumentFind.Command) {
+        guard canFindInDocument else { return }
+        if writerTab != .document { showWriterTab(.document) }
+        documentFind?.perform(command)
+    }
+
     /// From the applications menu under the composer.
     func openApplication(_ application: StudioApplication) {
         switch application {
