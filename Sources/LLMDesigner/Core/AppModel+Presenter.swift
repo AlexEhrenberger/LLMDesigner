@@ -311,7 +311,7 @@ extension AppModel {
         }
         let answer = try await client.complete(
             model: model,
-            messages: PresenterPrompts.notesMessages(deck: deck, title: document.displayTitle, slideIndex: index),
+            messages: PresenterPrompts.notesMessages(deck: deck, title: document.displayTitle, slideIndex: index, source: deckSources[slideID]),
             temperature: 0.7,
             maxTokens: 1500
         )

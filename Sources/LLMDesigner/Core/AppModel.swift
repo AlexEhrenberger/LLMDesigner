@@ -401,6 +401,10 @@ final class AppModel {
     @ObservationIgnored let presentationPlayer = PresentationPlayer()
     /// The model making a whole presentation from the assistant bar (see AppModel+PresenterGeneration.swift).
     var deckGeneration: DeckGeneration?
+    /// For slides made from a document: the passage each was made from, which the speaker card draws on.
+    @ObservationIgnored var deckSources: [UUID: String] = [:]
+    /// The sheet that makes a presentation from a document (see `DeckFromDocumentSheet`).
+    var deckSourceRequest: DeckSourceRequest?
     @ObservationIgnored var deckGenerationTask: Task<Void, Never>?
     /// The model writing out a handout made from a presentation (see AppModel+PresenterExport.swift).
     var handoutGeneration: HandoutGeneration?

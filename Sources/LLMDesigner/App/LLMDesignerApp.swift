@@ -96,6 +96,8 @@ struct AppCommands: Commands {
                 .keyboardShortcut("n", modifiers: [.command, .control])
             Button("Neue Präsentation") { app.newPresentation() }
                 .keyboardShortcut("p", modifiers: [.command, .control])
+            Button("Präsentation aus Dokument …") { app.showDeckFromDocument() }
+                .keyboardShortcut("p", modifiers: [.command, .option])
             Button("Neuer Skill") { app.createSkill() }
                 .keyboardShortcut("n", modifiers: [.command, .option])
             Button("Neue Persona") { app.createPersona() }

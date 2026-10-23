@@ -30,6 +30,10 @@ struct RootView: View {
         } message: {
             Text(session.message ?? "")
         }
+        .sheet(item: Binding(get: { app.deckSourceRequest }, set: { app.deckSourceRequest = $0 })) { request in
+            DeckFromDocumentSheet(request: request)
+                .environment(app)
+        }
         .alert("PDF-Export fehlgeschlagen", isPresented: exportErrorBinding) {
             Button("OK") {}
         } message: {

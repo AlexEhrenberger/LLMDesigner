@@ -386,6 +386,9 @@ private struct ExportMenu: View {
             Section("Drucken") {
                 Button("Drucken … (⌘P)", systemImage: "printer") { app.printWriterDocument(document.id) }
             }
+            Section("Präsentieren") {
+                Button("Präsentation aus diesem Dokument …", systemImage: StudioApplication.presenter.symbol) { app.showDeckFromDocument(document) }
+            }
         } label: {
             HStack(spacing: 5) {
                 if isExporting {

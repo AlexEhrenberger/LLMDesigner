@@ -271,6 +271,12 @@ Die erste der Applikationen (Menü „Applikationen“ rechts unter dem Eingabef
   - **Python**: das Hauptprogramm und jede Funktion (und Methode) als eigenes Diagramm: Anweisungen, Verzweigungen (`if`/`elif`/`else`, Ja/Nein), Schleifen (`for`, `while`, mit `break` und `continue`), `try`/`except` (der `try`-Teil in einem Kasten, Pfeile „Fehler: …“), Ein- und Ausgabe, `return` und `raise`. Der Code wird gelesen (Einrückung), nicht ausgeführt.
   - **SQL**: ein Diagramm je Anweisung, wie die Datenbank sie abarbeitet: Tabellen, Joins, Filter (`WHERE`), Gruppieren, `HAVING`, Spalten, Sortieren, Begrenzen; Common Table Expressions und Unterabfragen in Kästen; `UNION`, `INSERT`, `UPDATE`, `DELETE`, `CREATE`.
   - **Übernehmen**: „Ins Dokument übernehmen“ legt das Diagramm als Bild unter den Code-Block (hell und dunkel für das Blatt, als Vektorgrafik für LaTeX; eine Unterschrift „Ablauf: …“; im Markdown `{… .diagram}`); nochmaliges Übernehmen ersetzt es. In einer Präsentation entsteht dafür eine neue Folie hinter der Folie mit dem Code, das Diagramm auf weißem Grund, damit es auf jedem Hintergrund lesbar ist.
+- **Präsentation aus Dokument** (Ablage → „Präsentation aus Dokument …“ ⌥⌘P, oder Teilen → „Präsentation aus diesem Dokument …“): aus einem Dokument der Bibliothek oder einer Datei (Markdown, Text, Word, RTF, PDF, HTML) wird eine Präsentation.
+  - **Gliederung**: Aus den Überschriften werden Kapitel und Folien – Kapitel (`{.chapter}`) sind Kapitelfolien, Überschrift 1 (oder 2) Folien, tiefere Überschriften gehören zur Folie darüber. Ein Text ohne brauchbare Überschriften gliedert das Modell selbst in Kapitel und Folien über nummerierte Absätze. Word- und RTF-Dateien verlieren ihre Formatvorlagen; große oder fette kurze Zeilen werden dort zu Überschriften.
+  - **Inhalt**: Das Modell fasst den Text jedes Abschnitts in 3 bis 5 Stichpunkten zusammen (nur, was im Text steht). Die ersten **Formeln, Code-Blöcke und Tabellen** eines Abschnitts und sein erstes **Bild** kommen unverändert auf seine Folie (abschaltbar); mit solchen Objekten bleiben es höchstens drei Stichpunkte.
+  - **Moderatorenkarten**: Zu jeder Folie schreibt das Modell einen Sprechtext, gestützt auf den Text des Abschnitts, nicht nur auf die Stichpunkte.
+  - **Automatisch präsentieren**: Auf Wunsch startet danach das Vorführen im Vollbild, die KI trägt Folie für Folie vor und schaltet selbst weiter.
+  - Die Präsentation ist sofort offen, die Folien füllen sich nacheinander; „Stopp“ hält an, „Rückgängig“ räumt auf.
 - **Geplant**: Citations Studio.
 
 ## Aufbau
@@ -322,6 +328,7 @@ Alle Daten liegen in der geöffneten Bibliothek (siehe „Bibliotheken“): Chat
 | ⌘J | Writer Studio: in die KI-Leiste (esc zurück in den Text) |
 | ⌥⌘A | Writer Studio: zwischen Dokument und Inhaltsanalyse wechseln |
 | ⌘P | Drucken (Writer Studio: mit LaTeX gesetzt; Presenter Studio: die Folien) |
+| ⌥⌘P | Präsentation aus einem Dokument oder einer Datei erstellen |
 | ⌥⇧⌘F | Writer Studio: Code-Block formatieren (Python, SQL) |
 | ⌃⌘Leertaste | Writer Studio: Zeichenpalette (Sonderzeichen, Symbole, Emoji) |
 | ⇥ / ⇧⇥ im Code | Writer Studio: auf den nächsten Vierer-Schritt einrücken / ausrücken |

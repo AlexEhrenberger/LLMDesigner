@@ -24,7 +24,8 @@ enum PresenterPrompts {
     Sprechtext aus, ohne Anführungszeichen drumherum.
     """
 
-    static func notesMessages(deck: PresentationDeck, title: String, slideIndex: Int) -> [ChatPayloadMessage] {
+    /// `source`: the passage of the document the slide was made from; the card then explains it instead of the bare points.
+    static func notesMessages(deck: PresentationDeck, title: String, slideIndex: Int, source: String? = nil) -> [ChatPayloadMessage] {
         let slide = deck.slides[slideIndex]
         var lines: [String] = []
         lines.append("Präsentation: „\(title)“")
@@ -39,6 +40,10 @@ enum PresenterPrompts {
         lines.append("Folie \(slideIndex + 1) von \(deck.slides.count) (\(slide.role.label)):")
         let text = plainText(of: slide)
         lines.append("\"\"\"\n\(text.isEmpty ? "(die Folie hat keinen Text)" : text)\n\"\"\"")
+        if let source, !source.isEmpty {
+            let excerpt = source.count > 2_000 ? String(source.prefix(2_000)) + " …" : source
+            lines.append("\nVorlage – der Text des Dokuments, aus dem diese Folie entstand (daraus darfst du erklären, darüber hinaus erfindest du nichts):\n\"\"\"\n\(excerpt)\n\"\"\"")
+        }
         if slideIndex > 0 {
             // Only the previous slide's title: given its card (even only its last sentence), small models copy it.
             let previous = deck.slides[slideIndex - 1]
