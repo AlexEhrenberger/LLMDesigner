@@ -104,6 +104,11 @@ struct AppCommands: Commands {
                 .keyboardShortcut("n", modifiers: [.command, .shift])
                 .disabled(app.sidebarMode == .personas)
         }
+        CommandGroup(replacing: .printItem) {
+            Button("Drucken …") { app.printOpenDocument() }
+                .keyboardShortcut("p")
+                .disabled(app.selectedDocument == nil || app.exportingIDs.contains(app.selectedDocumentID ?? UUID()))
+        }
         CommandGroup(before: .toolbar) {
             Button(app.sidebarVisible ? "Seitenleiste ausblenden" : "Seitenleiste einblenden") { app.toggleSidebar() }
                 .keyboardShortcut("s", modifiers: [.control, .command])

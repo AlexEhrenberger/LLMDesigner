@@ -383,6 +383,9 @@ private struct ExportMenu: View {
                     Button(format.title, systemImage: format.symbol) { app.exportDocument(as: format) }
                 }
             }
+            Section("Drucken") {
+                Button("Drucken … (⌘P)", systemImage: "printer") { app.printWriterDocument(document.id) }
+            }
         } label: {
             HStack(spacing: 5) {
                 if isExporting {
@@ -406,7 +409,7 @@ private struct ExportMenu: View {
         .fixedSize()
         .onHover { hovering = $0 }
         .disabled(isExporting || document.isEmpty)
-        .help("Exportieren als PDF, LaTeX oder Markdown")
+        .help("Exportieren als PDF, LaTeX oder Markdown, drucken (⌘P) oder daraus eine Präsentation machen")
     }
 }
 
@@ -444,7 +447,7 @@ private struct WriterToolbar: View {
     var body: some View {
         let state = controller.state
         HStack(spacing: 2) {
-            group(0) { FontMenu(document: document) }
+            group(0) { FontMenu(controller: controller, document: document) }
             divider(1)
             group(2) { BlockMenu(controller: controller, current: state.block) }
             divider(3)
@@ -453,6 +456,7 @@ private struct WriterToolbar: View {
             group(6) { markButton("underline", .underline, "Unterstrichen (⌘U)", state) }
             group(7) { markButton("strikethrough", .strikethrough, "Durchgestrichen (⇧⌘X)", state) }
             group(8) { markButton("chevron.left.forwardslash.chevron.right", .code, "Code im Text (⌘E)", state) }
+            group(9) { ColorMenu(controller: controller).disabled(state.block == .code || state.block == .raw || state.block.isEmbed) }
             divider(9)
             group(10) {
                 ToolbarButton(symbol: "list.bullet", help: "Aufzählung (⇧⌘8)", isActive: state.block == .bullet) { controller.setBlock(.bullet) }
@@ -486,7 +490,12 @@ private struct WriterToolbar: View {
                 ) { controller.toggleBookmark() }
             }
             group(18) {
-                ToolbarButton(symbol: "minus", help: "Trennlinie / Abschnittsmarke", isActive: false) { controller.insertRule() }
+                HStack(spacing: 0) {
+                    ToolbarButton(symbol: "minus", help: "Trennlinie / Abschnittsmarke", isActive: false) { controller.insertRule() }
+                    ToolbarButton(symbol: "character.textbox", help: "Sonderzeichen und Symbole (⌃⌘Leertaste) – Pfeile, Griechisch, Mathesymbole, Emoji", isActive: false) {
+                        controller.showCharacterPalette()
+                    }
+                }
             }
             group(19) {
                 HStack(spacing: 0) {
@@ -802,41 +811,6 @@ struct ToolbarButton: View {
     private var background: Color {
         if isActive { return Theme.accent.opacity(0.16) }
         return hovering && isEnabled ? Theme.hover : .clear
-    }
-}
-
-struct FontMenu: View {
-    @Environment(AppModel.self) private var app
-    let document: WriterDocument
-    @State private var hovering = false
-
-    var body: some View {
-        Menu {
-            Section("Schrift des Dokuments") {
-                ForEach(WriterFont.allCases) { font in
-                    Button { app.setDocumentFont(document.id, font) } label: {
-                        if font == document.font { Label(font.label, systemImage: "checkmark") } else { Text(font.label) }
-                    }
-                }
-            }
-        } label: {
-            MenuLabel(symbol: "textformat", title: shortName, hovering: hovering)
-        }
-        .menuStyle(.button)
-        .buttonStyle(.plain)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .onHover { hovering = $0 }
-        .help("Schrift des ganzen Dokuments")
-    }
-
-    private var shortName: String {
-        switch document.font {
-        case .serif: "New York"
-        case .sans: "SF Pro"
-        case .rounded: "Rounded"
-        case .mono: "Mono"
-        }
     }
 }
 

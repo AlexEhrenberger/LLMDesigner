@@ -129,6 +129,7 @@ enum WriterHeadings {
     /// Plain text of a heading's Markdown for places without rich text (formulas stay as LaTeX).
     static func plainTitle(_ title: String) -> String {
         var text = title
+        text = WriterBookmark.strip(text)
         for token in ["**", "~~", "<u>", "</u>", "`"] { text = text.replacingOccurrences(of: token, with: "") }
         text = text.replacingOccurrences(of: #"\\([\\`*_{}\[\]()#+\-.!<>~$|])"#, with: "$1", options: .regularExpression)
         return text.trimmingCharacters(in: .whitespaces)
@@ -148,21 +149,29 @@ struct WriterBookmarkEntry: Identifiable, Equatable {
 extension WriterBookmark {
     /// The bookmarks of a stored document in text order.
     static func entries(in markdown: String) -> [WriterBookmarkEntry] {
-        guard markdown.contains("<span"),
-              let expression = try? NSRegularExpression(pattern: #"<span\s+([^>]*)>(.*?)</span>"#, options: [.dotMatchesLineSeparators]) else { return [] }
+        let tokens = WriterSpans.tokens(in: markdown)
+        guard !tokens.isEmpty else { return [] }
         let text = markdown as NSString
-        var entries: [WriterBookmarkEntry] = []
+        // Spans nest (a bookmark inside a coloured passage and the other way round): the closing tag belongs to the
+        // opening tag last opened.
+        var open: [(token: WriterSpans.Token, bookmark: WriterBookmark?)] = []
+        var found: [(location: Int, entry: WriterBookmarkEntry)] = []
         var seen = Set<String>()
-        for match in expression.matches(in: markdown, range: NSRange(location: 0, length: text.length)) {
-            guard let bookmark = parseTag("<span " + text.substring(with: match.range(at: 1)) + ">"), seen.insert(bookmark.id).inserted else { continue }
-            let excerpt = WriterHeadings.plainTitle(text.substring(with: match.range(at: 2)))
+        for token in tokens {
+            if token.isOpening {
+                open.append((token, parseTag(token.tag)))
+                continue
+            }
+            guard let last = open.popLast(), let bookmark = last.bookmark, seen.insert(bookmark.id).inserted else { continue }
+            let start = NSMaxRange(last.token.range)
+            let excerpt = WriterHeadings.plainTitle(text.substring(with: NSRange(location: start, length: max(0, token.range.location - start))))
             // The last heading before it.
-            let before = text.substring(to: match.range.location)
+            let before = text.substring(to: last.token.range.location)
             let section = before.components(separatedBy: "\n").last { $0.hasPrefix("#") }.map { line in
                 WriterHeadings.plainTitle(strip(WriterMarkdown.headingAttributes(String(line.drop { $0 == "#" || $0 == " " })).text))
             }
-            entries.append(WriterBookmarkEntry(id: bookmark.id, title: bookmark.title.isEmpty ? excerpt : bookmark.title, excerpt: excerpt, section: section))
+            found.append((last.token.range.location, WriterBookmarkEntry(id: bookmark.id, title: bookmark.title.isEmpty ? excerpt : bookmark.title, excerpt: excerpt, section: section)))
         }
-        return entries
+        return found.sorted { $0.location < $1.location }.map(\.entry)
     }
 }

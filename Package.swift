@@ -13,6 +13,12 @@ let package = Package(
             dependencies: [.product(name: "SwiftMath", package: "SwiftMath")],
             path: "Sources/LLMDesigner",
             swiftSettings: [.swiftLanguageMode(.v5)]
-        )
+        ),
+        .testTarget(
+            name: "LLMDesignerTests",
+            dependencies: ["LLMDesigner"],
+            path: "Tests/LLMDesignerTests",
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
     ]
 )

@@ -108,10 +108,39 @@ enum WriterStyler {
     static let listIndent: CGFloat = 26
     static let listStep: CGFloat = 24
 
-    static func bodySize(_ family: WriterFont) -> CGFloat { family == .mono ? 15 : 17 }
+    static func bodySize(_ family: WriterFont) -> CGFloat { family.bodySize }
+
+    private struct FontKey: Hashable {
+        let family: WriterFont
+        let size: CGFloat
+        let weight: CGFloat
+        let italic: Bool
+        let monospaced: Bool
+    }
+
+    nonisolated(unsafe) private static var fontCache: [FontKey: NSFont] = [:]
+    private static let fontCacheLock = NSLock()
 
     static func font(_ family: WriterFont, size: CGFloat, weight: NSFont.Weight = .regular, italic: Bool = false, monospaced: Bool = false) -> NSFont {
-        let base: NSFont = monospaced || family == .mono
+        // Code is always set in the system's monospaced font, whatever the text's font is.
+        let key = FontKey(family: monospaced ? .mono : family, size: size, weight: weight.rawValue, italic: italic, monospaced: monospaced)
+        fontCacheLock.lock()
+        defer { fontCacheLock.unlock() }
+        if let cached = fontCache[key] { return cached }
+        let made = makeFont(key.family, size: size, weight: weight, italic: italic, monospaced: monospaced)
+        fontCache[key] = made
+        return made
+    }
+
+    private static func makeFont(_ family: WriterFont, size: CGFloat, weight: NSFont.Weight, italic: Bool, monospaced: Bool) -> NSFont {
+        // An installed family: bold from the semibold weight on, as the families have no semibold cut.
+        if let name = family.familyName, !monospaced {
+            let bold = weight.rawValue >= NSFont.Weight.semibold.rawValue
+            var traits: NSFontTraitMask = italic ? .italicFontMask : .unitalicFontMask
+            traits.formUnion(bold ? .boldFontMask : .unboldFontMask)
+            if let font = NSFontManager.shared.font(withFamily: name, traits: traits, weight: bold ? 9 : 5, size: size) { return font }
+        }
+        let base: NSFont = monospaced || family.group == .mono
             ? .monospacedSystemFont(ofSize: size, weight: weight)
             : .systemFont(ofSize: size, weight: weight)
         var descriptor = base.fontDescriptor
@@ -119,7 +148,7 @@ enum WriterStyler {
             switch family {
             case .serif: descriptor = descriptor.withDesign(.serif) ?? descriptor
             case .rounded: descriptor = descriptor.withDesign(.rounded) ?? descriptor
-            case .sans, .mono: break
+            default: break
             }
         }
         if italic { descriptor = descriptor.withSymbolicTraits(descriptor.symbolicTraits.union(.italic)) }
@@ -239,10 +268,14 @@ enum WriterStyler {
             attributes[.foregroundColor] = block == .raw ? palette.tertiaryText : palette.text
             return attributes
         }
+        // A passage's own font replaces the document's for this stretch.
+        let passage = WriterSpanStyle(semantic)
+        let family = passage.font ?? family
+        let color = passage.color.flatMap { WriterColors.display($0, onDark: !palette.isLight) }
         if marks.contains(.code) {
             let size = blockFont(block, family: family).pointSize * 0.86
             attributes[.font] = font(family, size: size, weight: marks.contains(.bold) ? .semibold : .regular, monospaced: true)
-            attributes[.foregroundColor] = palette.inlineCodeText
+            attributes[.foregroundColor] = color ?? palette.inlineCodeText
             attributes[.backgroundColor] = palette.inlineCodeBackground
             return attributes
         }
@@ -257,7 +290,7 @@ enum WriterStyler {
         if block.isHeading, marks.contains(.bold) {
             attributes[.font] = blockFont(block, family: family, italic: marks.contains(.italic)).withWeight(.heavy)
         }
-        attributes[.foregroundColor] = block == .quote ? palette.secondaryText : palette.text
+        attributes[.foregroundColor] = color ?? (block == .quote ? palette.secondaryText : palette.text)
         return attributes
     }
 
@@ -335,7 +368,12 @@ enum WriterStyler {
 
     /// Typing attributes for a paragraph with this block and these marks.
     static func typingAttributes(block: WriterBlock, level: Int, semantic: [NSAttributedString.Key: Any], family: WriterFont, palette: WriterPalette) -> [NSAttributedString.Key: Any] {
-        var attributes = semantic.filter { [.writerBold, .writerItalic, .writerCode, .underlineStyle, .strikethroughStyle, .link].contains($0.key) }
+        var attributes = semantic.filter { [.writerBold, .writerItalic, .writerCode, .underlineStyle, .strikethroughStyle, .link, .writerColor, .writerFont].contains($0.key) }
+        // Code has no colours or fonts of its own.
+        if block == .code || block == .raw {
+            attributes.removeValue(forKey: .writerColor)
+            attributes.removeValue(forKey: .writerFont)
+        }
         let cell = block == .table ? WriterTableCell(semantic) : nil
         let block: WriterBlock = block == .table && cell == nil ? .paragraph : block
         attributes[.writerBlock] = block.rawValue

@@ -19,6 +19,10 @@ final class WriterEditorController {
     @ObservationIgnored weak var app: AppModel?
 
     func toggle(_ mark: WriterInline) { perform { $0.toggle(mark) } }
+    func setTextColor(_ hex: String?) { perform { $0.setTextColor(hex) } }
+    func setTextFont(_ font: WriterFont?) { perform { $0.setTextFont(font) } }
+    /// macOS's palette of special characters, symbols and emoji; what is chosen goes in at the caret.
+    func showCharacterPalette() { perform { _ in NSApp.orderFrontCharacterPalette(nil) } }
     func setBlock(_ block: WriterBlock, toggle: Bool = true) { perform { $0.setBlock(block, toggle: toggle) } }
     func changeListLevel(by step: Int) { perform { $0.changeListLevel(by: step) } }
     func insertRule() { perform { $0.insertRule() } }

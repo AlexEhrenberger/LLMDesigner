@@ -228,9 +228,19 @@ extension AppModel {
     }
 }
 
+/// A document made ready for export and print, see `AppModel.prepareExport(of:)`.
+struct WriterExportInput {
+    let document: WriterDocument
+    let markdown: String
+    let figures: [String: URL]
+    let printFigures: [String: URL]
+    let bibliography: [StyledText]
+    let part: LaTeXWriter.Part
+}
+
 /// The formats a Writer Studio document can be saved as.
 enum WriterExportFormat: CaseIterable, Identifiable {
-    case pdf, latex, markdown
+    case pdf, latex, markdown, plainMarkdown
 
     var id: Self { self }
 
@@ -239,6 +249,7 @@ enum WriterExportFormat: CaseIterable, Identifiable {
         case .pdf: "Als PDF …"
         case .latex: "Als LaTeX (.tex) …"
         case .markdown: "Als Markdown (.md) …"
+        case .plainMarkdown: "Als reines Markdown (ohne Farben, Schriften) …"
         }
     }
 
@@ -247,6 +258,7 @@ enum WriterExportFormat: CaseIterable, Identifiable {
         case .pdf: "doc.richtext"
         case .latex: "function"
         case .markdown: "number"
+        case .plainMarkdown: "number.square"
         }
     }
 
@@ -254,7 +266,7 @@ enum WriterExportFormat: CaseIterable, Identifiable {
         switch self {
         case .pdf: .pdf
         case .latex: UTType(filenameExtension: "tex") ?? .plainText
-        case .markdown: UTType(filenameExtension: "md") ?? .plainText
+        case .markdown, .plainMarkdown: UTType(filenameExtension: "md") ?? .plainText
         }
     }
 }
@@ -272,57 +284,41 @@ extension AppModel {
         }
         exportingIDs.insert(document.id)
         Task {
-            // A dynamic table of contents in the text is brought up to date first, like the chat export does.
-            if WriterTOCAttachment.kind(in: document.markdown) == true, client != nil,
-               document.outline == nil || DocumentOutlineBuilder.isOutdated(document) {
-                await refreshDocumentOutline(document.id)?.value
-            }
-            let current = self.document(document.id) ?? document
-            let markdown = current.markdown.trimmingCharacters(in: .whitespacesAndNewlines) + "\n"
-            // The pictures that are on this Mac, by their Markdown source; LaTeX prints a plot's PDF version.
-            var figures: [String: URL] = [:]
-            var printFigures: [String: URL] = [:]
-            for reference in markdown.components(separatedBy: "\n").compactMap(WriterImageReference.parse) {
-                if let url = WriterImageStore.url(for: reference.source) { figures[reference.source] = url }
-                if let url = WriterImageStore.printURL(for: reference) { printFigures[reference.source] = url }
-            }
-            // Citations are set in APA for LaTeX and PDF; the Markdown keeps Pandoc's `[@key]`.
-            citations.loadIfNeeded()
-            let style = CitationStyle(sources: citations.sources, cited: CitationMarkup.keys(in: markdown))
-            let bibliography = style.bibliography(CitationMarkup.keys(in: markdown)).map(\.text)
-            var part = LaTeXWriter.Part(text: CitationExport.resolve(markdown, style: style))
-            part.figures = printFigures
-            part.bibliography = bibliography
-            if let contents = latexContents(of: current.outline, in: markdown) {
-                part.contents = contents.outline
-                part.blockAnchors = contents.anchors
-            }
+            let input = await prepareExport(of: document)
+            let current = input.document
+            let markdown = input.markdown
+            let figures = input.figures
+            let printFigures = input.printFigures
+            let bibliography = input.bibliography
+            let part = input.part
 
             do {
                 switch format {
-                case .markdown, .latex:
+                case .markdown, .plainMarkdown, .latex:
                     exportingIDs.remove(document.id)
                     guard let url = await askForDestination(fileName: current.displayTitle, type: format.type) else { return }
                     // The pictures go into a folder next to the file, e.g. "Aufsatz-Bilder".
-                    let used = format == .markdown ? figures : printFigures
+                    let used = format == .latex ? printFigures : figures
                     let folder = used.isEmpty ? nil : figureFolderName(for: url)
                     if let folder {
                         try copyFigures(Array(used.values), to: url.deletingLastPathComponent().appendingPathComponent(folder, isDirectory: true))
                     }
                     let text: String
-                    if format == .markdown {
-                        let exported = CitationExport.expandBibliography(in: WriterMarkdownExport.expandTableOfContents(in: markdown, outline: current.outline),
+                    if format != .latex {
+                        var exported = CitationExport.expandBibliography(in: WriterMarkdownExport.expandTableOfContents(in: markdown, outline: current.outline),
                                                                          entries: bibliography)
+                        // Plain Markdown is for programs that only know Markdown: no colours, fonts, bookmarks or underline.
+                        if format == .plainMarkdown { exported = WriterMarkdownExport.plain(exported) }
                         text = folder.map { folder in
                             WriterImageStore.rewriteSources(in: exported) { figures[$0].map { folder + "/" + $0.lastPathComponent } }
                         } ?? exported
                     } else {
-                        text = LaTeXWriter.document(parts: [part], paper: paper, math: .native, figureFolder: folder)
+                        text = LaTeXWriter.document(parts: [part], paper: paper, math: .native, figureFolder: folder, typeface: current.font)
                     }
                     try text.write(to: url, atomically: true, encoding: .utf8)
                 case .pdf:
                     guard let engine else { return }
-                    let pdf = try await engine.makePDF(parts: [part], paper: paper)
+                    let pdf = try await engine.makePDF(parts: [part], paper: paper, typeface: current.font)
                     exportingIDs.remove(document.id)
                     guard let url = await askForDestination(fileName: current.displayTitle, type: .pdf) else { return }
                     try pdf.write(to: url, options: .atomic)
@@ -333,6 +329,38 @@ extension AppModel {
                 exportError = error.localizedDescription
             }
         }
+    }
+
+    /// Everything an export or a print needs of a document: its text, the pictures on this Mac, the reference list,
+    /// and the text as a LaTeX part with citations set in APA and the table of contents made.
+    func prepareExport(of document: WriterDocument) async -> WriterExportInput {
+        // A dynamic table of contents in the text is brought up to date first, like the chat export does.
+        if WriterTOCAttachment.kind(in: document.markdown) == true, client != nil,
+           document.outline == nil || DocumentOutlineBuilder.isOutdated(document) {
+            await refreshDocumentOutline(document.id)?.value
+        }
+        let current = self.document(document.id) ?? document
+        let markdown = current.markdown.trimmingCharacters(in: .whitespacesAndNewlines) + "\n"
+        // The pictures that are on this Mac, by their Markdown source; LaTeX prints a plot's PDF version.
+        var figures: [String: URL] = [:]
+        var printFigures: [String: URL] = [:]
+        for reference in markdown.components(separatedBy: "\n").compactMap(WriterImageReference.parse) {
+            if let url = WriterImageStore.url(for: reference.source) { figures[reference.source] = url }
+            if let url = WriterImageStore.printURL(for: reference) { printFigures[reference.source] = url }
+        }
+        // Citations are set in APA for LaTeX and PDF; the Markdown keeps Pandoc's `[@key]`.
+        citations.loadIfNeeded()
+        let style = CitationStyle(sources: citations.sources, cited: CitationMarkup.keys(in: markdown))
+        let bibliography = style.bibliography(CitationMarkup.keys(in: markdown)).map(\.text)
+        var part = LaTeXWriter.Part(text: CitationExport.resolve(markdown, style: style))
+        part.figures = printFigures
+        part.bibliography = bibliography
+        if let contents = latexContents(of: current.outline, in: markdown) {
+            part.contents = contents.outline
+            part.blockAnchors = contents.anchors
+        }
+        return WriterExportInput(document: current, markdown: markdown, figures: figures, printFigures: printFigures,
+                                 bibliography: bibliography, part: part)
     }
 
     /// The model's table of contents for LaTeX: its entries, and labels in front of the blocks they point to.
@@ -383,6 +411,14 @@ private func copyFigures(_ files: [URL], to folder: URL) throws {
 
 /// Markdown for other programs: the table of contents marker becomes a list of the headings with links.
 enum WriterMarkdownExport {
+    /// Markdown without what Markdown can't say: the spans of colours, fonts and bookmarks and the underline tags go;
+    /// the text stays. (The Markdown the library stores keeps them, as HTML in the text, which most programs show.)
+    static func plain(_ markdown: String) -> String {
+        WriterBookmark.strip(markdown)
+            .replacingOccurrences(of: "<u>", with: "")
+            .replacingOccurrences(of: "</u>", with: "")
+    }
+
     static func expandTableOfContents(in markdown: String, outline: DocumentOutline? = nil) -> String {
         if WriterTOCAttachment.kind(in: markdown) == true {
             // The model's topics as a numbered list with their points.

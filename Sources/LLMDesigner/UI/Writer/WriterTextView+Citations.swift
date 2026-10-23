@@ -158,7 +158,7 @@ extension WriterTextView {
     private func replaceInline(_ range: NSRange, with text: NSMutableAttributedString) {
         guard let storage = textStorage else { return }
         var attributes = typingAttributes.filter {
-            [.writerBold, .writerItalic, .underlineStyle, .strikethroughStyle, .writerBlock, .writerListLevel, .writerBookmark].contains($0.key)
+            [.writerBold, .writerItalic, .underlineStyle, .strikethroughStyle, .writerBlock, .writerListLevel, .writerBookmark, .writerColor, .writerFont].contains($0.key)
                 || WriterMarkdown.tableKeys.contains($0.key)
         }
         attributes.removeValue(forKey: .writerCode)

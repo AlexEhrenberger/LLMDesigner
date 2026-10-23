@@ -87,22 +87,6 @@ struct WriterDocument: Identifiable, Hashable, Sendable {
     }
 }
 
-/// The typeface of a whole document. Markdown has no fonts per passage, so the choice belongs to the document.
-enum WriterFont: String, CaseIterable, Identifiable, Sendable {
-    case serif, sans, rounded, mono
-
-    var id: String { rawValue }
-
-    var label: String {
-        switch self {
-        case .serif: "New York (Serifen)"
-        case .sans: "SF Pro"
-        case .rounded: "SF Pro Rounded"
-        case .mono: "SF Mono"
-        }
-    }
-}
-
 /// Every document is a Markdown file with a short header (front matter) in the library's `Documents` folder.
 struct WriterDocumentStore {
     let directory: URL

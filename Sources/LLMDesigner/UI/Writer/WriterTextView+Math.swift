@@ -143,7 +143,7 @@ extension WriterTextView {
         if display {
             insertDisplayFormula(latex, plot: plot)
         } else {
-            var attributes = typingAttributes.filter { [.writerBold, .writerItalic, .underlineStyle, .strikethroughStyle, .link, .writerBlock, .writerListLevel, .writerBookmark].contains($0.key) || WriterMarkdown.tableKeys.contains($0.key) }
+            var attributes = typingAttributes.filter { [.writerBold, .writerItalic, .underlineStyle, .strikethroughStyle, .link, .writerBlock, .writerListLevel, .writerBookmark, .writerColor, .writerFont].contains($0.key) || WriterMarkdown.tableKeys.contains($0.key) }
             attributes.removeValue(forKey: .writerCode)
             let text = NSMutableAttributedString(attachment: WriterMathAttachment(latex: latex))
             text.addAttributes(attributes, range: NSRange(location: 0, length: text.length))

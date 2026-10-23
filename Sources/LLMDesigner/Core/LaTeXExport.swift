@@ -81,7 +81,9 @@ enum LaTeXWriter {
     }
 
     /// `figureFolder`: where the figure files are, relative to the document (nil: next to it).
-    static func document(parts: [Part], outline: Outline? = nil, paper: PaperSize, math: MathMode, figureFolder: String? = nil) -> String {
+    /// `typeface`: the font of a Writer Studio document (nil: LaTeX's own). Fonts that passages carry are set up too.
+    static func document(parts: [Part], outline: Outline? = nil, paper: PaperSize, math: MathMode, figureFolder: String? = nil,
+                         typeface: WriterFont? = nil) -> String {
         var body: [String] = []
         // Writer Studio documents with chapters are set as a report, where \chapter exists.
         let hasChapters = parts.contains { $0.figures != nil && WriterHeadings.hasChapters($0.text) }
@@ -102,7 +104,9 @@ enum LaTeXWriter {
             body.append(section)
         }
         let contents = outline.map { tableOfContents($0, math: math) } ?? ""
-        return preamble(paper, documentClass: hasChapters ? "report" : "article") + "\\begin{document}\n" + contents
+        let spanFonts = parts.filter { $0.figures != nil }.flatMap { WriterSpans.fonts(in: $0.text) }
+        return preamble(paper, documentClass: hasChapters ? "report" : "article", typeface: typeface, spanFonts: spanFonts)
+            + "\\begin{document}\n" + contents
             + body.joined(separator: "\n\n\\bigskip\n\n") + "\n\\end{document}\n"
     }
 
@@ -183,12 +187,33 @@ enum LaTeXWriter {
 
     // MARK: - Preamble
 
-    private static func preamble(_ paper: PaperSize, documentClass: String = "article") -> String {
+    /// The fonts: the document's text font and a code font (both only when it is set), and one font family per
+    /// font that passages use, `\llmdfont<name>`. A font this Mac lacks is skipped, LaTeX's own stays.
+    private static func fontSetup(typeface: WriterFont?, spanFonts: [WriterFont]) -> String {
+        var lines: [String] = []
+        if let typeface {
+            lines.append("\\IfFontExistsTF{\(typeface.latexFamily)}{\\setmainfont{\(typeface.latexFamily)}\(typeface.latexOptions ?? "")}{}")
+            lines.append("\\IfFontExistsTF{Menlo}{\\setmonofont{Menlo}[Scale=MatchLowercase]}{}")
+        }
+        var seen = Set<WriterFont>()
+        for font in spanFonts where seen.insert(font).inserted {
+            let macro = fontMacro(font)
+            lines.append("\\IfFontExistsTF{\(font.latexFamily)}{\\newfontfamily\\\(macro){\(font.latexFamily)}\(font.latexOptions ?? "")}{\\newcommand{\\\(macro)}{}}")
+        }
+        return lines.isEmpty ? "" : lines.joined(separator: "\n") + "\n"
+    }
+
+    /// The switch that sets text in a passage's font: letters only, so it is a valid macro name.
+    static func fontMacro(_ font: WriterFont) -> String { "llmdfont" + font.rawValue }
+
+    private static func preamble(_ paper: PaperSize, documentClass: String = "article", typeface: WriterFont? = nil,
+                                 spanFonts: [WriterFont] = []) -> String {
         #"""
         \documentclass[11pt]{\#(documentClass)}
         \usepackage[\#(paper.geometry)]{geometry}
         \usepackage{amsmath}
         \usepackage{fontspec}
+        \#(fontSetup(typeface: typeface, spanFonts: spanFonts))
         \usepackage{unicode-math}
         \setmathfont{latinmodern-math.otf}
         \usepackage[ngerman,shorthands=off]{babel}
@@ -432,10 +457,12 @@ enum LaTeXWriter {
     private static func inline(_ source: String, math: MathMode) -> String {
         var markdown = ""
         var formulas: [String] = []
-        // Writer Studio stores underline as <u>…</u>, and line breaks in table cells as <br>. Placeholders made of
-        // letters carry them through the Markdown parser and the escaping (it drops private-use characters).
+        // Writer Studio stores underline as <u>…</u>, colours and fonts of passages as <span style="…">, and line
+        // breaks in table cells as <br>. Placeholders made of letters carry them through the Markdown parser and
+        // the escaping (it drops private-use characters); they are set again run by run, so braces always balance.
         // Bookmarks only matter in the editor.
-        let source = WriterBookmark.strip(source)
+        let (spanned, styles) = convertSpans(source)
+        let source = spanned
             .replacingOccurrences(of: "<u>", with: Self.underlineOpen).replacingOccurrences(of: "</u>", with: Self.underlineClose)
             .replacingOccurrences(of: #"<br\s*/?>"#, with: Self.lineBreak, options: [.regularExpression, .caseInsensitive])
         for segment in MathTokenizer.segments(source.trimmingCharacters(in: .whitespacesAndNewlines)) {
@@ -455,32 +482,103 @@ enum LaTeXWriter {
 
         var output = ""
         var formulaIndex = 0
+        // What is open across runs: the passages' styles and underline.
+        var styleStack: [WriterSpanStyle] = []
+        var underlined = 0
         for run in attributed.runs {
             let text = String(attributed.characters[run.range])
             let intent = run.inlinePresentationIntent ?? []
 
+            /// Sets one stretch of text in what is open now.
+            func wrap(_ piece: String) -> String {
+                guard !piece.isEmpty else { return piece }
+                var result = piece
+                let color = styleStack.reversed().compactMap(\.color).first
+                let font = styleStack.reversed().compactMap(\.font).first
+                if let font { result = "{\\\(fontMacro(font)){}\(result)}" }
+                if let color { result = "\\textcolor[HTML]{\(color)}{\(result)}" }
+                if underlined > 0 { result = "\\uline{\(result)}" }
+                return result
+            }
+            /// The stretches of the run between the placeholders, with the state at each.
+            func stretches(_ text: String, _ set: (String) -> String) -> String {
+                var result = ""
+                var rest = Substring(text)
+                while !rest.isEmpty {
+                    guard let marker = rest.range(of: #"LLMDSPANO\d+X|LLMDSPANCX|LLMDULINEOPENX|LLMDULINECLOSEX"#, options: .regularExpression) else {
+                        result += wrap(set(String(rest)))
+                        break
+                    }
+                    result += wrap(set(String(rest[..<marker.lowerBound])))
+                    let token = rest[marker]
+                    if token.hasPrefix("LLMDSPANO"), let number = Int(token.dropFirst(9).dropLast()), number < styles.count {
+                        styleStack.append(styles[number])
+                    } else if token == "LLMDSPANCX" {
+                        _ = styleStack.popLast()
+                    } else if token == Self.underlineOpen {
+                        underlined += 1
+                    } else if token == Self.underlineClose {
+                        underlined = max(0, underlined - 1)
+                    }
+                    rest = rest[marker.upperBound...]
+                }
+                return result
+            }
+
             if intent.contains(.code) {
-                output += "\\texttt{\(escape(text))}"
+                output += stretches(text) { "\\texttt{\(escape($0))}" }
                 continue
             }
 
-            var piece = ""
-            for (index, fragment) in text.components(separatedBy: placeholder).enumerated() {
-                if index > 0, formulaIndex < formulas.count {
-                    piece += inlineMath(formulas[formulaIndex], math: math)
-                    formulaIndex += 1
+            let piece = stretches(text) { fragment in
+                var part = ""
+                for (index, chunk) in fragment.components(separatedBy: placeholder).enumerated() {
+                    if index > 0, formulaIndex < formulas.count {
+                        part += inlineMath(formulas[formulaIndex], math: math)
+                        formulaIndex += 1
+                    }
+                    part += escape(chunk).replacingOccurrences(of: "\n", with: "\\newline\n")
+                        .replacingOccurrences(of: Self.lineBreak, with: "\\newline{}")
                 }
-                piece += escape(fragment).replacingOccurrences(of: "\n", with: "\\newline\n")
-                    .replacingOccurrences(of: Self.underlineOpen, with: "\\uline{").replacingOccurrences(of: Self.underlineClose, with: "}")
-                    .replacingOccurrences(of: Self.lineBreak, with: "\\newline{}")
+                return part
             }
-            if intent.contains(.stronglyEmphasized) { piece = "\\textbf{\(piece)}" }
-            if intent.contains(.emphasized) { piece = "\\emph{\(piece)}" }
-            if intent.contains(.strikethrough) { piece = "\\sout{\(piece)}" }
-            if let link = run.link { piece = "\\href{\(escapeURL(link.absoluteString))}{\(piece)}" }
-            output += piece
+            var wrapped = piece
+            if intent.contains(.stronglyEmphasized) { wrapped = "\\textbf{\(wrapped)}" }
+            if intent.contains(.emphasized) { wrapped = "\\emph{\(wrapped)}" }
+            if intent.contains(.strikethrough) { wrapped = "\\sout{\(wrapped)}" }
+            if let link = run.link { wrapped = "\\href{\(escapeURL(link.absoluteString))}{\(wrapped)}" }
+            output += wrapped
         }
         return output
+    }
+
+    /// Replaces the spans of a text: colour and font spans by placeholders (`LLMDSPANO<n>X`, `LLMDSPANCX`) that
+    /// stand for the n-th style in the result, bookmark spans by nothing.
+    static func convertSpans(_ source: String) -> (text: String, styles: [WriterSpanStyle]) {
+        let tokens = WriterSpans.tokens(in: source)
+        guard !tokens.isEmpty else { return (source, []) }
+        var styles: [WriterSpanStyle] = []
+        var stack: [Bool] = []
+        let result = NSMutableString(string: source)
+        // The stack needs the text's order; the replacements are made from the end, so the ranges stay valid.
+        var replacements: [(NSRange, String)] = []
+        for token in tokens {
+            if token.isOpening {
+                if let style = WriterSpanStyle(tag: token.tag) {
+                    stack.append(true)
+                    replacements.append((token.range, "LLMDSPANO\(styles.count)X"))
+                    styles.append(style)
+                } else {
+                    stack.append(false)
+                    replacements.append((token.range, ""))
+                }
+            } else {
+                let isStyle = stack.popLast() ?? false
+                replacements.append((token.range, isStyle ? "LLMDSPANCX" : ""))
+            }
+        }
+        for (range, text) in replacements.reversed() { result.replaceCharacters(in: range, with: text) }
+        return (result as String, styles)
     }
 
     private static let underlineOpen = "LLMDULINEOPENX"
@@ -504,8 +602,8 @@ enum LaTeXWriter {
                 continue
             }
             if isEmoji(character) { continue }
-            if let scalar = character.unicodeScalars.first, (0x0370...0x03FF).contains(scalar.value) {
-                output += "\\(\(character)\\)"   // Greek letters come from the math font
+            if let scalar = character.unicodeScalars.first, character.unicodeScalars.count == 1, isMathCharacter(scalar.value) {
+                output += "\\(\(character)\\)"   // Greek letters, arrows and mathematical symbols come from the math font
                 continue
             }
             switch character {
@@ -527,6 +625,16 @@ enum LaTeXWriter {
             }
         }
         return output
+    }
+
+    /// Characters the text fonts rarely have but the math font does: Greek, arrows, mathematical operators and symbols.
+    private static func isMathCharacter(_ value: UInt32) -> Bool {
+        switch value {
+        case 0x0370...0x03FF, 0x2190...0x21FF, 0x2200...0x22FF, 0x27C0...0x27EF, 0x27F0...0x27FF, 0x2900...0x297F, 0x2980...0x29FF, 0x2A00...0x2AFF:
+            true
+        default:
+            false
+        }
     }
 
     private static func escapeURL(_ url: String) -> String {
@@ -573,10 +681,10 @@ struct LaTeXEngine: Sendable {
     }
 
     /// Tries the document with native formulas first, then falls back to printing problematic formulas as code.
-    func makePDF(parts: [LaTeXWriter.Part], outline: LaTeXWriter.Outline? = nil, paper: PaperSize) async throws -> Data {
+    func makePDF(parts: [LaTeXWriter.Part], outline: LaTeXWriter.Outline? = nil, paper: PaperSize, typeface: WriterFont? = nil) async throws -> Data {
         var lastError: Error = PDFExportError.compileFailed("")
         for mode in LaTeXWriter.MathMode.allCases {
-            let source = await MainActor.run { LaTeXWriter.document(parts: parts, outline: outline, paper: paper, math: mode) }
+            let source = await MainActor.run { LaTeXWriter.document(parts: parts, outline: outline, paper: paper, math: mode, typeface: typeface) }
             do {
                 return try await compile(source, images: parts.flatMap(\.images) + parts.flatMap { Array(($0.figures ?? [:]).values) })
             } catch {

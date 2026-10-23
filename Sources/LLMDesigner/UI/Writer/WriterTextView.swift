@@ -444,6 +444,9 @@ final class WriterTextView: NSTextView {
     struct State: Equatable {
         var marks: WriterInline = []
         var block: WriterBlock = .paragraph
+        /// The colour (six hex digits) and font of the passage; nil: the text's own.
+        var passageColor: String?
+        var passageFont: WriterFont?
         var hasLink = false
         var hasSelection = false
         /// The start of the selected text, for the assistant bar.
@@ -492,6 +495,9 @@ final class WriterTextView: NSTextView {
             state.marks = WriterInline(attributes)
         }
         state.hasLink = attributes[.link] != nil
+        let passage = WriterSpanStyle(attributes)
+        state.passageColor = passage.color
+        state.passageFont = passage.font
         if hasTextSelection {
             let text = (storage.string as NSString).substring(with: range)
                 .replacingOccurrences(of: "\n", with: " ").replacingOccurrences(of: "\u{FFFC}", with: "")
@@ -618,7 +624,7 @@ final class WriterTextView: NSTextView {
             for paragraph in paragraphs where paragraph.range.length > 0 {
                 storage.addAttributes([.writerBlock: target.rawValue, .writerListLevel: target.isList ? paragraph.level : 0], range: paragraph.range)
                 if target == .code || target == .raw {
-                    for key in [NSAttributedString.Key.writerBold, .writerItalic, .writerCode, .underlineStyle, .strikethroughStyle, .link] {
+                    for key in [NSAttributedString.Key.writerBold, .writerItalic, .writerCode, .underlineStyle, .strikethroughStyle, .link, .writerColor, .writerFont] {
                         storage.removeAttribute(key, range: paragraph.range)
                     }
                 }
@@ -783,7 +789,7 @@ final class WriterTextView: NSTextView {
             if shouldChangeText(in: paragraph, replacementString: nil) {
                 storage.beginEditing()
                 storage.addAttributes([.writerBlock: block.rawValue, .writerListLevel: 0], range: paragraph)
-                for key in [NSAttributedString.Key.writerBold, .writerItalic, .writerCode, .underlineStyle, .strikethroughStyle, .link] {
+                for key in [NSAttributedString.Key.writerBold, .writerItalic, .writerCode, .underlineStyle, .strikethroughStyle, .link, .writerColor, .writerFont] {
                     storage.removeAttribute(key, range: paragraph)
                 }
                 storage.endEditing()

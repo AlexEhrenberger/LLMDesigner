@@ -71,6 +71,9 @@ extension NSAttributedString.Key {
     static let writerTableColumn = NSAttributedString.Key("LLMDesigner.writer.tableColumn")
     /// A bookmark (`WriterBookmark`) on the marked passage.
     static let writerBookmark = NSAttributedString.Key("LLMDesigner.writer.bookmark")
+    /// The passage's own colour (six hex digits, see `WriterColors`) and font (`WriterFont.rawValue`).
+    static let writerColor = NSAttributedString.Key("LLMDesigner.writer.color")
+    static let writerFont = NSAttributedString.Key("LLMDesigner.writer.font")
 }
 
 /// A bookmark in a document: a marked passage with a name. In Markdown it is an HTML span around the passage,
@@ -370,19 +373,19 @@ enum WriterMarkdown {
     /// Inline Markdown: `**bold**`, `*italic*`, `<u>underlined</u>`, `~~struck~~`, `` `code` `` and `[links](url)`.
     static func inline(_ text: String) -> NSAttributedString {
         let result = NSMutableAttributedString()
-        appendInline(Array(text), marks: [], link: nil, bookmark: nil, to: result)
+        appendInline(Array(text), marks: [], link: nil, bookmark: nil, style: nil, to: result)
         return result
     }
 
     private static func appendInline(_ characters: [Character], marks initial: WriterInline, link: String?, bookmark: WriterBookmark?,
-                                     to result: NSMutableAttributedString) {
+                                     style: WriterSpanStyle?, to result: NSMutableAttributedString) {
         var marks = initial
         var buffer = ""
         var index = 0
 
         func flush() {
             guard !buffer.isEmpty else { return }
-            result.append(NSAttributedString(string: buffer, attributes: attributes(marks, link: link, bookmark: bookmark)))
+            result.append(NSAttributedString(string: buffer, attributes: attributes(marks, link: link, bookmark: bookmark, style: style)))
             buffer = ""
         }
         /// An inline formula becomes a picture in the text that carries the marks around it.
@@ -391,7 +394,7 @@ enum WriterMarkdown {
             guard !latex.isEmpty else { return }
             flush()
             let formula = NSMutableAttributedString(attachment: WriterMathAttachment(latex: latex))
-            formula.addAttributes(attributes(marks, link: link, bookmark: bookmark), range: NSRange(location: 0, length: formula.length))
+            formula.addAttributes(attributes(marks, link: link, bookmark: bookmark, style: style), range: NSRange(location: 0, length: formula.length))
             result.append(formula)
         }
         func matches(_ token: String, at position: Int) -> Bool {
@@ -461,17 +464,16 @@ enum WriterMarkdown {
                 index = close + 2
                 continue
             }
-            // A bookmark: `<span id="…" title="…">…</span>`.
-            if character == "<", bookmark == nil, matches("<span", at: index), let tagEnd = characters[index...].firstIndex(of: ">"),
-               let close = find(Array("</span>"), in: characters, from: tagEnd + 1) {
+            // A span: a bookmark (`<span id="…" title="…">`) or a colour and font (`<span style="color:#C0392B">`),
+            // which may contain each other.
+            if character == "<", matches("<span", at: index), let tagEnd = characters[index...].firstIndex(of: ">"),
+               let close = WriterSpans.closing(in: characters, from: tagEnd + 1) {
                 flush()
                 let tag = String(characters[index...tagEnd])
                 let inner = Array(characters[(tagEnd + 1)..<close])
-                if let mark = WriterBookmark.parseTag(tag) {
-                    appendInline(inner, marks: marks, link: link, bookmark: mark, to: result)
-                } else {
-                    appendInline(inner, marks: marks, link: link, bookmark: nil, to: result)
-                }
+                let mark = bookmark ?? WriterBookmark.parseTag(tag)
+                let innerStyle = WriterSpanStyle(tag: tag).map { $0.over(style) } ?? style
+                appendInline(inner, marks: marks, link: link, bookmark: mark, style: innerStyle, to: result)
                 index = close + 7
                 continue
             }
@@ -491,7 +493,7 @@ enum WriterMarkdown {
                     if fence > 1, code.hasPrefix(" "), code.hasSuffix(" "), code.count >= 2 {
                         code = String(code.dropFirst().dropLast())
                     }
-                    result.append(NSAttributedString(string: code, attributes: attributes(marks.union(.code), link: link, bookmark: bookmark)))
+                    result.append(NSAttributedString(string: code, attributes: attributes(marks.union(.code), link: link, bookmark: bookmark, style: style)))
                     index = end + fence
                     continue
                 }
@@ -525,14 +527,14 @@ enum WriterMarkdown {
                characters[(index + 1)..<close].contains("@"), let items = CitationMarkup.parse(String(characters[(index + 1)..<close])) {
                 flush()
                 let citation = NSMutableAttributedString(attachment: WriterCitationAttachment(items: items))
-                citation.addAttributes(attributes(marks, link: link, bookmark: bookmark), range: NSRange(location: 0, length: citation.length))
+                citation.addAttributes(attributes(marks, link: link, bookmark: bookmark, style: style), range: NSRange(location: 0, length: citation.length))
                 result.append(citation)
                 index = close + 1
                 continue
             }
             if character == "[", link == nil, let (text, url, end) = linkSyntax(in: characters, at: index) {
                 flush()
-                appendInline(text, marks: marks, link: url, bookmark: bookmark, to: result)
+                appendInline(text, marks: marks, link: url, bookmark: bookmark, style: style, to: result)
                 index = end
                 continue
             }
@@ -576,8 +578,8 @@ enum WriterMarkdown {
         return (Array(characters[(position + 1)..<closeBracket]), url, closeParen + 1)
     }
 
-    private static func attributes(_ marks: WriterInline, link: String?, bookmark: WriterBookmark?) -> [NSAttributedString.Key: Any] {
-        var attributes: [NSAttributedString.Key: Any] = [:]
+    private static func attributes(_ marks: WriterInline, link: String?, bookmark: WriterBookmark?, style: WriterSpanStyle?) -> [NSAttributedString.Key: Any] {
+        var attributes: [NSAttributedString.Key: Any] = style?.attributes ?? [:]
         for mark in [WriterInline.bold, .italic, .underline, .strikethrough, .code] where marks.contains(mark) {
             if let attribute = mark.attribute { attributes[attribute.key] = attribute.value }
         }
@@ -780,6 +782,7 @@ enum WriterMarkdown {
         var open: [WriterInline] = []
         var openLink: String?
         var openBookmark: WriterBookmark?
+        var openStyle: WriterSpanStyle?
         var pendingSpace = ""
         let order: [WriterInline] = [.bold, .italic, .underline, .strikethrough]
 
@@ -804,6 +807,8 @@ enum WriterMarkdown {
             let marks = WriterInline(attributes)
             let link: String? = (attributes[.link] as? URL)?.absoluteString ?? attributes[.link] as? String
             let bookmark = attributes[.writerBookmark] as? WriterBookmark
+            let spanStyle = WriterSpanStyle(attributes)
+            let style: WriterSpanStyle? = spanStyle.isEmpty ? nil : spanStyle
 
             let leading = isObject ? "" : String(raw.prefix(while: { $0 == " " || $0 == "\t" }))
             let rest = raw.dropFirst(leading.count)
@@ -814,11 +819,17 @@ enum WriterMarkdown {
                 return
             }
 
-            // Close what this stretch doesn't have, from the inside out.
+            // Close what this stretch doesn't have, from the inside out: marks, link, colour and font, bookmark.
             if openBookmark != bookmark {
                 closeMarks()
+                if openStyle != nil { output += "</span>" }
+                openStyle = nil
                 if openBookmark != nil { output += "</span>" }
                 openBookmark = nil
+            } else if openStyle != style {
+                closeMarks()
+                if openStyle != nil { output += "</span>" }
+                openStyle = nil
             } else if openLink != link {
                 closeMarks()
             } else if let keep = open.firstIndex(where: { !marks.contains($0) }) {
@@ -830,6 +841,10 @@ enum WriterMarkdown {
             if let bookmark, openBookmark == nil {
                 output += bookmark.openingTag
                 openBookmark = bookmark
+            }
+            if let style, openStyle == nil {
+                output += style.openingTag
+                openStyle = style
             }
             if let link, openLink == nil {
                 output += "["
@@ -850,6 +865,7 @@ enum WriterMarkdown {
             pendingSpace = trailing
         }
         closeMarks()
+        if openStyle != nil { output += "</span>" }
         if openBookmark != nil { output += "</span>" }
         output += pendingSpace
         return output.replacingOccurrences(of: String(lineSeparator), with: "\n")

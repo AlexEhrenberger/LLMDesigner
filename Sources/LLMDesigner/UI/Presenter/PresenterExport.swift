@@ -12,6 +12,7 @@ struct PresenterExportMenu: View {
         Menu {
             Section("Präsentation exportieren") {
                 Button("Folien als PDF …", systemImage: "doc.richtext") { app.exportPresentationPDF(document.id) }
+                Button("Drucken … (⌘P)", systemImage: "printer") { app.printPresentation(document.id) }
             }
             Section("Writer Studio") {
                 Button("Als Handout in Writer Studio …", systemImage: StudioApplication.writer.symbol) { showsHandout = true }

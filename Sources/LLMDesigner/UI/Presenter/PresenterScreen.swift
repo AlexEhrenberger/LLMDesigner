@@ -373,13 +373,14 @@ private struct PresenterToolbar: View {
             RoleMenu(document: document, slide: slide)
             BackgroundButton(document: document, deck: deck, slide: slide)
             divider
-            FontMenu(document: document)
+            FontMenu(controller: controller, document: document)
             BlockMenu(controller: controller, current: state.block)
             divider
             markButton("bold", .bold, "Fett (⌘B)", state)
             markButton("italic", .italic, "Kursiv (⌘I)", state)
             markButton("underline", .underline, "Unterstrichen (⌘U)", state)
             markButton("strikethrough", .strikethrough, "Durchgestrichen (⇧⌘X)", state)
+            ColorMenu(controller: controller).disabled(state.block == .code || state.block == .raw || state.block.isEmbed)
             divider
             ToolbarButton(symbol: "list.bullet", help: "Aufzählung (⇧⌘8)", isActive: state.block == .bullet) { controller.setBlock(.bullet) }
                 .disabled(state.block.isEmbed || state.block == .table)
