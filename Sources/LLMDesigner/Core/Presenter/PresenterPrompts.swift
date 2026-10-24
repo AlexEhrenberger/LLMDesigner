@@ -211,7 +211,8 @@ enum PresenterPrompts {
 
     static let backgroundSystemPrompt = """
     You write image prompts for the text-to-image model Qwen-Image. The picture is the background of a \
-    presentation slide in 16:9; the slide's text will be set on top of it. The user describes the topic or \
+    presentation slide in 16:9. The app sets the slide's words on top of it later, so the picture itself is \
+    purely pictorial: light, color, shapes, textures, landscapes, materials. The user describes the topic or \
     the look, usually in German.
 
     How Qwen-Image reads prompts:
@@ -219,15 +220,24 @@ enum PresenterPrompts {
     (left, right, top, bottom, foreground, background).
     - What comes first weighs most: begin with the medium or style and the overall look.
     - Describe only what is visible. Never write what should be absent (no "no", "without", "not").
+    - It paints letters very readily: every word about writing in the prompt turns into visible lettering, \
+    even a word that says the writing should be absent.
+
+    So the prompt never contains words about writing or layouts: text, title, heading, headline, caption, \
+    words, letters, lettering, typography, font, label, logo, sign, signature, watermark, numbers, quote, \
+    slide, presentation, poster, banner, template, mockup, copy space. Nothing goes in quotation marks, and \
+    the presentation's title or topic never appears as words to be shown; turn the topic into a scene, a \
+    mood, colors or forms instead. Leave out objects that carry writing: books, newspapers, papers, screens, \
+    monitors, phones, whiteboards, blackboards, maps, charts, diagrams, signs, packaging, coins, clocks.
 
     A good slide background:
     - Is atmospheric and calm, with one clear color palette, soft light and depth.
-    - Leaves a large, smooth, uncluttered area where the text goes (described below as the calm area): \
-    describe that area explicitly as empty soft gradient, smooth sky, plain wall, gentle bokeh or similar.
+    - Leaves a large, smooth, uncluttered area (described below as the calm area). Describe it only by how it \
+    looks, never by what it is for: an empty soft gradient, a smooth misty sky, a plain wall, gentle bokeh.
     - Puts its details and points of interest only where the description below allows.
-    - Shows no writing of any kind: describe surfaces as plain and smooth.
-    - Fits the requested brightness: "dark" means a deep, low-key image (the text will be white); "light" means \
-    a bright, high-key, airy image with pale colors (the text will be black).
+    - Has plain, smooth surfaces everywhere.
+    - Fits the requested brightness: "dark" means a deep, low-key image; "light" means a bright, high-key, \
+    airy image with pale colors.
 
     Rules:
     - Keep the user's topic and style. Prefer abstract, atmospheric or scenic interpretations of the topic \
@@ -238,24 +248,75 @@ enum PresenterPrompts {
     PROMPT: <the English prompt>
     """
 
+    /// Sent to Draw Things with a background. It only counts where the sampler uses guidance (the full-quality
+    /// preset and most of Draw Things' own settings); the Lightning preset paints without it.
+    static let backgroundNegativePrompt = "text, letters, words, writing, lettering, typography, title, heading, caption, subtitles, label, logo, watermark, signature, numbers, symbols, signage, user interface, slide template, mockup"
+
     static func backgroundMessages(description: String, presentationTitle: String, role: SlideRole, tone: SlideTone, style: ImageStyle) -> [ChatPayloadMessage] {
         var lines: [String] = []
         let idea = description.trimmingCharacters(in: .whitespacesAndNewlines)
         lines.append("Thema / Bildidee: " + (idea.isEmpty ? "passend zur Präsentation „\(presentationTitle)“" : idea))
-        if !presentationTitle.isEmpty { lines.append("Präsentation: „\(presentationTitle)“") }
-        lines.append("Stil: " + (style.instruction ?? "frei wählen, passend zum Thema"))
-        lines.append("Helligkeit: " + (tone == .light ? "dark (white text on top)" : "light (black text on top)"))
+        if !presentationTitle.isEmpty { lines.append("Präsentation: „\(presentationTitle)“ (nur als Anregung, nie als Schrift im Bild)") }
+        lines.append("Stil: " + (backgroundStyle(style) ?? "frei wählen, passend zum Thema"))
+        lines.append("Helligkeit: " + (tone == .light ? "dark" : "light"))
         switch role {
         case .title:
-            lines.append("Slide: the title slide. Striking, cinematic, the most expressive of the set. Calm area: a wide horizontal band across the middle for a centered title; details along the edges, the lower third and the corners.")
+            lines.append("Picture for: the opening slide. Striking, cinematic, the most expressive of the set. Calm area: a wide horizontal band across the middle; details along the edges, the lower third and the corners.")
         case .chapter:
-            lines.append("Slide: a chapter opening. Bold but simpler than a title slide. Calm area: the left 60 percent for a left-aligned heading; the visual interest sits in the right third.")
+            lines.append("Picture for: a chapter opening. Bold but simpler than the opening picture. Calm area: the left 60 percent; the visual interest sits in the right third.")
         case .content:
-            lines.append("Slide: a content slide with a lot of text. Very subtle, low contrast, mostly empty: a soft gradient or gentle texture over nearly the whole picture. Calm area: everything except a narrow strip along the right and bottom edges, where faint details may appear.")
+            lines.append("Picture for: a slide that will be full of bullet points. Very subtle, low contrast, mostly empty: a soft gradient or gentle texture over nearly the whole picture. Calm area: everything except a narrow strip along the right and bottom edges, where faint details may appear.")
         }
         return [
             ChatPayloadMessage(role: "system", content: backgroundSystemPrompt),
             ChatPayloadMessage(role: "user", content: lines.joined(separator: "\n")),
         ]
     }
+
+    /// The style as told for a background: an infographic's labels would bring letters into the picture.
+    private static func backgroundStyle(_ style: ImageStyle) -> String? {
+        style == .infographic ? "clean flat vector graphic, simple geometric shapes and soft color fields, plain light background" : style.instruction
+    }
+
+    // MARK: Keeping writing out of a background
+
+    /// Words that make Qwen-Image paint letters, also when the sentence around them means the opposite.
+    private static let writingWords = #"texts?|titles?|subtitles?|headings?|headlines?|captions?|words?|letters?|lettering|typography|typographic|typefaces?|fonts?|writing|written|inscriptions?|labels?|logos?|watermarks?|signatures?|signage|signs?|slide|presentations?|posters?|banners?|quotes?|quotations?|calligraphy|alphabet|characters?|numbers?|numerals?|digits?|templates?|mockups?|bullet points?|copy space"#
+
+    /// The prompt the model wrote, made safe to paint behind a slide: anything in quotation marks goes, so do
+    /// phrases that say what the empty area is for ("…, leaving room for the title"), and then every sentence
+    /// that still speaks of writing. A sentence closing on blank surfaces is added.
+    static func textFreeBackgroundPrompt(_ prompt: String) -> String {
+        var text = prompt.replacingOccurrences(of: #"["“„”«»][^"“„”«»]{0,120}["“”«»]"#, with: "", options: .regularExpression)
+        // "a presentation slide background" → "a background"
+        text = text.replacingOccurrences(of: #"\b(?:presentation\s+)?slide\s+(?=background|backdrop|design|image|picture)"#, with: "", options: [.regularExpression, .caseInsensitive])
+        text = text.replacingOccurrences(of: #"\bpresentation\s+(?=background|backdrop)"#, with: "", options: [.regularExpression, .caseInsensitive])
+        // "…, perfect for a centered title", "where the text will go", "leaving room for headings"
+        let purpose = #"\s*,?\s*(?:\b(?:perfect|ideal|suitable|reserved|kept|left|ready|open|clear|space|room)\s+)?\b(?:for|where|to (?:hold|carry|host|frame|receive)|leaving (?:room|space) for|providing (?:room|space) for|with (?:room|space) for|that (?:will )?(?:hold|carry)s?)\b[^,.;]*?\b(?:"# + writingWords + #")\b[^,.;]*"#
+        text = text.replacingOccurrences(of: purpose, with: "", options: [.regularExpression, .caseInsensitive])
+        let writing = try? NSRegularExpression(pattern: #"\b(?:"# + writingWords + #")\b"#, options: .caseInsensitive)
+        func mentionsWriting(_ sentence: String) -> Bool {
+            writing?.firstMatch(in: sentence, range: NSRange(sentence.startIndex..., in: sentence)) != nil
+        }
+        var kept: [String] = []
+        text.enumerateSubstrings(in: text.startIndex..., options: .bySentences) { sentence, _, _, _ in
+            guard let sentence else { return }
+            let trimmed = sentence.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty, !mentionsWriting(trimmed) { kept.append(trimmed) }
+        }
+        var result = kept.joined(separator: " ")
+        // Too little left: keep the sentences and take out only the words.
+        if result.split(separator: " ").count < 20, let writing {
+            result = writing.stringByReplacingMatches(in: text, range: NSRange(text.startIndex..., in: text), withTemplate: "")
+        }
+        result = result.replacingOccurrences(of: #"\s+([,.;])"#, with: "$1", options: .regularExpression)
+            .replacingOccurrences(of: #",\s*([.;])"#, with: "$1", options: .regularExpression)
+            .replacingOccurrences(of: #"\s{2,}"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let last = result.last, !".!?".contains(last) { result += "." }
+        return result + " " + backgroundClosing
+    }
+
+    /// Ends every background prompt (before Qwen's quality suffix).
+    static let backgroundClosing = "A purely pictorial image of light, color and texture, every surface blank and smooth."
 }

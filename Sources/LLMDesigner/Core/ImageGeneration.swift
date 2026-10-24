@@ -13,6 +13,8 @@ struct GeneratedImageInfo: Codable, Equatable, Sendable {
     var profile: DrawThingsProfile = .qwenLightning
     /// Adds "Ultra HD, 4K, cinematic composition." as the Qwen model card recommends.
     var qualitySuffix = true
+    /// What the picture must not show, e.g. writing on a slide background; nil sends Draw Things none.
+    var negativePrompt: String?
     /// The seed of the finished picture.
     var seed: UInt32?
     /// The picture this one replaces; it shows (dimmed) while the new one is made.
@@ -199,7 +201,7 @@ final class ImageGenerationCenter {
             let status = try? await client.status()
             let data = try await client.generate(
                 prompt: ImagePromptBuilder.finalPrompt(info.prompt, qualitySuffix: info.qualitySuffix),
-                negativePrompt: info.profile == .qwenFull ? " " : "",
+                negativePrompt: info.negativePrompt ?? (info.profile == .qwenFull ? " " : ""),
                 width: size.width, height: size.height, seed: info.seed ?? 1, profile: info.profile
             )
             // Cancelled meanwhile: the picture is not wanted any more.

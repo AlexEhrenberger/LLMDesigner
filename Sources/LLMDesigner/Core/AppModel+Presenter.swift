@@ -250,10 +250,12 @@ extension AppModel {
                 temperature: 0.7,
                 maxTokens: 1200
             )
-            let prompt = try ImagePromptBuilder.parse(answer).prompt
+            // Qwen-Image paints any writing the prompt hints at, which would clash with the slide's own text.
+            let prompt = PresenterPrompts.textFreeBackgroundPrompt(try ImagePromptBuilder.parse(answer).prompt)
             var info = defaults
             info.description = request.description
             info.prompt = prompt
+            info.negativePrompt = PresenterPrompts.backgroundNegativePrompt
             let source = WriterImageStore.newGeneratedSource()
             imageGeneration.generate(source: source, info: info)
             var background = SlideBackground.image(source, dim: role == .content ? 0.3 : 0.15)
