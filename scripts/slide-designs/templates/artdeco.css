@@ -1,0 +1,86 @@
+/*
+ * @name Art déco
+ * @beschreibung Goldene Fächer und feine Linien auf tiefem Nachtgrün
+ * @text hell
+ * @akzent #E2C17E
+ */
+
+body {
+  background: radial-gradient(120% 110% at 50% 38%, #15372f 0%, #0c231f 52%, #071512 100%);
+}
+
+/* Feine senkrechte Nadelstreifen, nach oben hin verblassend. */
+.e1 {
+  background: repeating-linear-gradient(90deg, rgba(226, 193, 126, 0.05) 0 0.12vw, transparent 0.12vw 1.6vw);
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.5) 45%, #000 100%);
+}
+
+/* Ein doppelter Goldrahmen. */
+.e2 {
+  inset: 3.4% 2.4%;
+  border: 0.2vmin solid rgba(226, 193, 126, 0.75);
+}
+.e2::before {
+  content: "";
+  position: absolute;
+  inset: 0.9vmin;
+  border: 0.12vmin solid rgba(226, 193, 126, 0.4);
+}
+
+/* Der Fächer und die Eckbögen. */
+.e3 {
+  background: @@DECO_TITEL@@ center / cover no-repeat;
+}
+
+/* Ein Ornament über dem Titel: zwei Linien und eine Raute. */
+.e4 {
+  inset: auto;
+  left: calc(50% - 10vw);
+  top: 24%;
+  width: 20vw;
+  height: 0.2vmin;
+  background: linear-gradient(90deg, rgba(226, 193, 126, 0), #e2c17e 22%, #e2c17e 78%, rgba(226, 193, 126, 0));
+}
+.e4::before {
+  content: "";
+  position: absolute;
+  left: calc(50% - 0.9vmin);
+  top: calc(0.1vmin - 0.9vmin);
+  width: 1.8vmin;
+  height: 1.8vmin;
+  box-sizing: border-box;
+  background: #0d2621;
+  border: 0.2vmin solid #e2c17e;
+  transform: rotate(45deg);
+}
+.e4::after {
+  content: "";
+  position: absolute;
+  left: 28%;
+  width: 44%;
+  top: 1.5vmin;
+  height: 0.12vmin;
+  background: linear-gradient(90deg, rgba(226, 193, 126, 0), rgba(226, 193, 126, 0.6), rgba(226, 193, 126, 0));
+}
+
+/* Ein warmer Schimmer von oben und dunkle Ränder. */
+.e5 {
+  background: radial-gradient(60% 50% at 50% 0%, rgba(226, 193, 126, 0.1), rgba(226, 193, 126, 0) 70%);
+}
+.e6 {
+  background: radial-gradient(120% 100% at 50% 45%, rgba(0, 0, 0, 0) 60%, rgba(0, 0, 0, 0.4) 100%);
+}
+
+/* Kapitel: der Fächer öffnet sich vom rechten Rand. */
+.kapitel .e1 {
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, transparent 40%, #000 100%);
+}
+.kapitel .e3 { background-image: @@DECO_KAPITEL@@; }
+.kapitel .e4 { display: none; }
+.kapitel .e5 { background: radial-gradient(50% 70% at 100% 50%, rgba(226, 193, 126, 0.1), rgba(226, 193, 126, 0) 70%); }
+
+/* Inhaltsfolien: der Rahmen, ein kleiner Fächer in der Ecke, kaum Streifen. */
+.folie .e1 { opacity: 0.4; }
+.folie .e3 { background-image: @@DECO_FOLIE@@; }
+.folie .e4 { display: none; }
+.folie .e5 { opacity: 0.6; }

@@ -1,0 +1,77 @@
+/*
+ * @name Tusche
+ * @beschreibung Tuschmalerei auf Reispapier: Nebelberge, ein Pinselkreis und ein rotes Siegel
+ * @text dunkel
+ * @akzent #B8322A
+ */
+
+body {
+  background: radial-gradient(120% 110% at 50% 40%, #f7f2e8 0%, #efe8da 70%, #e5dccb 100%);
+}
+
+/* Lange Fasern im Papier. */
+.e1 {
+  background-image: @@NOISE_FASER@@;
+  opacity: 0.18;
+}
+
+/* Berge im Nebel. */
+.e2 {
+  background: @@TUSCHE_BERGE@@ center bottom / cover no-repeat;
+}
+
+/* Die rote Sonne. */
+.e3 {
+  inset: auto;
+  right: 15%;
+  top: 13%;
+  width: 13vh;
+  height: 13vh;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 38%, #d65a40 0%, #b8322a 72%);
+  box-shadow: 0 0 0 0.5vmin rgba(184, 50, 42, 0.1);
+  opacity: 0.86;
+}
+
+/* Der Pinselkreis (Kapitel und Inhaltsfolien). */
+.e4 {
+  display: none;
+  inset: auto;
+  background: @@TUSCHE_ENSO@@ center / contain no-repeat;
+}
+
+/* Das Siegel. */
+.e5 {
+  inset: auto;
+  right: 6.4%;
+  bottom: 8.4%;
+  width: 5.6vh;
+  height: 5.6vh;
+  background: @@TUSCHE_SIEGEL@@ center / contain no-repeat;
+  opacity: 0.92;
+}
+
+/* Kapitel: der Kreis rechts, die Berge nur als Hauch. */
+.kapitel .e2 { opacity: 0.4; translate: 0 10vh; }
+.kapitel .e3 { display: none; }
+.kapitel .e4 {
+  display: block;
+  right: 5%;
+  top: calc(50% - 34vh);
+  width: 68vh;
+  height: 68vh;
+  opacity: 0.9;
+}
+.kapitel .e5 { right: 7.6%; bottom: 13%; }
+
+/* Inhaltsfolien: ein kleiner Kreis und das Siegel in der Ecke. */
+.folie .e2, .folie .e3 { display: none; }
+.folie .e4 {
+  display: block;
+  right: 3.2%;
+  bottom: 5%;
+  width: 19vh;
+  height: 19vh;
+  opacity: 0.72;
+}
+.folie .e5 { right: 14.4%; bottom: 6.4%; width: 3.8vh; height: 3.8vh; }

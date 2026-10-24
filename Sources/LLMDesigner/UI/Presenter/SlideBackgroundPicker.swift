@@ -76,27 +76,47 @@ struct SlideBackgroundPicker: View {
         }
     }
 
+    /// The designs in two groups: those that move in the presentation and the still ones.
     private func designs(current: SlideBackground, role: SlideRole, scope: Scope) -> some View {
-        let library = SlideDesignLibrary.shared
+        let all = SlideDesignLibrary.shared.all
         return section("Designs") {
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
-                ForEach(library.all) { design in
-                    let isSelected = current.kind == .design && current.design == design.id
-                    Button { apply(.design(design.id), scope: scope) } label: {
-                        VStack(alignment: .leading, spacing: 4) {
-                            SlideBackgroundView(background: .design(design.id), role: role)
-                                .aspectRatio(16 / 9, contentMode: .fit)
-                                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
-                                .overlay(selectionRing(isSelected))
-                            Text(design.name)
-                                .font(.system(size: 11.5, weight: isSelected ? .semibold : .regular))
-                                .foregroundStyle(isSelected ? Theme.textPrimary : Theme.textSecondary)
-                                .lineLimit(1)
+            VStack(alignment: .leading, spacing: 14) {
+                designGroup(all.filter(\.isAnimated), title: "Bewegt", hint: "langsam, nur in der Präsentation", symbol: "wind", current: current, role: role, scope: scope)
+                designGroup(all.filter { !$0.isAnimated }, title: "Ruhig", hint: nil, symbol: "square.on.square", current: current, role: role, scope: scope)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func designGroup(_ designs: [SlideDesign], title: String, hint: String?, symbol: String, current: SlideBackground, role: SlideRole, scope: Scope) -> some View {
+        if !designs.isEmpty {
+            VStack(alignment: .leading, spacing: 7) {
+                HStack(spacing: 5) {
+                    Image(systemName: symbol)
+                    Text(title).fontWeight(.medium)
+                    if let hint { Text("– " + hint) }
+                }
+                .font(.system(size: 11))
+                .foregroundStyle(Theme.textTertiary)
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+                    ForEach(designs) { design in
+                        let isSelected = current.kind == .design && current.design == design.id
+                        Button { apply(.design(design.id), scope: scope) } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                SlideBackgroundView(background: .design(design.id), role: role)
+                                    .aspectRatio(16 / 9, contentMode: .fit)
+                                    .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                                    .overlay(selectionRing(isSelected))
+                                Text(design.name)
+                                    .font(.system(size: 11.5, weight: isSelected ? .semibold : .regular))
+                                    .foregroundStyle(isSelected ? Theme.textPrimary : Theme.textSecondary)
+                                    .lineLimit(1)
+                            }
+                            .contentShape(Rectangle())
                         }
-                        .contentShape(Rectangle())
+                        .buttonStyle(.plain)
+                        .help(design.summary.isEmpty ? design.name : "\(design.name) – \(design.summary)")
                     }
-                    .buttonStyle(.plain)
-                    .help(design.summary.isEmpty ? design.name : "\(design.name) – \(design.summary)")
                 }
             }
         }

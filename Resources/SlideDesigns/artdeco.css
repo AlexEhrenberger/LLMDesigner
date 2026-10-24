@@ -1,0 +1,86 @@
+/*
+ * @name Art déco
+ * @beschreibung Goldene Fächer und feine Linien auf tiefem Nachtgrün
+ * @text hell
+ * @akzent #E2C17E
+ */
+
+body {
+  background: radial-gradient(120% 110% at 50% 38%, #15372f 0%, #0c231f 52%, #071512 100%);
+}
+
+/* Feine senkrechte Nadelstreifen, nach oben hin verblassend. */
+.e1 {
+  background: repeating-linear-gradient(90deg, rgba(226, 193, 126, 0.05) 0 0.12vw, transparent 0.12vw 1.6vw);
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.5) 45%, #000 100%);
+}
+
+/* Ein doppelter Goldrahmen. */
+.e2 {
+  inset: 3.4% 2.4%;
+  border: 0.2vmin solid rgba(226, 193, 126, 0.75);
+}
+.e2::before {
+  content: "";
+  position: absolute;
+  inset: 0.9vmin;
+  border: 0.12vmin solid rgba(226, 193, 126, 0.4);
+}
+
+/* Der Fächer und die Eckbögen. */
+.e3 {
+  background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1600 900' preserveAspectRatio='xMidYMid slice'><defs><linearGradient id='g' gradientUnits='userSpaceOnUse' x1='0' y1='0' x2='1600' y2='900'><stop offset='0' stop-color='%23f1d99a'/><stop offset='0.5' stop-color='%23d4ad62'/><stop offset='1' stop-color='%23a07a3a'/></linearGradient></defs><path d='M730 900A70 70 0 0 1 870 900M680 900A120 120 0 0 1 920 900M620 900A180 180 0 0 1 980 900M565 900A235 235 0 0 1 1035 900M510 900A290 290 0 0 1 1090 900M720 900L510 900M671 885L512 868M722 882L517 835M621 837L526 804M728 865L539 774M690 831L554 746M737 850L573 719M666 766L595 695M750 837L619 673M731 790L646 654M765 828L674 639M737 721L704 626M782 822L735 617M785 771L768 612M800 820L800 610M821 711L832 612M818 822L865 617M843 777L896 626M835 828L926 639M901 739L954 654M850 837L981 673M892 808L1005 695M863 850L1027 719M961 799L1046 746M872 865L1061 774M923 857L1074 804M878 882L1083 835M989 879L1088 868M880 900L1090 900' fill='none' stroke='url(%23g)' stroke-opacity='0.85' stroke-width='2.2'/><path d='M756 900A44 44 0 0 1 844 900' fill='none' stroke='url(%23g)' stroke-opacity='0.85' stroke-width='2.2'/><path d='M800 900L756 900A44 44 0 0 1 844 900z' fill='url(%23g)' fill-opacity='0.9'/><path d='M60 0A60 60 0 0 1 0 60M100 0A100 100 0 0 1 0 100M140 0A140 140 0 0 1 0 140M168 0A168 168 0 0 1 0 168M70 0L168 0M108 21L165 33M65 27L155 64M91 61L140 93M49 49L119 119M61 91L93 140M27 65L64 155M21 108L33 165M0 70L0 168' fill='none' stroke='url(%23g)' stroke-opacity='0.85' stroke-width='2.2'/><path d='M1600 60A60 60 0 0 1 1540 0M1600 100A100 100 0 0 1 1500 0M1600 140A140 140 0 0 1 1460 0M1600 168A168 168 0 0 1 1432 0M1600 70L1600 168M1579 108L1567 165M1573 65L1536 155M1539 91L1507 140M1551 49L1481 119M1509 61L1460 93M1535 27L1445 64M1492 21L1435 33M1530 0L1432 0' fill='none' stroke='url(%23g)' stroke-opacity='0.85' stroke-width='2.2'/><path d='M0 840A60 60 0 0 1 60 900M0 800A100 100 0 0 1 100 900M0 760A140 140 0 0 1 140 900M0 732A168 168 0 0 1 168 900M0 830L0 732M21 792L33 735M27 835L64 745M61 809L93 760M49 851L119 781M91 839L140 807M65 873L155 836M108 879L165 867M70 900L168 900' fill='none' stroke='url(%23g)' stroke-opacity='0.85' stroke-width='2.2'/><path d='M1540 900A60 60 0 0 1 1600 840M1500 900A100 100 0 0 1 1600 800M1460 900A140 140 0 0 1 1600 760M1432 900A168 168 0 0 1 1600 732M1530 900L1432 900M1492 879L1435 867M1535 873L1445 836M1509 839L1460 807M1551 851L1481 781M1539 809L1507 760M1573 835L1536 745M1579 792L1567 735M1600 830L1600 732' fill='none' stroke='url(%23g)' stroke-opacity='0.85' stroke-width='2.2'/></svg>") center / cover no-repeat;
+}
+
+/* Ein Ornament über dem Titel: zwei Linien und eine Raute. */
+.e4 {
+  inset: auto;
+  left: calc(50% - 10vw);
+  top: 24%;
+  width: 20vw;
+  height: 0.2vmin;
+  background: linear-gradient(90deg, rgba(226, 193, 126, 0), #e2c17e 22%, #e2c17e 78%, rgba(226, 193, 126, 0));
+}
+.e4::before {
+  content: "";
+  position: absolute;
+  left: calc(50% - 0.9vmin);
+  top: calc(0.1vmin - 0.9vmin);
+  width: 1.8vmin;
+  height: 1.8vmin;
+  box-sizing: border-box;
+  background: #0d2621;
+  border: 0.2vmin solid #e2c17e;
+  transform: rotate(45deg);
+}
+.e4::after {
+  content: "";
+  position: absolute;
+  left: 28%;
+  width: 44%;
+  top: 1.5vmin;
+  height: 0.12vmin;
+  background: linear-gradient(90deg, rgba(226, 193, 126, 0), rgba(226, 193, 126, 0.6), rgba(226, 193, 126, 0));
+}
+
+/* Ein warmer Schimmer von oben und dunkle Ränder. */
+.e5 {
+  background: radial-gradient(60% 50% at 50% 0%, rgba(226, 193, 126, 0.1), rgba(226, 193, 126, 0) 70%);
+}
+.e6 {
+  background: radial-gradient(120% 100% at 50% 45%, rgba(0, 0, 0, 0) 60%, rgba(0, 0, 0, 0.4) 100%);
+}
+
+/* Kapitel: der Fächer öffnet sich vom rechten Rand. */
+.kapitel .e1 {
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, transparent 40%, #000 100%);
+}
+.kapitel .e3 { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1600 900' preserveAspectRatio='xMidYMid slice'><defs><linearGradient id='g' gradientUnits='userSpaceOnUse' x1='0' y1='0' x2='1600' y2='900'><stop offset='0' stop-color='%23f1d99a'/><stop offset='0.5' stop-color='%23d4ad62'/><stop offset='1' stop-color='%23a07a3a'/></linearGradient></defs><path d='M1600 560A110 110 0 0 1 1600 340M1600 650A200 200 0 0 1 1600 250M1600 750A300 300 0 0 1 1600 150M1600 860A410 410 0 0 1 1600 40M1600 970A520 520 0 0 1 1600-70M1600 580L1600 970M1581 659L1552 968M1576 578L1504 961M1515 748L1458 950M1553 571L1412 935M1506 638L1368 915M1532 561L1326 892M1413 697L1287 865M1512 546L1250 834M1445 591L1216 800M1496 528L1185 763M1336 613L1158 724M1484 508L1135 682M1404 526L1115 638M1475 486L1100 592M1295 507L1089 546M1471 462L1082 498M1390 450L1080 450M1471 438L1082 402M1295 393L1089 354M1475 414L1100 308M1404 374L1115 262M1484 392L1135 218M1336 287L1158 176M1496 372L1185 137M1445 309L1216 100M1512 354L1250 66M1413 203L1287 35M1532 339L1326 8M1506 262L1368-15M1553 329L1412-35M1515 152L1458-50M1576 322L1504-61M1581 241L1552-68M1600 320L1600-70' fill='none' stroke='url(%23g)' stroke-opacity='0.85' stroke-width='2.2'/><path d='M1600 520A70 70 0 0 1 1600 380' fill='none' stroke='url(%23g)' stroke-opacity='0.85' stroke-width='2.2'/><path d='M1600 450L1600 520A70 70 0 0 1 1600 380z' fill='url(%23g)' fill-opacity='0.9'/><path d='M60 0A60 60 0 0 1 0 60M100 0A100 100 0 0 1 0 100M140 0A140 140 0 0 1 0 140M70 0L140 0M68 18L135 36M61 35L121 70M49 49L99 99M35 61L70 121M18 68L36 135M0 70L0 140' fill='none' stroke='url(%23g)' stroke-opacity='0.85' stroke-width='2.2'/><path d='M0 840A60 60 0 0 1 60 900M0 800A100 100 0 0 1 100 900M0 760A140 140 0 0 1 140 900M0 830L0 760M18 832L36 765M35 839L70 779M49 851L99 801M61 865L121 830M68 882L135 864M70 900L140 900' fill='none' stroke='url(%23g)' stroke-opacity='0.85' stroke-width='2.2'/></svg>"); }
+.kapitel .e4 { display: none; }
+.kapitel .e5 { background: radial-gradient(50% 70% at 100% 50%, rgba(226, 193, 126, 0.1), rgba(226, 193, 126, 0) 70%); }
+
+/* Inhaltsfolien: der Rahmen, ein kleiner Fächer in der Ecke, kaum Streifen. */
+.folie .e1 { opacity: 0.4; }
+.folie .e3 { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1600 900' preserveAspectRatio='xMidYMid slice'><defs><linearGradient id='g' gradientUnits='userSpaceOnUse' x1='0' y1='0' x2='1600' y2='900'><stop offset='0' stop-color='%23f1d99a'/><stop offset='0.5' stop-color='%23d4ad62'/><stop offset='1' stop-color='%23a07a3a'/></linearGradient></defs><path d='M1530 900A70 70 0 0 1 1600 830M1470 900A130 130 0 0 1 1600 770M1410 900A190 190 0 0 1 1600 710M1360 900A240 240 0 0 1 1600 660M1520 900L1360 900M1462 878L1363 862M1524 875L1372 826M1475 836L1386 791M1535 853L1406 759M1501 801L1430 730M1553 835L1459 706M1536 775L1491 686M1575 824L1526 672M1578 762L1562 663M1600 820L1600 660' fill='none' stroke='url(%23g)' stroke-opacity='0.85' stroke-width='2.2'/><path d='M1556 900A44 44 0 0 1 1600 856' fill='none' stroke='url(%23g)' stroke-opacity='0.85' stroke-width='2.2'/><path d='M1600 900L1556 900A44 44 0 0 1 1600 856z' fill='url(%23g)' fill-opacity='0.9'/></svg>"); }
+.folie .e4 { display: none; }
+.folie .e5 { opacity: 0.6; }

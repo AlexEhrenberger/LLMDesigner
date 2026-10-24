@@ -1,0 +1,75 @@
+/*
+ * @name Terrazzo
+ * @beschreibung Heller Terrazzo mit Steinsplittern in Koralle, Ocker und Petrol
+ * @text dunkel
+ * @akzent #C8553D
+ */
+
+body {
+  background: #f3eee6;
+}
+
+/* Der Grund: feines Steinkorn. */
+.e1 {
+  background-image: @@NOISE_STEIN@@;
+  opacity: 0.2;
+}
+
+/* Die Splitter; im mittleren Band fast keine, damit der Titel frei steht. */
+.e2 {
+  background: @@TERRAZZO@@ center / cover no-repeat;
+  -webkit-mask-image: linear-gradient(180deg, #000 4%, rgba(0, 0, 0, 0.1) 30%, rgba(0, 0, 0, 0.1) 70%, #000 96%);
+}
+
+/* Drei große Steine. */
+.e3, .e4, .e5 {
+  inset: auto;
+  background-position: center;
+  background-size: contain;
+  background-repeat: no-repeat;
+}
+.e3 {
+  left: -7vh;
+  top: -9vh;
+  width: 36vh;
+  height: 36vh;
+  background-image: @@TERRAZZO_KORALLE@@;
+  transform: rotate(18deg);
+}
+.e4 {
+  right: -6vh;
+  bottom: -11vh;
+  width: 44vh;
+  height: 44vh;
+  background-image: @@TERRAZZO_PETROL@@;
+  transform: rotate(-12deg);
+}
+.e5 {
+  right: 15%;
+  top: 11%;
+  width: 9vh;
+  height: 9vh;
+  background-image: @@TERRAZZO_OCKER@@;
+  transform: rotate(30deg);
+}
+
+/* Ein Hauch Politur. */
+.e6 {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0) 40%, rgba(255, 255, 255, 0) 70%, rgba(120, 100, 80, 0.06) 100%);
+}
+
+/* Kapitel: die Steine sammeln sich rechts. */
+.kapitel .e2 {
+  -webkit-mask-image: linear-gradient(90deg, rgba(0, 0, 0, 0.08) 0%, rgba(0, 0, 0, 0.12) 42%, #000 82%);
+}
+.kapitel .e3 { left: auto; right: -9vh; top: 14vh; width: 46vh; height: 46vh; }
+.kapitel .e4 { right: 30vh; bottom: -9vh; width: 24vh; height: 24vh; }
+.kapitel .e5 { right: 8%; top: 9%; }
+
+/* Inhaltsfolien: ganz leise Splitter, kräftiger am rechten und unteren Rand. */
+.folie .e2 {
+  -webkit-mask-image: linear-gradient(90deg, rgba(0, 0, 0, 0.07) 0%, rgba(0, 0, 0, 0.07) 76%, #000 100%), linear-gradient(0deg, rgba(0, 0, 0, 0.8) 0%, rgba(0, 0, 0, 0) 12%);
+}
+.folie .e3 { display: none; }
+.folie .e4 { right: -7vh; bottom: -9vh; width: 24vh; height: 24vh; }
+.folie .e5 { right: 13vh; top: auto; bottom: 5vh; width: 6vh; height: 6vh; }

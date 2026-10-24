@@ -1,0 +1,79 @@
+/*
+ * @name Pastell
+ * @beschreibung Weiche Verläufe in Pfirsich, Flieder und Mint, die langsam ineinanderfließen
+ * @text dunkel
+ * @akzent #7A4FD0
+ */
+
+body {
+  background: #fbf8f5;
+}
+
+/* Vier weiche Farbwolken, jede in ihrem eigenen Takt. */
+.e1, .e2, .e3, .e4 {
+  inset: -25%;
+  mix-blend-mode: multiply;
+}
+.e1 {
+  background: radial-gradient(24% 30% at 30% 30%, rgba(255, 186, 152, 0.95), rgba(255, 186, 152, 0) 72%);
+  animation: pastell-a 47s ease-in-out infinite alternate;
+}
+.e2 {
+  background: radial-gradient(26% 32% at 72% 30%, rgba(206, 184, 255, 0.95), rgba(206, 184, 255, 0) 72%);
+  animation: pastell-b 59s ease-in-out infinite alternate;
+}
+.e3 {
+  background: radial-gradient(28% 30% at 68% 72%, rgba(172, 232, 206, 0.95), rgba(172, 232, 206, 0) 72%);
+  animation: pastell-c 53s ease-in-out -21s infinite alternate;
+}
+.e4 {
+  background: radial-gradient(24% 28% at 30% 74%, rgba(184, 216, 255, 0.9), rgba(184, 216, 255, 0) 72%);
+  animation: pastell-d 66s ease-in-out -33s infinite alternate;
+}
+
+/* Ein heller Schleier, wo die Schrift steht. */
+.e5 {
+  background: radial-gradient(48% 34% at 50% 50%, rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0) 100%);
+}
+
+/* Feine weiße Fäden, die langsam treiben. */
+.e6 {
+  inset: -6%;
+  background: @@PASTELL_FAEDEN@@ center / cover no-repeat;
+  animation: pastell-threads 41s ease-in-out infinite alternate;
+}
+
+/* Kapitel: die Farben sammeln sich rechts. */
+.kapitel .e1 { translate: 22vw 4vh; }
+.kapitel .e4 { translate: 30vw -6vh; }
+.kapitel .e5 { background: linear-gradient(90deg, rgba(255, 255, 255, 0.62) 0%, rgba(255, 255, 255, 0.4) 45%, rgba(255, 255, 255, 0) 75%); }
+.kapitel .e6 { background-image: @@PASTELL_FAEDEN_KAPITEL@@; }
+
+/* Inhaltsfolien: ganz zart, die Farben in den Ecken. */
+.folie .e1 { translate: -10vw -16vh; opacity: 0.85; }
+.folie .e2 { translate: 12vw -14vh; opacity: 0.75; }
+.folie .e3 { translate: 12vw 14vh; opacity: 0.85; }
+.folie .e4 { translate: -12vw 16vh; opacity: 0.65; }
+.folie .e5 { background: linear-gradient(100deg, rgba(255, 255, 255, 0.72) 0%, rgba(255, 255, 255, 0.5) 55%, rgba(255, 255, 255, 0.1) 100%); }
+.folie .e6 { background-image: @@PASTELL_FAEDEN_FOLIE@@; }
+
+@keyframes pastell-a {
+  from { transform: translate(0, 0) scale(1); }
+  to { transform: translate(7%, 5%) scale(1.12); }
+}
+@keyframes pastell-b {
+  from { transform: translate(0, 0) scale(1.05); }
+  to { transform: translate(-8%, 6%) scale(0.95); }
+}
+@keyframes pastell-c {
+  from { transform: translate(0, 0) scale(1); }
+  to { transform: translate(-6%, -6%) scale(1.1); }
+}
+@keyframes pastell-d {
+  from { transform: translate(0, 0) scale(1.08); }
+  to { transform: translate(8%, -4%) scale(0.96); }
+}
+@keyframes pastell-threads {
+  from { transform: translate(-1.5vw, 1vh) rotate(-0.8deg); }
+  to { transform: translate(1.5vw, -1.2vh) rotate(0.8deg); }
+}

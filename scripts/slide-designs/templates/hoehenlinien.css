@@ -1,0 +1,76 @@
+/*
+ * @name Höhenlinien
+ * @beschreibung Höhenlinien einer Landkarte auf warmem Papier, die langsam driften
+ * @text dunkel
+ * @akzent #2F7F7A
+ */
+
+body {
+  background: radial-gradient(130% 120% at 50% 45%, #f5f0e5 0%, #ede5d5 70%, #e3d8c3 100%);
+}
+
+/* Die Faser des Papiers. */
+.e1 {
+  background-image: @@NOISE_PAPIER@@;
+  opacity: 0.22;
+}
+
+/* Ein feines Gradnetz. */
+.e2 {
+  background-image:
+    linear-gradient(rgba(90, 70, 45, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(90, 70, 45, 0.08) 1px, transparent 1px);
+  background-size: 12.5vw 22.2222vh;
+  background-position: -1px -1px;
+}
+
+/* Wasser in den Senken: ein Hauch Petrol, der langsam wandert. */
+.e3 {
+  inset: -20%;
+  background:
+    radial-gradient(22% 26% at 54% 56%, rgba(47, 127, 122, 0.12), rgba(47, 127, 122, 0) 70%),
+    radial-gradient(18% 20% at 30% 34%, rgba(47, 127, 122, 0.08), rgba(47, 127, 122, 0) 70%);
+  animation: hoehen-water 56s ease-in-out infinite alternate;
+}
+
+/* Die Höhenlinien drehen und verschieben sich ganz langsam. */
+.e4 {
+  inset: -6%;
+  background: @@HOEHEN_TITEL@@ center / cover no-repeat;
+  animation: hoehen-drift 74s ease-in-out infinite alternate;
+}
+.titel .e4 {
+  -webkit-mask-image: radial-gradient(44% 30% at 50% 50%, rgba(0, 0, 0, 0.3) 35%, #000 100%);
+}
+
+/* Ein Wanderweg zum Gipfel. */
+.e5 {
+  background: @@HOEHEN_WEG_TITEL@@ center / cover no-repeat;
+  animation: hoehen-drift 74s ease-in-out infinite alternate;
+  inset: -6%;
+}
+
+/* Ein leichter Rand wie bei einer gedruckten Karte. */
+.e6 {
+  box-shadow: inset 0 0 0 1.4vmin rgba(245, 240, 229, 0.7), inset 0 0 0 1.55vmin rgba(90, 70, 45, 0.35);
+}
+
+/* Kapitel: ein Berg rechts, der Weg führt hinauf. */
+.kapitel .e4 { background-image: @@HOEHEN_KAPITEL@@; }
+.kapitel .e5 { background-image: @@HOEHEN_WEG_KAPITEL@@; }
+.kapitel .e3 { translate: 14vw 0; }
+
+/* Inhaltsfolien: nur die Ausläufer in der Ecke unten rechts, das Netz leiser. */
+.folie .e2 { opacity: 0.6; }
+.folie .e3 { opacity: 0.6; }
+.folie .e4 { background-image: @@HOEHEN_FOLIE@@; }
+.folie .e5 { display: none; }
+
+@keyframes hoehen-drift {
+  from { transform: rotate(-1.2deg) scale(1) translate(0, 0); }
+  to { transform: rotate(1.4deg) scale(1.04) translate(1vw, -0.8vh); }
+}
+@keyframes hoehen-water {
+  from { transform: translate(-3%, 1%) scale(1); }
+  to { transform: translate(3%, -2%) scale(1.1); }
+}

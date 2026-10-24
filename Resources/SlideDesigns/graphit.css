@@ -1,0 +1,66 @@
+/*
+ * @name Graphit
+ * @beschreibung Gefaltete Flächen aus Graphit mit feinen Kupferkanten
+ * @text hell
+ * @akzent #E8A06C
+ */
+
+body {
+  background: linear-gradient(155deg, #272a30 0%, #1c1e23 50%, #141518 100%);
+}
+
+/* Ein feiner, schräger Schliff. */
+.e1 {
+  background: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.022) 0 0.1vmin, transparent 0.1vmin 0.7vmin);
+}
+.e1::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='300'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.5 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  opacity: 0.06;
+  mix-blend-mode: overlay;
+}
+
+/* Die Flächen mit ihren Kupferkanten; sie werfen einen weichen Schatten. */
+.e2 {
+  background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1600 900' preserveAspectRatio='xMidYMid slice'><defs><linearGradient id='k' gradientUnits='userSpaceOnUse' x1='0' y1='0' x2='1600' y2='900'><stop offset='0' stop-color='%23f2b48a'/><stop offset='0.55' stop-color='%23d0814f'/><stop offset='1' stop-color='%238f4f2c'/></linearGradient><linearGradient id='p' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='%233a3e45'/><stop offset='1' stop-color='%2322252a'/></linearGradient><linearGradient id='q' x1='1' y1='0' x2='0' y2='1'><stop offset='0' stop-color='%232d3036'/><stop offset='1' stop-color='%2317181c'/></linearGradient></defs><path d='M1020-10l590 0 0 570z' fill='url(%23p)' fill-opacity='0.95'/><path d='M1260-10l350 0 0 310z' fill='url(%23q)' fill-opacity='0.9'/><path d='M-10 600l0 310 570 0z' fill='url(%23p)' fill-opacity='0.9'/><path d='M-10 760l0 150 270 0z' fill='url(%23q)' fill-opacity='0.95'/><path d='M1020 -10L1610 560' stroke='url(%23k)' stroke-width='3' stroke-opacity='0.95'/><path d='M1260 -10L1610 300' stroke='url(%23k)' stroke-width='1.6' stroke-opacity='0.6'/><path d='M-10 600L560 910' stroke='url(%23k)' stroke-width='3' stroke-opacity='0.95'/><path d='M960 -10L1610 620' stroke='%23ffffff' stroke-opacity='0.12' stroke-width='1.2'/><path d='M-10 540L620 910' stroke='%23ffffff' stroke-opacity='0.12' stroke-width='1.2'/></svg>") center / cover no-repeat;
+  filter: drop-shadow(0 1.2vmin 2.4vmin rgba(0, 0, 0, 0.45));
+}
+
+/* Ein Lichtschein in der Mitte. */
+.e3 {
+  background: radial-gradient(50% 60% at 50% 45%, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0) 70%);
+}
+
+/* Eine kurze Kupferleiste über dem Titel. */
+.e4 {
+  inset: auto;
+  left: calc(50% - 3vw);
+  top: 30%;
+  width: 6vw;
+  height: 0.45vmin;
+  border-radius: 0.2vmin;
+  background: linear-gradient(90deg, #f2b48a, #b8693d);
+}
+
+/* Dunkle Ränder. */
+.e5 {
+  background: radial-gradient(120% 100% at 50% 45%, rgba(0, 0, 0, 0) 60%, rgba(0, 0, 0, 0.35) 100%);
+}
+
+/* Kapitel: die Flächen rechts, die Leiste links über der Überschrift. */
+.kapitel .e2 { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1600 900' preserveAspectRatio='xMidYMid slice'><defs><linearGradient id='k' gradientUnits='userSpaceOnUse' x1='0' y1='0' x2='1600' y2='900'><stop offset='0' stop-color='%23f2b48a'/><stop offset='0.55' stop-color='%23d0814f'/><stop offset='1' stop-color='%238f4f2c'/></linearGradient><linearGradient id='p' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='%233a3e45'/><stop offset='1' stop-color='%2322252a'/></linearGradient><linearGradient id='q' x1='1' y1='0' x2='0' y2='1'><stop offset='0' stop-color='%232d3036'/><stop offset='1' stop-color='%2317181c'/></linearGradient></defs><path d='M1140-10l470 0 0 920-230 0z' fill='url(%23p)' fill-opacity='0.95'/><path d='M1330-10l280 0 0 530z' fill='url(%23q)' fill-opacity='0.9'/><path d='M1480 910l130-270 0 270z' fill='url(%23q)' fill-opacity='0.95'/><path d='M1140 -10L1380 910' stroke='url(%23k)' stroke-width='3' stroke-opacity='0.95'/><path d='M1330 -10L1610 520' stroke='url(%23k)' stroke-width='1.6' stroke-opacity='0.6'/><path d='M1080 -10L1320 910' stroke='%23ffffff' stroke-opacity='0.12' stroke-width='1.2'/></svg>"); }
+.kapitel .e3 { background: radial-gradient(50% 70% at 30% 50%, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0) 70%); }
+.kapitel .e4 { left: 6.4%; top: 35%; }
+
+/* Inhaltsfolien: eine kleine Falte in der Ecke, die Leiste senkrecht am Rand. */
+.folie .e2 { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1600 900' preserveAspectRatio='xMidYMid slice'><defs><linearGradient id='k' gradientUnits='userSpaceOnUse' x1='0' y1='0' x2='1600' y2='900'><stop offset='0' stop-color='%23f2b48a'/><stop offset='0.55' stop-color='%23d0814f'/><stop offset='1' stop-color='%238f4f2c'/></linearGradient><linearGradient id='p' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='%233a3e45'/><stop offset='1' stop-color='%2322252a'/></linearGradient><linearGradient id='q' x1='1' y1='0' x2='0' y2='1'><stop offset='0' stop-color='%232d3036'/><stop offset='1' stop-color='%2317181c'/></linearGradient></defs><path d='M1310 910l300-310 0 310z' fill='url(%23p)' fill-opacity='0.95'/><path d='M1470 910l140-150 0 150z' fill='url(%23q)' fill-opacity='0.95'/><path d='M1310 910L1610 600' stroke='url(%23k)' stroke-width='2.4' stroke-opacity='0.9'/><path d='M1250 910L1610 540' stroke='%23ffffff' stroke-opacity='0.12' stroke-width='1.2'/></svg>"); }
+.folie .e3 { opacity: 0.6; }
+.folie .e4 {
+  left: 3.2%;
+  top: 8.6%;
+  width: 0.45vmin;
+  height: 7vh;
+  background: linear-gradient(180deg, #f2b48a, #b8693d);
+}

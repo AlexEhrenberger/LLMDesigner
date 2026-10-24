@@ -1,0 +1,106 @@
+/*
+ * @name Orbit
+ * @beschreibung Ein glühender Planet mit Umlaufbahnen, die sich langsam neigen
+ * @text hell
+ * @akzent #FFB86B
+ */
+
+/* Wo der Planet steht (--x, --y) und wie groß er ist (--r). */
+.titel { --x: 80%; --y: 80%; --r: 21vh; --tilt: -16deg; }
+.kapitel { --x: 79%; --y: 50%; --r: 24vh; --tilt: -12deg; }
+.folie { --x: 95%; --y: 98%; --r: 17vh; --tilt: 12deg; }
+
+body {
+  background: radial-gradient(110% 100% at var(--x) var(--y), #1f1849 0%, #0d0b25 46%, #05050f 100%);
+}
+
+/* Sterne; die zweite Lage funkelt ganz langsam. */
+.e1 {
+  background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1600 900' preserveAspectRatio='xMidYMid slice'><path d='M264 621h0M461 768h0M637 510h0M1374 629h0M811 215h0M737 599h0M697 749h0' stroke='%23ffffff' stroke-opacity='0.5' stroke-width='3.2' stroke-linecap='round'/><path d='M1349 891h0M1265 7h0M622 278h0M79 169h0M1060 552h0M600 225h0M1485 179h0' stroke='%23ffffff' stroke-opacity='0.9' stroke-width='1.8' stroke-linecap='round'/><path d='M820 455h0M671 154h0M1166 25h0M46 463h0M580 118h0M861 413h0M1029 409h0' stroke='%23ffffff' stroke-opacity='0.9' stroke-width='1.4' stroke-linecap='round'/><path d='M23 840h0M883 309h0M1288 697h0M568 286h0M828 350h0M1027 613h0M742 627h0M1169 894h0M536 584h0M1018 572h0M1256 31h0' stroke='%23ffffff' stroke-opacity='0.4' stroke-width='1.8' stroke-linecap='round'/><path d='M1270 209h0M1033 132h0M152 85h0M1258 65h0M1203 842h0M1234 446h0M179 481h0' stroke='%23ffffff' stroke-opacity='0.8' stroke-width='1.4' stroke-linecap='round'/><path d='M699 896h0M55 296h0M1413 442h0M885 72h0M432 318h0M1362 726h0M823 257h0M538 396h0M1175 731h0M1150 64h0M1348 255h0M264 719h0' stroke='%23ffffff' stroke-opacity='0.8' stroke-width='1.8' stroke-linecap='round'/><path d='M1038 844h0M619 24h0M510 882h0M956 276h0M1096 859h0M1421 559h0M40 595h0M1320 867h0M858 794h0M1412 326h0M1432 463h0M243 562h0M862 76h0' stroke='%23ffffff' stroke-opacity='0.5' stroke-width='1.4' stroke-linecap='round'/><path d='M1308 112h0M304 334h0M819 610h0' stroke='%23ffffff' stroke-opacity='0.6' stroke-width='1.4' stroke-linecap='round'/><path d='M1064 423h0M1093 676h0M1011 867h0M1089 588h0M473 196h0M822 201h0' stroke='%23ffffff' stroke-opacity='0.4' stroke-width='1.4' stroke-linecap='round'/><path d='M316 606h0M564 479h0M1527 680h0M196 112h0' stroke='%23ffffff' stroke-opacity='0.8' stroke-width='3.2' stroke-linecap='round'/><path d='M1220 523h0M855 248h0M1542 545h0M323 788h0M15 726h0M124 277h0' stroke='%23ffffff' stroke-opacity='0.4' stroke-width='3.2' stroke-linecap='round'/><path d='M896 503h0M1477 799h0M637 397h0M34 332h0M1454 873h0M1202 586h0M1323 200h0M1332 412h0M479 868h0' stroke='%23ffffff' stroke-opacity='0.5' stroke-width='1.8' stroke-linecap='round'/><path d='M1527 451h0M897 57h0' stroke='%23ffffff' stroke-opacity='1.0' stroke-width='1.8' stroke-linecap='round'/><path d='M1146 884h0M881 673h0M43 825h0' stroke='%23ffffff' stroke-opacity='0.7' stroke-width='1.4' stroke-linecap='round'/><path d='M272 313h0M1477 157h0M682 523h0M202 485h0M606 847h0M372 323h0' stroke='%23ffffff' stroke-opacity='0.6' stroke-width='1.8' stroke-linecap='round'/><path d='M1093 608h0M344 316h0' stroke='%23ffffff' stroke-opacity='1.0' stroke-width='3.2' stroke-linecap='round'/><path d='M651 890h0M766 227h0' stroke='%23ffffff' stroke-opacity='0.7' stroke-width='3.2' stroke-linecap='round'/><path d='M1498 221h0M1285 441h0M1414 16h0M519 197h0M563 552h0' stroke='%23ffffff' stroke-opacity='0.4' stroke-width='2.4' stroke-linecap='round'/><path d='M585 138h0M122 66h0M1276 359h0M770 449h0M216 713h0M1444 674h0M909 220h0' stroke='%23ffffff' stroke-opacity='0.7' stroke-width='1.8' stroke-linecap='round'/><path d='M522 225h0M1105 655h0M781 484h0' stroke='%23ffffff' stroke-opacity='0.6' stroke-width='2.4' stroke-linecap='round'/><path d='M604 639h0M1247 564h0M662 111h0M34 652h0' stroke='%23ffffff' stroke-opacity='0.8' stroke-width='2.4' stroke-linecap='round'/><path d='M966 454h0M959 317h0M1309 468h0' stroke='%23ffffff' stroke-opacity='0.9' stroke-width='3.2' stroke-linecap='round'/><path d='M962 457h0M1515 612h0M1127 736h0M266 390h0M786 611h0M738 351h0M643 399h0M639 864h0' stroke='%23ffffff' stroke-opacity='0.6' stroke-width='3.2' stroke-linecap='round'/><path d='M827 262h0M1127 17h0M95 734h0M564 146h0M348 700h0M1187 191h0' stroke='%23ffffff' stroke-opacity='0.7' stroke-width='2.4' stroke-linecap='round'/><path d='M277 336h0' stroke='%23ffffff' stroke-opacity='0.9' stroke-width='2.4' stroke-linecap='round'/><path d='M601 669h0M615 245h0M12 490h0M602 674h0' stroke='%23ffffff' stroke-opacity='1.0' stroke-width='1.4' stroke-linecap='round'/><path d='M391 517h0' stroke='%23ffffff' stroke-opacity='1.0' stroke-width='2.4' stroke-linecap='round'/><path d='M52 700h0' stroke='%23ffffff' stroke-opacity='0.5' stroke-width='2.4' stroke-linecap='round'/></svg>") center / cover no-repeat;
+  opacity: 0.7;
+}
+.e1::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1600 900' preserveAspectRatio='xMidYMid slice'><path d='M846 527h0M154 312h0M1184 634h0M930 822h0M832 788h0M491 99h0M556 195h0' stroke='%23ffffff' stroke-opacity='0.9' stroke-width='1.4' stroke-linecap='round'/><path d='M1411 328h0M1204 78h0M935 267h0M923 745h0' stroke='%23ffffff' stroke-opacity='0.7' stroke-width='1.4' stroke-linecap='round'/><path d='M490 85h0M1203 634h0M14 662h0M853 559h0' stroke='%23ffffff' stroke-opacity='0.9' stroke-width='2.4' stroke-linecap='round'/><path d='M1494 530h0' stroke='%23ffffff' stroke-opacity='0.7' stroke-width='3.2' stroke-linecap='round'/><path d='M611 192h0M972 516h0M251 280h0M713 87h0M1389 143h0' stroke='%23ffffff' stroke-opacity='0.8' stroke-width='1.8' stroke-linecap='round'/><path d='M378 616h0M673 608h0M150 112h0M1284 101h0' stroke='%23ffffff' stroke-opacity='0.8' stroke-width='1.4' stroke-linecap='round'/><path d='M1198 730h0M649 699h0M1452 468h0M298 374h0M627 131h0M1434 209h0M893 558h0' stroke='%23ffffff' stroke-opacity='0.7' stroke-width='1.8' stroke-linecap='round'/><path d='M739 118h0M1175 302h0M1451 236h0M900 273h0M225 586h0' stroke='%23ffffff' stroke-opacity='0.6' stroke-width='1.8' stroke-linecap='round'/><path d='M1355 686h0M1221 227h0M1513 4h0' stroke='%23ffffff' stroke-opacity='0.9' stroke-width='3.2' stroke-linecap='round'/><path d='M1545 548h0' stroke='%23ffffff' stroke-opacity='0.5' stroke-width='1.8' stroke-linecap='round'/><path d='M446 841h0M497 602h0' stroke='%23ffffff' stroke-opacity='0.8' stroke-width='2.4' stroke-linecap='round'/><path d='M819 708h0M589 733h0M521 155h0M1592 759h0' stroke='%23ffffff' stroke-opacity='0.6' stroke-width='1.4' stroke-linecap='round'/><path d='M802 875h0M193 212h0M1583 478h0M1141 806h0' stroke='%23ffffff' stroke-opacity='0.8' stroke-width='3.2' stroke-linecap='round'/><path d='M1241 421h0M853 468h0M403 184h0' stroke='%23ffffff' stroke-opacity='1.0' stroke-width='1.4' stroke-linecap='round'/><path d='M1378 544h0M726 196h0' stroke='%23ffffff' stroke-opacity='1.0' stroke-width='2.4' stroke-linecap='round'/><path d='M37 739h0M1242 436h0M488 154h0' stroke='%23ffffff' stroke-opacity='0.7' stroke-width='2.4' stroke-linecap='round'/><path d='M546 702h0M819 333h0M47 660h0' stroke='%23ffffff' stroke-opacity='0.9' stroke-width='1.8' stroke-linecap='round'/><path d='M1582 318h0' stroke='%23ffffff' stroke-opacity='0.5' stroke-width='3.2' stroke-linecap='round'/><path d='M963 780h0' stroke='%23ffffff' stroke-opacity='0.6' stroke-width='2.4' stroke-linecap='round'/><path d='M1374 272h0M1123 613h0M504 421h0' stroke='%23ffffff' stroke-opacity='0.5' stroke-width='1.4' stroke-linecap='round'/><path d='M601 826h0M273 730h0M588 743h0' stroke='%23ffffff' stroke-opacity='0.6' stroke-width='3.2' stroke-linecap='round'/></svg>") center / cover no-repeat;
+  animation: orbit-twinkle 11s ease-in-out infinite alternate;
+}
+
+/* Nebel, der langsam zieht. */
+.e2 {
+  inset: -25%;
+  background:
+    radial-gradient(28% 24% at 32% 32%, rgba(124, 92, 255, 0.2), rgba(124, 92, 255, 0) 70%),
+    radial-gradient(24% 22% at 66% 70%, rgba(255, 140, 90, 0.14), rgba(255, 140, 90, 0) 70%);
+  animation: orbit-nebula 64s ease-in-out infinite alternate;
+}
+
+/* Die Umlaufbahnen. Jede ist zweigeteilt: die hintere Hälfte liegt unter dem Planeten, die vordere
+   darüber. Beide Hälften neigen sich im selben Takt. */
+.e3::before, .e3::after, .e5::before, .e5::after, .e6 {
+  content: "";
+  position: absolute;
+  inset: auto;
+  left: calc(var(--x) - var(--o));
+  top: calc(var(--y) - var(--o));
+  width: calc(2 * var(--o));
+  height: calc(2 * var(--o));
+  background-size: 100% 100%;
+  rotate: var(--tilt);
+}
+.e3::before, .e5::before { --o: 37vh; animation: orbit-tilt-1 46s ease-in-out infinite alternate; }
+.e3::after, .e5::after { --o: 56vh; animation: orbit-tilt-2 62s ease-in-out infinite alternate; }
+.e6 { --o: 84vh; animation: orbit-tilt-3 80s ease-in-out -20s infinite alternate; }
+.e3::before { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 1000'><path d='M4 500A496 149 0 0 1 996 500' fill='none' stroke='%23ffd9b0' stroke-opacity='0.5' stroke-width='3.6'/></svg>"); }
+.e5::before { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 1000'><path d='M996 500A496 149 0 0 1 4 500' fill='none' stroke='%23ffd9b0' stroke-opacity='0.5' stroke-width='3.6'/><circle cx='891' cy='592' r='11.5' fill='%23fff1dc'/></svg>"); }
+.e3::after { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 1000'><path d='M4 500A496 149 0 0 1 996 500' fill='none' stroke='%23ffd9b0' stroke-opacity='0.5' stroke-width='2.4'/><circle cx='195' cy='383' r='7.7' fill='%23fff1dc'/></svg>"); }
+.e5::after { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 1000'><path d='M996 500A496 149 0 0 1 4 500' fill='none' stroke='%23ffd9b0' stroke-opacity='0.5' stroke-width='2.4'/></svg>"); }
+.e6 { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 1000'><path d='M4 500A496 149 0 0 1 996 500A496 149 0 0 1 4 500' fill='none' stroke='%23ffd9b0' stroke-opacity='0.34' stroke-width='1.7'/><circle cx='40' cy='556' r='5.4' fill='%23fff1dc'/></svg>"); }
+
+/* Der Planet mit Tag- und Nachtseite. */
+.e4 {
+  inset: auto;
+  left: calc(var(--x) - var(--r));
+  top: calc(var(--y) - var(--r));
+  width: calc(2 * var(--r));
+  height: calc(2 * var(--r));
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 30%, #ffe2b0 0%, #f6a15e 24%, #c4506a 58%, #3a1847 88%, #1d0d2c 100%);
+  box-shadow: 0 0 7vmin rgba(246, 161, 94, 0.3), 0 0 22vmin rgba(196, 80, 106, 0.16);
+}
+.e4::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle at 80% 84%, rgba(5, 5, 15, 0.78) 0%, rgba(5, 5, 15, 0) 62%);
+}
+
+/* Inhaltsfolien: der Planet nur angeschnitten in der Ecke, die Bahnen leise. */
+.folie .e1 { opacity: 0.45; }
+.folie .e1::after { opacity: 0.6; }
+.folie .e2 { opacity: 0.6; }
+.folie .e3::before, .folie .e5::before { display: none; }
+.folie .e3::after, .folie .e5::after, .folie .e6 { opacity: 0.6; }
+
+@keyframes orbit-twinkle {
+  from { opacity: 0.25; }
+  to { opacity: 0.9; }
+}
+@keyframes orbit-nebula {
+  from { transform: translate(-3%, 2%) rotate(0deg); }
+  to { transform: translate(3%, -2%) rotate(-7deg); }
+}
+@keyframes orbit-tilt-1 {
+  from { rotate: calc(var(--tilt) - 4deg); }
+  to { rotate: calc(var(--tilt) + 4deg); }
+}
+@keyframes orbit-tilt-2 {
+  from { rotate: calc(var(--tilt) + 5deg); }
+  to { rotate: calc(var(--tilt) - 3deg); }
+}
+@keyframes orbit-tilt-3 {
+  from { rotate: calc(var(--tilt) - 3deg); }
+  to { rotate: calc(var(--tilt) + 5deg); }
+}

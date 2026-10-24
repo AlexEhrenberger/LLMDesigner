@@ -1,0 +1,106 @@
+/*
+ * @name Orbit
+ * @beschreibung Ein glühender Planet mit Umlaufbahnen, die sich langsam neigen
+ * @text hell
+ * @akzent #FFB86B
+ */
+
+/* Wo der Planet steht (--x, --y) und wie groß er ist (--r). */
+.titel { --x: 80%; --y: 80%; --r: 21vh; --tilt: -16deg; }
+.kapitel { --x: 79%; --y: 50%; --r: 24vh; --tilt: -12deg; }
+.folie { --x: 95%; --y: 98%; --r: 17vh; --tilt: 12deg; }
+
+body {
+  background: radial-gradient(110% 100% at var(--x) var(--y), #1f1849 0%, #0d0b25 46%, #05050f 100%);
+}
+
+/* Sterne; die zweite Lage funkelt ganz langsam. */
+.e1 {
+  background: @@ORBIT_STERNE@@ center / cover no-repeat;
+  opacity: 0.7;
+}
+.e1::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: @@ORBIT_STERNE_B@@ center / cover no-repeat;
+  animation: orbit-twinkle 11s ease-in-out infinite alternate;
+}
+
+/* Nebel, der langsam zieht. */
+.e2 {
+  inset: -25%;
+  background:
+    radial-gradient(28% 24% at 32% 32%, rgba(124, 92, 255, 0.2), rgba(124, 92, 255, 0) 70%),
+    radial-gradient(24% 22% at 66% 70%, rgba(255, 140, 90, 0.14), rgba(255, 140, 90, 0) 70%);
+  animation: orbit-nebula 64s ease-in-out infinite alternate;
+}
+
+/* Die Umlaufbahnen. Jede ist zweigeteilt: die hintere Hälfte liegt unter dem Planeten, die vordere
+   darüber. Beide Hälften neigen sich im selben Takt. */
+.e3::before, .e3::after, .e5::before, .e5::after, .e6 {
+  content: "";
+  position: absolute;
+  inset: auto;
+  left: calc(var(--x) - var(--o));
+  top: calc(var(--y) - var(--o));
+  width: calc(2 * var(--o));
+  height: calc(2 * var(--o));
+  background-size: 100% 100%;
+  rotate: var(--tilt);
+}
+.e3::before, .e5::before { --o: 37vh; animation: orbit-tilt-1 46s ease-in-out infinite alternate; }
+.e3::after, .e5::after { --o: 56vh; animation: orbit-tilt-2 62s ease-in-out infinite alternate; }
+.e6 { --o: 84vh; animation: orbit-tilt-3 80s ease-in-out -20s infinite alternate; }
+.e3::before { background-image: @@ORBIT_1_HINTEN@@; }
+.e5::before { background-image: @@ORBIT_1_VORNE@@; }
+.e3::after { background-image: @@ORBIT_2_HINTEN@@; }
+.e5::after { background-image: @@ORBIT_2_VORNE@@; }
+.e6 { background-image: @@ORBIT_3@@; }
+
+/* Der Planet mit Tag- und Nachtseite. */
+.e4 {
+  inset: auto;
+  left: calc(var(--x) - var(--r));
+  top: calc(var(--y) - var(--r));
+  width: calc(2 * var(--r));
+  height: calc(2 * var(--r));
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 30%, #ffe2b0 0%, #f6a15e 24%, #c4506a 58%, #3a1847 88%, #1d0d2c 100%);
+  box-shadow: 0 0 7vmin rgba(246, 161, 94, 0.3), 0 0 22vmin rgba(196, 80, 106, 0.16);
+}
+.e4::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle at 80% 84%, rgba(5, 5, 15, 0.78) 0%, rgba(5, 5, 15, 0) 62%);
+}
+
+/* Inhaltsfolien: der Planet nur angeschnitten in der Ecke, die Bahnen leise. */
+.folie .e1 { opacity: 0.45; }
+.folie .e1::after { opacity: 0.6; }
+.folie .e2 { opacity: 0.6; }
+.folie .e3::before, .folie .e5::before { display: none; }
+.folie .e3::after, .folie .e5::after, .folie .e6 { opacity: 0.6; }
+
+@keyframes orbit-twinkle {
+  from { opacity: 0.25; }
+  to { opacity: 0.9; }
+}
+@keyframes orbit-nebula {
+  from { transform: translate(-3%, 2%) rotate(0deg); }
+  to { transform: translate(3%, -2%) rotate(-7deg); }
+}
+@keyframes orbit-tilt-1 {
+  from { rotate: calc(var(--tilt) - 4deg); }
+  to { rotate: calc(var(--tilt) + 4deg); }
+}
+@keyframes orbit-tilt-2 {
+  from { rotate: calc(var(--tilt) + 5deg); }
+  to { rotate: calc(var(--tilt) - 3deg); }
+}
+@keyframes orbit-tilt-3 {
+  from { rotate: calc(var(--tilt) - 3deg); }
+  to { rotate: calc(var(--tilt) + 5deg); }
+}

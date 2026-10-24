@@ -34,6 +34,10 @@ Das Design zeichnet auf eine Seite im Format 16:9:
   (`position: absolute; inset: 0`). Jede hat dazu `::before` und `::after`.
 - Größen in `vw`, `vh` oder `vmin` wachsen mit der Folie mit.
 - Animationen laufen nur in der Präsentation; im Editor stehen sie still
-  (`html.still`). `html.live` gilt während der Präsentation.
+  (`html.still`) und zeigen ihren Anfang. `html.live` gilt während der
+  Präsentation. Ein Design mit `@keyframes` steht im Menü unter „Bewegt“.
+- Für eine nahtlose, ruhige Bewegung: `alternate` (hin und zurück) oder eine
+  Ebene, die um genau eine Kachelbreite wandert (siehe `wellen.css`). Bewege
+  am besten mit `transform`, das bleibt auch im Vollbild flüssig.
 - Der Text der Folie beginnt etwa 6,4 % vom linken und rechten und 8,4 % vom
   oberen Rand.

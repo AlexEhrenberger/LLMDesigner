@@ -1,0 +1,77 @@
+/*
+ * @name Wellen
+ * @beschreibung Feine Linienwellen, die langsam über ein nächtliches Blau ziehen
+ * @text hell
+ * @akzent #7CC4FF
+ */
+
+body {
+  background: linear-gradient(180deg, #050d22 0%, #0a1a3d 55%, #0e2652 100%);
+}
+
+/* Ein Leuchten, das langsam hin und her wandert. */
+.e1 {
+  inset: -20%;
+  background:
+    radial-gradient(34% 30% at 32% 70%, rgba(60, 170, 255, 0.26), rgba(60, 170, 255, 0) 70%),
+    radial-gradient(30% 26% at 72% 64%, rgba(140, 110, 255, 0.22), rgba(140, 110, 255, 0) 70%);
+  animation: wellen-glow 44s ease-in-out infinite alternate;
+}
+
+/* Drei Lagen Wellen. Jede Kachel ist so breit wie die Folie und wandert in einer Richtung um genau
+   eine Breite, so geht die Bewegung nahtlos weiter. Die Ebene selbst steht und trägt die Maske. */
+.e2::before, .e3::before, .e4::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 200%;
+  height: 100%;
+  background-size: 50% 100%;
+  background-repeat: repeat-x;
+}
+.e2::before {
+  background-image: @@WELLEN_A@@;
+  animation: wellen-drift 160s linear infinite;
+}
+.e3::before {
+  background-image: @@WELLEN_B@@;
+  animation: wellen-drift 230s linear infinite reverse;
+}
+.e4::before {
+  background-image: @@WELLEN_OBEN@@;
+  animation: wellen-drift 280s linear infinite;
+}
+
+/* Ein Hauch Dunst über dem Horizont. */
+.e5 {
+  background: linear-gradient(0deg, rgba(10, 30, 70, 0.55) 0%, rgba(10, 30, 70, 0) 22%);
+}
+.e6 {
+  background-image: @@NOISE_GRAIN@@;
+  opacity: 0.05;
+  mix-blend-mode: overlay;
+}
+
+/* Kapitel: die Wellen steigen zur Mitte, links werden sie leise. */
+.kapitel .e2, .kapitel .e3 {
+  translate: 0 -14vh;
+  -webkit-mask-image: linear-gradient(90deg, rgba(0, 0, 0, 0.18) 10%, rgba(0, 0, 0, 0.35) 40%, #000 78%);
+}
+.kapitel .e4 { opacity: 0.5; }
+.kapitel .e1 { translate: 14vw -10vh; }
+
+/* Inhaltsfolien: ein schmales Band am unteren Rand. */
+.folie .e1 { opacity: 0.5; translate: 0 14vh; }
+.folie .e2 { translate: 0 15vh; opacity: 0.6; }
+.folie .e3 { translate: 0 13vh; opacity: 0.45; }
+.folie .e4 { display: none; }
+
+@keyframes wellen-drift {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+@keyframes wellen-glow {
+  from { transform: translate(-4%, 1%) scale(1); }
+  to { transform: translate(5%, -2%) scale(1.08); }
+}

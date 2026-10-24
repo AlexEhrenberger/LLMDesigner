@@ -1,0 +1,66 @@
+/*
+ * @name Graphit
+ * @beschreibung Gefaltete Flächen aus Graphit mit feinen Kupferkanten
+ * @text hell
+ * @akzent #E8A06C
+ */
+
+body {
+  background: linear-gradient(155deg, #272a30 0%, #1c1e23 50%, #141518 100%);
+}
+
+/* Ein feiner, schräger Schliff. */
+.e1 {
+  background: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.022) 0 0.1vmin, transparent 0.1vmin 0.7vmin);
+}
+.e1::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: @@NOISE_GRAIN@@;
+  opacity: 0.06;
+  mix-blend-mode: overlay;
+}
+
+/* Die Flächen mit ihren Kupferkanten; sie werfen einen weichen Schatten. */
+.e2 {
+  background: @@GRAPHIT_TITEL@@ center / cover no-repeat;
+  filter: drop-shadow(0 1.2vmin 2.4vmin rgba(0, 0, 0, 0.45));
+}
+
+/* Ein Lichtschein in der Mitte. */
+.e3 {
+  background: radial-gradient(50% 60% at 50% 45%, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0) 70%);
+}
+
+/* Eine kurze Kupferleiste über dem Titel. */
+.e4 {
+  inset: auto;
+  left: calc(50% - 3vw);
+  top: 30%;
+  width: 6vw;
+  height: 0.45vmin;
+  border-radius: 0.2vmin;
+  background: linear-gradient(90deg, #f2b48a, #b8693d);
+}
+
+/* Dunkle Ränder. */
+.e5 {
+  background: radial-gradient(120% 100% at 50% 45%, rgba(0, 0, 0, 0) 60%, rgba(0, 0, 0, 0.35) 100%);
+}
+
+/* Kapitel: die Flächen rechts, die Leiste links über der Überschrift. */
+.kapitel .e2 { background-image: @@GRAPHIT_KAPITEL@@; }
+.kapitel .e3 { background: radial-gradient(50% 70% at 30% 50%, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0) 70%); }
+.kapitel .e4 { left: 6.4%; top: 35%; }
+
+/* Inhaltsfolien: eine kleine Falte in der Ecke, die Leiste senkrecht am Rand. */
+.folie .e2 { background-image: @@GRAPHIT_FOLIE@@; }
+.folie .e3 { opacity: 0.6; }
+.folie .e4 {
+  left: 3.2%;
+  top: 8.6%;
+  width: 0.45vmin;
+  height: 7vh;
+  background: linear-gradient(180deg, #f2b48a, #b8693d);
+}

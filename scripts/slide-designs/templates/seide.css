@@ -1,0 +1,86 @@
+/*
+ * @name Seide
+ * @beschreibung Seidige Falten in Petrol und Violett, die langsam fließen
+ * @text hell
+ * @akzent #8FE3D9
+ */
+
+body {
+  background: radial-gradient(130% 120% at 30% 20%, #141b3c 0%, #0b0f24 55%, #070914 100%);
+}
+
+/* Farbschimmer unter dem Stoff; er wandert ganz langsam. */
+.e1 {
+  inset: -30%;
+  background:
+    radial-gradient(26% 30% at 62% 40%, rgba(31, 181, 168, 0.5), rgba(31, 181, 168, 0) 70%),
+    radial-gradient(30% 26% at 40% 62%, rgba(110, 64, 200, 0.55), rgba(110, 64, 200, 0) 70%),
+    radial-gradient(20% 22% at 74% 64%, rgba(214, 84, 160, 0.3), rgba(214, 84, 160, 0) 70%);
+  animation: seide-glow 52s ease-in-out infinite alternate;
+}
+
+/* Die Falten: zwei Lagen feiner Linien, die gegeneinander gleiten. */
+.e2, .e3 {
+  inset: -5%;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+}
+.e2 {
+  background-image: @@SEIDE_TITEL_A@@;
+  animation: seide-flow 38s ease-in-out infinite alternate;
+}
+.e3 {
+  background-image: @@SEIDE_TITEL_B@@;
+  animation: seide-flow 46s ease-in-out -17s infinite alternate-reverse;
+}
+
+/* Ein breiter Glanz, der quer über den Stoff zieht. */
+.e4 {
+  inset: -40%;
+  background: linear-gradient(115deg, transparent 40%, rgba(190, 240, 255, 0.05) 47%, rgba(220, 250, 255, 0.09) 50%, rgba(190, 240, 255, 0.05) 53%, transparent 60%);
+  mix-blend-mode: screen;
+  animation: seide-sheen 34s ease-in-out infinite alternate;
+}
+
+/* Feines Korn und dunkle Ränder für die Tiefe. */
+.e5 {
+  background-image: @@NOISE_GRAIN@@;
+  opacity: 0.06;
+  mix-blend-mode: overlay;
+}
+.e6 {
+  background: radial-gradient(120% 100% at 50% 50%, transparent 55%, rgba(0, 0, 0, 0.45) 100%);
+}
+
+/* Titel: in der Mitte ein ruhiges Band für die Schrift. */
+.titel .e2, .titel .e3 {
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.45) 36%, rgba(0, 0, 0, 0.45) 62%, #000 100%);
+}
+
+/* Kapitel: der Stoff fällt rechts herab, links bleibt Ruhe. */
+.kapitel .e1 { translate: 16vw 0; }
+.kapitel .e2 { background-image: @@SEIDE_KAPITEL_A@@; }
+.kapitel .e3 { background-image: @@SEIDE_KAPITEL_B@@; }
+.kapitel .e2, .kapitel .e3 {
+  -webkit-mask-image: linear-gradient(90deg, rgba(0, 0, 0, 0.2) 30%, #000 72%);
+}
+
+/* Inhaltsfolien: nur ein Saum unten und rechts, der Schimmer gedämpft. */
+.folie .e1 { opacity: 0.55; translate: 8vw 14vh; }
+.folie .e2 { background-image: @@SEIDE_FOLIE_A@@; }
+.folie .e3 { background-image: @@SEIDE_FOLIE_B@@; }
+.folie .e4 { display: none; }
+
+@keyframes seide-glow {
+  from { transform: translate(-3%, 2%) rotate(0deg); }
+  to { transform: translate(3%, -2%) rotate(9deg); }
+}
+@keyframes seide-flow {
+  from { transform: translate(-1.6vw, 1.2vh) rotate(-0.6deg) scale(1.01); }
+  to { transform: translate(1.6vw, -1.4vh) rotate(0.8deg) scale(1.05); }
+}
+@keyframes seide-sheen {
+  from { transform: translateX(-22%); }
+  to { transform: translateX(22%); }
+}

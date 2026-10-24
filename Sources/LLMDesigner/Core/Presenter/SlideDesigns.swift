@@ -26,6 +26,8 @@ struct SlideDesign: Identifiable, Hashable, Sendable {
     var tones: [SlideRole: SlideTone]
     var accent: UInt32?
     var isBuiltIn: Bool
+    /// Has animations, which run in the presentation.
+    var isAnimated = false
 
     func tone(for role: SlideRole) -> SlideTone {
         tones[role] ?? tones[.content] ?? .light
@@ -58,6 +60,7 @@ struct SlideDesign: Identifiable, Hashable, Sendable {
     /// Reads the comment at the top of a design file.
     static func parse(id: String, css: String, isBuiltIn: Bool) -> SlideDesign {
         var design = SlideDesign(id: id, name: id.capitalized, summary: "", css: css, tones: [:], accent: nil, isBuiltIn: isBuiltIn)
+        design.isAnimated = css.contains("@keyframes")
         guard let start = css.range(of: "/*"), let end = css.range(of: "*/", range: start.upperBound..<css.endIndex) else { return design }
         for rawLine in css[start.upperBound..<end.lowerBound].components(separatedBy: "\n") {
             let line = rawLine.trimmingCharacters(in: CharacterSet(charactersIn: " *\t"))
@@ -152,7 +155,10 @@ final class SlideDesignLibrary {
 
     private static func load(from folder: URL?, isBuiltIn: Bool) -> [SlideDesign] {
         guard let folder, let names = try? FileManager.default.contentsOfDirectory(atPath: folder.path) else { return [] }
-        let order = ["aurora", "prisma", "blaupause", "schiefer", "morgenrot", "papier", "bauhaus"]
+        let order = [
+            "aurora", "prisma", "blaupause", "morgenrot", "seide", "wellen", "orbit", "hoehenlinien", "pastell",
+            "schiefer", "papier", "bauhaus", "artdeco", "graphit", "tusche", "botanik", "terrazzo",
+        ]
         return names.filter { $0.hasSuffix(".css") }
             .compactMap { name -> SlideDesign? in
                 guard let css = try? String(contentsOf: folder.appendingPathComponent(name), encoding: .utf8) else { return nil }
