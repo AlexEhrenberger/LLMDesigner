@@ -29,6 +29,73 @@ enum SpeakableText {
         return parts.filter { !$0.isEmpty }.joined(separator: "\n\n")
     }
 
+    /// The text as Qwen TTS should get it. Qwen spells abbreviations letter by letter ("vgl. Abb. 3" came out as
+    /// "VGLE App 3") and stumbles over brackets and symbols, so they are written out; `language` is a two-letter code.
+    static func forVoice(_ text: String, language: String) -> String {
+        var text = text
+        func replace(_ pattern: String, _ template: String) {
+            text = text.replacingOccurrences(of: pattern, with: template, options: .regularExpression)
+        }
+        let abbreviations = language == "en" ? englishAbbreviations : language == "de" ? germanAbbreviations : []
+        for (abbreviation, words) in abbreviations {
+            let pattern = #"(?<![\p{L}\d])"# + abbreviation.split(separator: ".")
+                .map { NSRegularExpression.escapedPattern(for: String($0)) }
+                .joined(separator: #"\.\s?"#) + #"\."#
+            // "… usw. Danach": the abbreviation ended the sentence, so its full stop stays.
+            if sentenceEnds.contains(abbreviation) {
+                replace(pattern + #"(?=\s*$|\s*\n|\s+\p{Lu})"#, words + ".")
+            }
+            replace(pattern, words)
+        }
+        let percent = language == "en" ? "percent" : "Prozent"
+        replace(#"(?<=\d)\s?%|%"#, " " + percent)
+        replace(#"(?<=\d)\s?€"#, " Euro")
+        replace(#"€\s?(\d[\d.,]*)"#, "$1 Euro")
+        replace(#"\s*&\s*"#, language == "en" ? " and " : " und ")
+        if language == "de" {
+            replace(#"(?<![\p{L}\d])S\.\s?(?=\d)"#, "Seite ")
+            replace(#"§\s?"#, "Paragraf ")
+            replace(#"°\s?C\b"#, " Grad Celsius")
+            replace("°", " Grad")
+            replace(#"\bkm/h\b"#, "Kilometer pro Stunde")
+            replace(#"(?<=\d)\s?–\s?(?=\d)"#, " bis ")
+        }
+        // Brackets, arrows and dashes become pauses; quotation marks and bullets go.
+        replace(#"\s*(?:→|⇒|->|=>)\s*"#, ", ")
+        replace(#"\s+[–—-]\s+"#, ", ")
+        replace(#"\s*[(\[]\s*"#, ", ")
+        replace(#"\s*[)\]]"#, ",")
+        replace(#"[„“”"«»•▪◦]"#, "")
+        replace(#",\s*(?=[,.!?:;…]|$)"#, "")
+        replace(#"(?m)^\s*,\s*"#, "")
+        replace(#"[ \t]{2,}"#, " ")
+        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Written without spaces; "z. B." and "z.B." both match.
+    private static let germanAbbreviations: [(String, String)] = [
+        ("i.d.R.", "in der Regel"), ("u.v.m.", "und vieles mehr"), ("n.Chr.", "nach Christus"), ("v.Chr.", "vor Christus"),
+        ("z.B.", "zum Beispiel"), ("d.h.", "das heißt"), ("u.a.", "unter anderem"), ("u.U.", "unter Umständen"),
+        ("v.a.", "vor allem"), ("o.Ä.", "oder Ähnliches"), ("z.T.", "zum Teil"), ("s.o.", "siehe oben"), ("s.u.", "siehe unten"),
+        ("bzw.", "beziehungsweise"), ("usw.", "und so weiter"), ("etc.", "et cetera"), ("ca.", "circa"), ("vgl.", "vergleiche"),
+        ("Vgl.", "Vergleiche"), ("evtl.", "eventuell"), ("ggf.", "gegebenenfalls"), ("inkl.", "inklusive"), ("exkl.", "exklusive"),
+        ("zzgl.", "zuzüglich"), ("bspw.", "beispielsweise"), ("sog.", "sogenannte"), ("bzgl.", "bezüglich"),
+        ("insbes.", "insbesondere"), ("insb.", "insbesondere"), ("allg.", "allgemein"), ("gem.", "gemäß"), ("geb.", "geboren"),
+        ("Nr.", "Nummer"), ("Abb.", "Abbildung"), ("Tab.", "Tabelle"), ("Kap.", "Kapitel"), ("Bd.", "Band"),
+        ("Hrsg.", "Herausgeber"), ("Dr.", "Doktor"), ("Prof.", "Professor"), ("Mio.", "Millionen"), ("Mrd.", "Milliarden"),
+        ("Tsd.", "Tausend"), ("Std.", "Stunden"), ("Min.", "Minuten"), ("Jhd.", "Jahrhundert"), ("Jh.", "Jahrhundert"),
+        ("Str.", "Straße"), ("ff.", "folgende"),
+    ]
+
+    private static let englishAbbreviations: [(String, String)] = [
+        ("e.g.", "for example"), ("i.e.", "that is"), ("etc.", "et cetera"), ("vs.", "versus"), ("approx.", "approximately"),
+        ("Fig.", "Figure"),
+    ]
+
+    /// Abbreviations that often close a sentence. Others are usually followed by a capitalised noun ("z. B. Daten",
+    /// "Dr. Müller"), which must not read as a new sentence.
+    private static let sentenceEnds: Set<String> = ["usw.", "etc.", "u.v.m.", "ff."]
+
     /// Two-letter language code of the text ("de", "en", …), used for the voice.
     static func language(of text: String) -> String {
         let recognizer = NLLanguageRecognizer()

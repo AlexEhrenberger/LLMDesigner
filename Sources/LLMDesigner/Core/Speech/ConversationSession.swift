@@ -354,10 +354,10 @@ extension ConversationSession.Phase {
 }
 
 /// Cuts an answer that is still streaming into pieces a voice can read: whole sentences only, never inside a code
-/// block or display formula. The first piece goes out as soon as possible, so speaking starts early; later pieces
-/// gather a few sentences, which sounds more natural and costs fewer TTS requests.
+/// block or display formula. The first piece goes out as soon as it is long enough for Qwen to keep the language,
+/// so speaking starts early; later pieces gather a few sentences, which sounds more natural and costs fewer requests.
 struct SpokenAnswerSegmenter {
-    private static let firstPieceLength = 20
+    private static let firstPieceLength = SpeechReader.shortestPiece
     private static let pieceLength = 100
 
     /// Characters of the answer that have been taken.

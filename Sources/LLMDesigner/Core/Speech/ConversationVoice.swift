@@ -102,7 +102,12 @@ final class ConversationVoice {
         let token = answer
         worker = Task { [weak self] in
             while let self, token == self.answer, !self.queue.isEmpty {
-                let piece = self.queue.removeFirst()
+                var piece = self.queue.removeFirst()
+                // Short pieces go out together with what is waiting (see `SpeechReader.shortestPiece`).
+                while let next = self.queue.first, next.language == piece.language,
+                      min(piece.text.count, next.text.count) < SpeechReader.shortestPiece {
+                    piece.text += " " + self.queue.removeFirst().text
+                }
                 guard let clip = await self.render(piece.text, language: piece.language), token == self.answer else { continue }
                 self.play(clip, token: token)
             }

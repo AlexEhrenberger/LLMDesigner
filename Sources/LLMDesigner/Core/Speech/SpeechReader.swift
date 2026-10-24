@@ -153,7 +153,7 @@ final class SpeechReader: NSObject {
 
     /// Sentence groups of up to ~220 characters, with where they are in `text`. Short paragraphs (headings,
     /// list items) share a group, so Qwen doesn't pause for a new request after every line.
-    private static func chunks(of text: String) -> [(text: String, range: NSRange)] {
+    static func chunks(of text: String) -> [(text: String, range: NSRange)] {
         var result: [(text: String, range: NSRange)] = []
         var group = ""
         var groupRange: Range<String.Index>?
@@ -175,7 +175,7 @@ final class SpeechReader: NSObject {
                 let tokenizer = NLTokenizer(unit: .sentence)
                 tokenizer.string = text
                 tokenizer.enumerateTokens(in: paragraph) { range, _ in
-                    let sentence = text[range].trimmingCharacters(in: .whitespaces)
+                    let sentence = text[range].trimmingCharacters(in: .whitespacesAndNewlines)
                     if !group.isEmpty && group.count + sentence.count > 220 { close() }
                     group += group.isEmpty ? sentence : " " + sentence
                     groupRange = groupRange.map { $0.lowerBound..<range.upperBound } ?? range
@@ -185,6 +185,32 @@ final class SpeechReader: NSObject {
             paragraphStart = paragraphEnd < text.endIndex ? text.index(after: paragraphEnd) : text.endIndex
         }
         close()
+        return mergingShortGroups(result)
+    }
+
+    /// Below this many characters a piece joins its neighbour: on a few words alone Qwen often loses the language
+    /// ("Ja, genau." came out English or mumbled in tests).
+    nonisolated static let shortestPiece = 40
+
+    /// A short group (a heading closed before a long paragraph, a closing "Viel Erfolg!") goes with the group
+    /// before it, or with the next one when it comes first.
+    private static func mergingShortGroups(_ groups: [(text: String, range: NSRange)]) -> [(text: String, range: NSRange)] {
+        var result: [(text: String, range: NSRange)] = []
+        var carried: (text: String, range: NSRange)?
+        for var group in groups {
+            if let short = carried {
+                group = (short.text + " " + group.text, NSUnionRange(short.range, group.range))
+                carried = nil
+            }
+            if group.text.count >= shortestPiece {
+                result.append(group)
+            } else if let last = result.last {
+                result[result.count - 1] = (last.text + " " + group.text, NSUnionRange(last.range, group.range))
+            } else {
+                carried = group
+            }
+        }
+        if let carried { result.append(carried) }
         return result
     }
 }

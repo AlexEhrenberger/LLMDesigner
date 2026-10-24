@@ -78,13 +78,21 @@ struct QwenTTSClient: Sendable {
         }
     }
 
+    /// Sampling temperature of the speech tokens. With Qwen's default of 0.9 short German pieces now and then came
+    /// out as mumbling or another language; in a test of about 400 clips 0.6 had a third fewer word errors and none
+    /// of those, without the voice going flat (0.45 was no better). Older services ignore the field.
+    static let temperature = 0.6
+
     /// WAV audio (24 kHz mono). The service caches results, so repeats are instant. `instructions` describe how
-    /// the voice should sound, e.g. "ruhig und warm".
+    /// the voice should sound, e.g. "ruhig und warm". The text goes out in its spoken form (`SpeakableText.forVoice`).
     func speech(text: String, model: String, voice: String, language: String, instructions: String? = nil) async throws -> Data {
         var request = URLRequest(url: baseURL.appending(path: "v1/audio/speech"), timeoutInterval: 600)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        var body = ["model": model, "input": text, "voice": voice, "language": language, "response_format": "wav"]
+        var body: [String: Any] = [
+            "model": model, "input": SpeakableText.forVoice(text, language: language), "voice": voice,
+            "language": language, "response_format": "wav", "temperature": Self.temperature,
+        ]
         if let instructions { body["instructions"] = instructions }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         let data: Data

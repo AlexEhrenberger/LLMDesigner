@@ -304,7 +304,7 @@ private struct VoiceSettings: View {
                 ) { app.previewVoice(of: persona.id) }
             }
 
-            TextField("", text: style, prompt: Text("Sprechweise (optional), z. B. ruhig und warm, leicht heiser, schnell und fröhlich").foregroundStyle(Theme.textTertiary))
+            TextField("", text: style, prompt: Text("Sprechweise (optional, nur Qwen TTS groß), z. B. ruhig und warm, leicht heiser").foregroundStyle(Theme.textTertiary))
                 .textFieldStyle(.plain)
                 .font(.system(size: 13.5))
                 .foregroundStyle(Theme.textPrimary)
@@ -314,7 +314,7 @@ private struct VoiceSettings: View {
                 .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Theme.strongBorder))
                 .disabled(persona.voice == nil)
                 .opacity(persona.voice == nil ? 0.5 : 1)
-                .help(persona.voice == nil ? "Erst eine eigene Stimme wählen" : "Anweisung an Qwen TTS, wie die Stimme klingen soll")
+                .help(persona.voice == nil ? "Erst eine eigene Stimme wählen" : "Anweisung an Qwen TTS, wie die Stimme klingen soll. Wirkt nur mit dem großen Modell; das kleine würde davon unsicher und wird ohne sie gefragt.")
         }
     }
 

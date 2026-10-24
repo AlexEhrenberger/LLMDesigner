@@ -261,15 +261,18 @@ extension AppModel {
         return voice(of: persona)
     }
 
+    /// The speaking style goes to the large model only: the small one was not trained on instructions and gets
+    /// unsteady with them (in a test, 5 of 16 German sentences went wrong instead of 1).
     func voice(of persona: Persona?) -> VoiceChoice {
         guard let persona, let voice = persona.voice else {
             return VoiceChoice(engine: speechEngine, qwenVoice: qwenVoice)
         }
+        let engine: SpeechEngine = speechEngine.qwenModel == nil ? .qwenSmall : speechEngine
         let style = persona.voiceStyle?.trimmingCharacters(in: .whitespacesAndNewlines)
         return VoiceChoice(
-            engine: speechEngine.qwenModel == nil ? .qwenSmall : speechEngine,
+            engine: engine,
             qwenVoice: voice,
-            instructions: style?.isEmpty == false ? style : nil
+            instructions: engine == .qwenLarge && style?.isEmpty == false ? style : nil
         )
     }
 
