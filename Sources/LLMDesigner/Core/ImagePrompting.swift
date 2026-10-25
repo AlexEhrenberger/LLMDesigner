@@ -127,7 +127,7 @@ enum ImagePromptBuilder {
         if let end = text.range(of: "</think>", options: .backwards) { text = String(text[end.upperBound...]) }
         if let end = text.range(of: "<channel|>", options: .backwards) { text = String(text[end.upperBound...]) }
         guard let promptMarker = text.range(of: "PROMPT:", options: [.caseInsensitive, .backwards]) else {
-            throw LMStudioError.server("Das Modell hat keinen brauchbaren Prompt geliefert.")
+            throw LLMError.server("Das Modell hat keinen brauchbaren Prompt geliefert.")
         }
         var rest = String(text[promptMarker.upperBound...])
         var caption = ""
@@ -138,7 +138,7 @@ enum ImagePromptBuilder {
         let prompt = rest.replacingOccurrences(of: "\n", with: " ")
             .replacingOccurrences(of: "**", with: "")
             .trimmingCharacters(in: CharacterSet(charactersIn: " \n*<>"))
-        guard prompt.split(separator: " ").count >= 5 else { throw LMStudioError.server("Das Modell hat keinen brauchbaren Prompt geliefert.") }
+        guard prompt.split(separator: " ").count >= 5 else { throw LLMError.server("Das Modell hat keinen brauchbaren Prompt geliefert.") }
         caption = caption.components(separatedBy: .newlines).first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) ?? ""
         caption = caption.trimmingCharacters(in: CharacterSet(charactersIn: " *\"„“”<>"))
         if caption.hasSuffix("."), !caption.hasSuffix("..") { caption.removeLast() }

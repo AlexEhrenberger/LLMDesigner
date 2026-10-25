@@ -314,7 +314,7 @@ private struct ConversationButton: View {
     private var helpText: String {
         if app.canStartConversation { return "Gesprächsmodus (⇧⌘D): sprechen statt tippen, die Antworten werden vorgelesen" }
         if app.isGenerating { return "Gesprächsmodus: Warte, bis die Antwort fertig ist" }
-        return "Gesprächsmodus: Lade zuerst ein Modell in LM Studio"
+        return "Gesprächsmodus: Lade zuerst ein Modell in \(app.provider.label)"
     }
 }
 

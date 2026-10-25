@@ -233,7 +233,7 @@ private struct AnalysisStart: View {
                     .font(.system(size: 12.5))
                     .foregroundStyle(colors.tertiaryText)
             }
-            Text("Analysiert wird mit dem Modell, das in LM Studio gewählt ist (unten links in der Seitenleiste). Je nach Länge dauert das eine bis zwei Minuten; die Teile erscheinen, sobald sie fertig sind.")
+            Text("Analysiert wird mit dem Modell, das unten links in der Seitenleiste gewählt ist. Je nach Länge dauert das eine bis zwei Minuten; die Teile erscheinen, sobald sie fertig sind.")
                 .font(.system(size: 11.5))
                 .foregroundStyle(colors.tertiaryText)
                 .multilineTextAlignment(.center)

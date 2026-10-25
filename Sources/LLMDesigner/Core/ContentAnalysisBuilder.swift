@@ -449,7 +449,7 @@ enum ContentAnalysisBuilder {
     }
 
     private static var noResult: Error {
-        LMStudioError.server("Das Modell hat dazu nichts Verwertbares geliefert.")
+        LLMError.server("Das Modell hat dazu nichts Verwertbares geliefert.")
     }
 
     static func jsonObject(in answer: String) -> String {

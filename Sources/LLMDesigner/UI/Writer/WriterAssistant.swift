@@ -445,7 +445,7 @@ final class WriterAssistant {
     // MARK: Helpers
 
     private struct Request {
-        let client: LMStudioClient
+        let client: LLMClient
         let model: String
         /// How many characters of the document fit into the prompt.
         let limit: Int
@@ -454,11 +454,11 @@ final class WriterAssistant {
     private func prepare() -> Request? {
         guard let app else { return nil }
         guard let client = app.client, let model = app.currentModelId else {
-            error = "Kein Modell gewählt. Wähle eines unten links in der Seitenleiste („LM Studio verbunden“)."
+            error = "Kein Modell gewählt. Wähle eines unten links in der Seitenleiste."
             return nil
         }
         guard !isBusy else { return nil }
-        let context = app.currentModel?.loadedContextLength ?? 8_192
+        let context = app.currentModel?.workingContextLength ?? 8_192
         // About 3 characters per token; half the context for the document, the rest for instructions and the answer.
         return Request(client: client, model: model, limit: max(2_000, Int(Double(context) * 3 * 0.5)))
     }

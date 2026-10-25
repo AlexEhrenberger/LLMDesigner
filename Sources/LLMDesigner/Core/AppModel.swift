@@ -67,15 +67,11 @@ struct FolderSection<Item>: Identifiable {
 @MainActor
 @Observable
 final class AppModel {
-    static let defaultEndpoint = "http://127.0.0.1:1234"
-
     private enum Keys {
-        static let endpoint = "endpoint"
-        static let apiKey = "apiKey"
+        static let provider = "provider"
         static let systemPrompt = "systemPrompt"
         static let temperature = "temperature"
         static let useCustomTemperature = "useCustomTemperature"
-        static let preferredModel = "preferredModel"
         static let sidebarVisible = "sidebarVisible"
         static let pdfPaperSize = "pdfPaperSize"
         static let pdfSpeakerLineEnabled = "pdfSpeakerLineEnabled"
@@ -95,6 +91,17 @@ final class AppModel {
         static let writerLightPaper = "writerLightPaper"
         static let writerReadsAnswers = "writerReadsAnswers"
         static let presenterNotesVisible = "presenterNotesVisible"
+
+        /// Each source keeps its own address, token and chosen model; LM Studio's keys are the ones from before Kapitsa.
+        static func endpoint(of provider: LLMProvider) -> String {
+            provider == .lmStudio ? "endpoint" : "\(provider.rawValue)Endpoint"
+        }
+        static func apiKey(of provider: LLMProvider) -> String {
+            provider == .lmStudio ? "apiKey" : "\(provider.rawValue)ApiKey"
+        }
+        static func preferredModel(of provider: LLMProvider) -> String {
+            provider == .lmStudio ? "preferredModel" : "\(provider.rawValue)PreferredModel"
+        }
     }
 
     static let defaultSpeakerTemplate = "{Modell} sagt:"
@@ -105,15 +112,29 @@ final class AppModel {
     /// The settings live in the open library (`Einstellungen.plist`), not in the system preferences.
     @ObservationIgnored let settings: LibrarySettings = AppLibrary.current.settings
 
+    /// Where the models run. Switching loads that source's address, token and chosen model.
+    var provider: LLMProvider {
+        didSet {
+            guard provider != oldValue else { return }
+            settings.set(provider.rawValue, forKey: Keys.provider)
+            models = []
+            explicitModelChoice = false
+            endpoint = settings.string(forKey: Keys.endpoint(of: provider)) ?? provider.defaultEndpoint
+            apiKey = settings.string(forKey: Keys.apiKey(of: provider)) ?? ""
+            preferredModelId = settings.string(forKey: Keys.preferredModel(of: provider))
+            setConnection(.connecting)
+            scheduleRefresh()
+        }
+    }
     var endpoint: String {
         didSet {
-            settings.set(endpoint, forKey: Keys.endpoint)
+            settings.set(endpoint, forKey: Keys.endpoint(of: provider))
             scheduleRefresh()
         }
     }
     var apiKey: String {
         didSet {
-            settings.set(apiKey, forKey: Keys.apiKey)
+            settings.set(apiKey, forKey: Keys.apiKey(of: provider))
             scheduleRefresh()
         }
     }
@@ -338,7 +359,7 @@ final class AppModel {
     private(set) var models: [LMModel] = []
     private(set) var connection: ConnectionState = .connecting
     private(set) var preferredModelId: String? {
-        didSet { settings.set(preferredModelId, forKey: Keys.preferredModel) }
+        didSet { settings.set(preferredModelId, forKey: Keys.preferredModel(of: provider)) }
     }
 
     // MARK: Chats
@@ -447,8 +468,10 @@ final class AppModel {
 
     init() {
         let defaults = settings
-        endpoint = defaults.string(forKey: Keys.endpoint) ?? Self.defaultEndpoint
-        apiKey = defaults.string(forKey: Keys.apiKey) ?? ""
+        let provider = defaults.string(forKey: Keys.provider).flatMap(LLMProvider.init(rawValue:)) ?? .lmStudio
+        self.provider = provider
+        endpoint = defaults.string(forKey: Keys.endpoint(of: provider)) ?? provider.defaultEndpoint
+        apiKey = defaults.string(forKey: Keys.apiKey(of: provider)) ?? ""
         systemPrompt = defaults.string(forKey: Keys.systemPrompt) ?? ""
         temperature = defaults.object(forKey: Keys.temperature) as? Double ?? 0.7
         useCustomTemperature = defaults.bool(forKey: Keys.useCustomTemperature)
@@ -465,7 +488,7 @@ final class AppModel {
         speechRate = defaults.object(forKey: Keys.speechRate) as? Double ?? 0.5
         conversationPause = defaults.object(forKey: Keys.conversationPause) as? Double ?? Self.defaultConversationPause
         webReaderFallback = defaults.object(forKey: Keys.webReaderFallback) as? Bool ?? true
-        preferredModelId = defaults.string(forKey: Keys.preferredModel)
+        preferredModelId = defaults.string(forKey: Keys.preferredModel(of: provider))
         newChatThinking = defaults.bool(forKey: Keys.thinkingDefault)
         newChatMemory = defaults.string(forKey: Keys.memoryDefault).map(MemoryLevel.init(stored:)) ?? .off
         newChatContextLength = (defaults.object(forKey: Keys.contextDefault) as? Int).flatMap { ContextChoice.lengths.contains($0) ? $0 : nil }
@@ -484,7 +507,7 @@ final class AppModel {
             thalamus[persona.id] = PersonaStore.loadThalamus(of: persona.id)
         }
         saveSkillsOnQuit()
-        // Impressions of chats that went quiet while the app was closed; LM Studio needs a moment first.
+        // Impressions of chats that went quiet while the app was closed; the model server needs a moment first.
         Task { [weak self] in
             try? await Task.sleep(for: .seconds(20))
             self?.catchUpThalamus()
@@ -527,7 +550,7 @@ final class AppModel {
 
     // MARK: Derived state
 
-    var client: LMStudioClient? { try? LMStudioClient(endpoint: endpoint, apiKey: apiKey) }
+    var client: LLMClient? { try? LLMClient(provider: provider, endpoint: endpoint, apiKey: apiKey) }
     var hostDescription: String { client?.hostDescription ?? endpoint }
 
     var chatModels: [LMModel] { models.filter(\.isChatCapable) }
@@ -540,7 +563,15 @@ final class AppModel {
     }
     /// Writer Studio uses the model chosen last, not the one of the chat that was open before.
     var currentModelId: String? {
-        selectedDocumentID != nil ? preferredModelId : selectedChat?.modelId ?? preferredModelId
+        selectedDocumentID != nil ? preferredModelId : selectedChat.flatMap(modelId(for:)) ?? preferredModelId
+    }
+
+    /// The model that answers in a chat: its own, as long as the current source offers it. A chat begun with the other
+    /// source, or with a model that is gone, goes on with the chosen one (Kapitsa serves only the model it runs).
+    func modelId(for chat: Chat) -> String? {
+        guard let id = chat.modelId else { return preferredModelId }
+        if models.isEmpty || chatModels.contains(where: { $0.id == id }) { return id }
+        return preferredModelId ?? id
     }
     var currentModel: LMModel? {
         guard let currentModelId else { return nil }
@@ -661,7 +692,7 @@ final class AppModel {
         return buckets.filter { !$0.entries.isEmpty }.map { ChatGroup(id: $0.title, entries: $0.entries) }
     }
 
-    // MARK: LM Studio
+    // MARK: Model server
 
     func refreshModels() async {
         guard let client else {
@@ -670,10 +701,13 @@ final class AppModel {
         }
         do {
             let list = try await client.fetchModels()
+            // The source was switched while the list was on its way.
+            guard client.provider == provider else { return }
             if list != models { models = list }
             setConnection(.connected)
             ensureModelSelection()
         } catch {
+            guard client.provider == provider else { return }
             if !models.isEmpty { models = [] }
             setConnection(.failed(error.localizedDescription))
         }
@@ -693,6 +727,7 @@ final class AppModel {
     }
 
     /// Falls back to a loaded model unless the user deliberately picked one that LM Studio loads on demand.
+    /// Kapitsa lists only the model it runs, so the choice follows it.
     private func ensureModelSelection() {
         let preferred = preferredModelId.flatMap { id in chatModels.first { $0.id == id } }
         if let preferred, preferred.isLoaded || explicitModelChoice { return }
@@ -838,7 +873,8 @@ final class AppModel {
             if let folderID = newChatFolderID, chatFolders.contains(where: { $0.id == folderID }) { chat.folderID = folderID }
             // The memory belongs to a persona; chats without one have none.
             if chat.personaID != nil { chat.memory = newChatMemory }
-            chat.contextLength = newChatContextLength
+            // With Kapitsa the chat runs in the context Kapitsa was started with; back in LM Studio it takes the loaded one.
+            chat.contextLength = provider.loadsModels ? newChatContextLength : nil
             newChatWebSearch = false
             newChatWikipedia = false
             newChatSkillIDs = []
@@ -886,13 +922,14 @@ final class AppModel {
 
     private func generate(in chatID: Chat.ID, spoken: Bool = false) {
         guard let client, let index = index(of: chatID),
-              let modelId = chats[index].modelId ?? preferredModelId else { return }
+              let modelId = self.modelId(for: chats[index]) else { return }
 
         let model = models.first { $0.id == modelId }
-        // A chat with a chosen context length needs the model loaded with exactly that length.
+        // A chat with a chosen context length needs the model loaded with exactly that length. Kapitsa keeps the
+        // context it was started with; there the choice only sets the budget.
         let wantedContext = chats[index].contextLength
         // Plain OpenAI-compatible servers (no state reported) can't be reloaded.
-        let canReload = model.map { $0.state != nil } ?? true
+        let canReload = client.provider.loadsModels && (model.map { $0.state != nil } ?? true)
         let reloadContext = wantedContext.flatMap { canReload && $0 != model?.loadedContextLength ? $0 : nil }
         let canCallTools = model?.acceptsTools == true
         let sources: WebTools.Sources = canCallTools ? lookupSources(of: chats[index]) : []
@@ -911,9 +948,10 @@ final class AppModel {
         if spoken {
             system = system.isEmpty ? ConversationSession.systemHint : system + "\n\n" + ConversationSession.systemHint
         }
-        // Gemma 4 thinks only with its token at the very start of the system prompt; other models
-        // (e.g. Qwen 3.5) think on their own.
-        if chats[index].thinking == true, (model ?? LMModel(id: modelId)).thinksOnThinkToken {
+        // Kapitsa switches thinking per request. In LM Studio, Gemma 4 thinks only with its token at the very start of
+        // the system prompt; Qwen 3.5 always thinks there.
+        let thinking = chats[index].thinking == true
+        if thinking, !client.provider.switchesThinking, (model ?? LMModel(id: modelId)).thinksOnThinkToken {
             system = "<|think|>" + system
         }
         if !system.isEmpty { payload.append(ChatPayloadMessage(role: "system", content: system)) }
@@ -926,7 +964,7 @@ final class AppModel {
         }
 
         // Search results must leave room for the chat and the answer (roughly 3–4 characters per token).
-        let contextTokens = wantedContext ?? model?.loadedContextLength ?? 8_192
+        let contextTokens = contextLength(of: chats[index])
         let resultLimit = min(12_000, max(3_000, contextTokens / 2))
         var resultBudget = max(6_000, contextTokens * 4 / 3)
 
@@ -1012,7 +1050,9 @@ final class AppModel {
                 for round in 0... {
                     // The last round goes without tools, so the model answers with what it found so far.
                     let offered = round < WebTools.maxRounds ? tools : nil
-                    let stream = client.streamChat(model: modelId, messages: conversation, temperature: temperature, tools: offered)
+                    let stream = client.streamChat(
+                        model: modelId, messages: conversation, temperature: temperature, tools: offered, thinking: thinking
+                    )
                     var calls: [ToolCall] = []
 
                     for try await event in stream {
@@ -1498,7 +1538,7 @@ final class AppModel {
     func refreshOutline(_ chatID: Chat.ID) -> Task<Void, Never>? {
         if let running = outlineTasks[chatID] { return running }
         guard !isGenerating(chatID), let client, let snapshot = chat(chatID),
-              let model = snapshot.modelId ?? preferredModelId else { return nil }
+              let model = modelId(for: snapshot) else { return nil }
 
         outlineGeneratingIDs.insert(chatID)
         outlineErrors[chatID] = nil
@@ -1626,7 +1666,7 @@ final class AppModel {
     private func generateFollowUps(_ chatID: Chat.ID, answerID: ChatMessage.ID) async {
         guard let client, let snapshot = chat(chatID),
               let answer = snapshot.messages.first(where: { $0.id == answerID }), !answer.content.isEmpty,
-              let model = answer.model ?? snapshot.modelId ?? preferredModelId else { return }
+              let model = answer.model ?? modelId(for: snapshot) else { return }
         let request = FollowUpBuilder.requestMessages(for: snapshot, answer: answer)
         let task = Task { [weak self] in
             guard let reply = try? await client.complete(

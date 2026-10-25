@@ -205,7 +205,7 @@ enum OutlineBuilder {
             let owner = sections.lastIndex { position($0.target) <= position(point.target) } ?? 0
             sections[owner].items.append(point)
         }
-        guard !sections.isEmpty else { throw LMStudioError.server("Das Modell hat kein verwertbares Inhaltsverzeichnis geliefert.") }
+        guard !sections.isEmpty else { throw LLMError.server("Das Modell hat kein verwertbares Inhaltsverzeichnis geliefert.") }
 
         let title = response.chattitel.map { raw in
             String(cleanTitle(raw).trimmingCharacters(in: CharacterSet(charactersIn: "\"'„“”‚‘’«»").union(.whitespaces)).prefix(70))

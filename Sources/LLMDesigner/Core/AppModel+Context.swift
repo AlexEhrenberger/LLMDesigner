@@ -24,7 +24,7 @@ struct ContextUsage {
     let parts: [Part]
     /// What the model is loaded with right now, if that differs from the chat's choice.
     let loadedLength: Int?
-    /// The estimate was matched against LM Studio's count for the last answer.
+    /// The estimate was matched against the server's count for the last answer.
     let isCalibrated: Bool
 
     var used: Int { parts.map(\.tokens).reduce(0, +) }
@@ -34,7 +34,7 @@ struct ContextUsage {
 
 /// Memory and context length of a chat: chosen before the first message, fixed afterwards.
 extension AppModel {
-    /// Rough cost of a picture for a vision model; LM Studio's count for the last answer corrects it.
+    /// Rough cost of a picture for a vision model; the server's count for the last answer corrects it.
     static let tokensPerImage = 260
 
     /// Once the chat has started, memory and context length can't change any more.
@@ -49,6 +49,17 @@ extension AppModel {
     var activeContextLength: Int? {
         if let chat = selectedChat { return chat.contextLength }
         return newChatContextLength
+    }
+
+    /// Kapitsa's context, set when it was started (`kapitsa serve --context …`); nil for LM Studio, where each chat
+    /// chooses its own.
+    var fixedContextLength: Int? {
+        provider.loadsModels ? nil : currentModel?.loadedContextLength
+    }
+
+    /// What a new chat's memories may fill (see `contextLength(of:)`).
+    var newChatBudget: Int {
+        provider.loadsModels ? newChatContextLength : currentModel?.workingContextLength ?? 8_192
     }
 
     func chooseMemory(_ level: MemoryLevel) {
@@ -87,11 +98,12 @@ extension AppModel {
     // MARK: Usage
 
     /// What the next request of this chat will hold, estimated per part (about 3.5 characters per token) and,
-    /// where possible, scaled to the prompt size LM Studio reported for the last answer.
+    /// where possible, scaled to the prompt size the server reported for the last answer.
     func contextUsage(for chat: Chat) -> ContextUsage {
-        let model = models.first { $0.id == (chat.modelId ?? preferredModelId) }
+        let model = models.first { $0.id == modelId(for: chat) }
         let loaded = model?.loadedContextLength
-        let capacity = chat.contextLength ?? loaded ?? 8_192
+        // Kapitsa holds its whole context for every chat, whatever the chat chose with LM Studio.
+        let capacity = (provider.loadsModels ? chat.contextLength : nil) ?? loaded ?? 8_192
         let persona = persona(of: chat)
         func tokens(_ text: String) -> Int { SkillPrompt.estimatedTokens(text) }
 
@@ -122,7 +134,7 @@ extension AppModel {
             imageCount += message.images?.count ?? 0
         }
 
-        // LM Studio counted the prompt of the latest answer exactly; that prompt held everything before it.
+        // The server counted the prompt of the latest answer exactly; that prompt held everything before it.
         // Answers that looked things up don't count: their prompt also held the search results.
         var scale = 1.0
         var isCalibrated = false
@@ -151,7 +163,8 @@ extension AppModel {
         return ContextUsage(
             capacity: capacity,
             parts: parts,
-            loadedLength: loaded.flatMap { $0 == capacity ? nil : $0 },
+            // Kapitsa isn't reloaded: its context is the one it was started with.
+            loadedLength: provider.loadsModels ? loaded.flatMap { $0 == capacity ? nil : $0 } : nil,
             isCalibrated: isCalibrated
         )
     }

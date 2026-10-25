@@ -258,7 +258,7 @@ final class ConversationSession {
         // A shortcut such as ⌘N may have switched chats in the meantime.
         if let chatID, app.selectedChatID != chatID, app.chat(chatID) != nil { app.selectChat(chatID) }
         guard let sent = app.sendSpoken(text) else {
-            fail("Die Nachricht konnte nicht gesendet werden. Ist in LM Studio ein Modell geladen?")
+            fail("Die Nachricht konnte nicht gesendet werden. Ist in \(app.provider.label) ein Modell geladen?")
             return
         }
         chatID = sent.chat

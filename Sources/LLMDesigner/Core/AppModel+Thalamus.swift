@@ -44,10 +44,13 @@ extension AppModel {
         return thalamusBlock(of: personaID, excluding: chat.id, contextLength: contextLength(of: chat))
     }
 
-    /// The chat's context length, or what its model is loaded with for chats from before the setting.
+    /// What the app may fill in for a chat (memories, search results): the chat's context length, or what its model is
+    /// loaded with for chats from before the setting. Kapitsa keeps the context it was started with; there its working
+    /// budget counts.
     func contextLength(of chat: Chat) -> Int {
-        let loaded = models.first { $0.id == (chat.modelId ?? preferredModelId) }?.loadedContextLength
-        return chat.contextLength ?? loaded ?? 8_192
+        let model = models.first { $0.id == modelId(for: chat) }
+        guard provider.loadsModels else { return model?.workingContextLength ?? 8_192 }
+        return chat.contextLength ?? model?.loadedContextLength ?? 8_192
     }
 
     /// Profile and latest chats for the system prompt of a chat with the memory on.

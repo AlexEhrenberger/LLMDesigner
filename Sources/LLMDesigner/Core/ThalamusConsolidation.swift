@@ -237,7 +237,7 @@ enum ThalamusConsolidator {
         profile = profile.sorted { $0.since < $1.since }.filter { seenFacts.insert($0.text.lowercased()).inserted }
 
         guard outcome.updated + outcome.created + outcome.facts > 0 else {
-            throw LMStudioError.server("Das Modell hat aus den Eindrücken nichts verdichtet.")
+            throw LLMError.server("Das Modell hat aus den Eindrücken nichts verdichtet.")
         }
         outcome.dropped = job.impressions.count - used.count
 

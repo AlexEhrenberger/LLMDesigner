@@ -1,5 +1,36 @@
 import Foundation
 
+/// Where the language models run.
+enum LLMProvider: String, CaseIterable, Identifiable, Sendable {
+    /// LM Studio: many models, loaded on request and with a chosen context length.
+    case lmStudio
+    /// Kapitsa: runs Qwen 3.5 on Apple silicon especially fast, but only the one model it was started with
+    /// (`kapitsa serve --model …`) and with the context it was started with.
+    case kapitsa
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .lmStudio: "LM Studio"
+        case .kapitsa: "Kapitsa"
+        }
+    }
+
+    var defaultEndpoint: String {
+        switch self {
+        case .lmStudio: "http://127.0.0.1:1234"
+        case .kapitsa: "http://127.0.0.1:8000"
+        }
+    }
+
+    /// LM Studio loads a model on request and reloads it with another context length; Kapitsa can't.
+    var loadsModels: Bool { self == .lmStudio }
+
+    /// Kapitsa switches Qwen's thinking per request (`enable_thinking`); LM Studio ignores the switch.
+    var switchesThinking: Bool { self == .kapitsa }
+}
+
 struct LMModel: Identifiable, Hashable, Decodable, Sendable {
     let id: String
     var type: String?
@@ -11,6 +42,12 @@ struct LMModel: Identifiable, Hashable, Decodable, Sendable {
     var maxContextLength: Int?
     var loadedContextLength: Int?
     var capabilities: [String]?
+    /// Set for Kapitsa (see `workingContextLength`).
+    var contextBudget: Int?
+
+    /// Kapitsa holds 120K or more per conversation, but on a 16 GB Mac it reads a long prompt at only about 150 tokens
+    /// per second; what the app fills in by itself stays within this, as with LM Studio.
+    static let kapitsaContextBudget = 32_768
 
     /// Servers without LM Studio's REST API don't report a state; treat their models as ready.
     var isLoaded: Bool { state == nil || state == "loaded" }
@@ -26,6 +63,12 @@ struct LMModel: Identifiable, Hashable, Decodable, Sendable {
         arch == "gemma4" || id.lowercased().contains("gemma-4") || id.lowercased().contains("gemma4")
     }
     var displayName: String { id.split(separator: "/").last.map(String.init) ?? id }
+    /// What the app fills in by itself (search results, memories, document excerpts, prompt warnings): the loaded
+    /// context, or the smaller budget where reading the whole of it would take minutes.
+    var workingContextLength: Int? {
+        guard let loadedContextLength else { return contextBudget }
+        return min(loadedContextLength, contextBudget ?? loadedContextLength)
+    }
 
     static func formatTokens(_ count: Int) -> String {
         count >= 1024 ? "\(count / 1024)K" : "\(count)"
@@ -121,36 +164,38 @@ enum StreamEvent: Sendable {
     case toolCalls([ToolCall])
 }
 
-enum LMStudioError: LocalizedError {
+enum LLMError: LocalizedError {
     case invalidEndpoint(String)
-    case http(Int, String?)
+    case http(LLMProvider, Int, String?)
     case server(String)
 
     var errorDescription: String? {
         switch self {
         case .invalidEndpoint(let value):
             return "Ungültiger Endpoint: \(value)"
-        case .http(let status, let message):
-            return message.map { "LM Studio (\(status)): \($0)" } ?? "LM Studio antwortet mit Status \(status)."
+        case .http(let provider, let status, let message):
+            return message.map { "\(provider.label) (\(status)): \($0)" } ?? "\(provider.label) antwortet mit Status \(status)."
         case .server(let message):
             return message
         }
     }
 }
 
-/// Talks to LM Studio's local server: the REST API for model state and the
-/// OpenAI-compatible endpoint for streaming chat completions.
-struct LMStudioClient: Sendable {
+/// Talks to the local model server: LM Studio's REST API for model state, Kapitsa's model list, and the
+/// OpenAI-compatible endpoint both offer for streaming chat completions.
+struct LLMClient: Sendable {
+    let provider: LLMProvider
     let baseURL: URL
     let apiKey: String?
 
-    init(endpoint: String, apiKey: String?) throws {
+    init(provider: LLMProvider, endpoint: String, apiKey: String?) throws {
+        self.provider = provider
         var value = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
         if !value.contains("://") { value = "http://" + value }
         while value.hasSuffix("/") { value.removeLast() }
         if value.hasSuffix("/v1") { value.removeLast(3) }
         guard let url = URL(string: value), url.host != nil else {
-            throw LMStudioError.invalidEndpoint(endpoint)
+            throw LLMError.invalidEndpoint(endpoint)
         }
         baseURL = url
         self.apiKey = (apiKey?.isEmpty ?? true) ? nil : apiKey
@@ -162,19 +207,31 @@ struct LMStudioClient: Sendable {
     }
 
     func fetchModels() async throws -> [LMModel] {
+        if provider == .kapitsa { return try await fetchKapitsaModels() }
         do {
             return try await fetchModelList(path: "api/v0/models")
-        } catch LMStudioError.http(let status, _) where status == 404 {
+        } catch LLMError.http(_, let status, _) where status == 404 {
             // Plain OpenAI-compatible servers only offer /v1/models.
             return try await fetchModelList(path: "v1/models")
         }
     }
 
+    /// Kapitsa's switch for Qwen's thinking; nil for LM Studio, which ignores it.
+    private struct TemplateOptions: Encodable {
+        let enable_thinking: Bool
+    }
+
+    private func templateOptions(thinking: Bool) -> TemplateOptions? {
+        provider.switchesThinking ? TemplateOptions(enable_thinking: thinking) : nil
+    }
+
+    /// `thinking` switches the model's thinking where the server allows it (Kapitsa); Qwen thinks there unless told not to.
     func streamChat(
         model: String,
         messages: [ChatPayloadMessage],
         temperature: Double?,
-        tools: [ToolDefinition]? = nil
+        tools: [ToolDefinition]? = nil,
+        thinking: Bool = false
     ) -> AsyncThrowingStream<StreamEvent, Error> {
         struct StreamOptions: Encodable { let include_usage = true }
         struct Body: Encodable {
@@ -182,6 +239,7 @@ struct LMStudioClient: Sendable {
             let messages: [ChatPayloadMessage]
             let temperature: Double?
             let tools: [ToolDefinition]?
+            let chat_template_kwargs: TemplateOptions?
             let stream = true
             let stream_options = StreamOptions()
         }
@@ -189,7 +247,10 @@ struct LMStudioClient: Sendable {
         return AsyncThrowingStream { continuation in
             let task = Task {
                 do {
-                    let body = try JSONEncoder().encode(Body(model: model, messages: messages, temperature: temperature, tools: tools))
+                    let body = try JSONEncoder().encode(Body(
+                        model: model, messages: messages, temperature: temperature, tools: tools,
+                        chat_template_kwargs: templateOptions(thinking: thinking)
+                    ))
                     // Long idle timeout: LM Studio may load the model just-in-time before the first token.
                     let request = makeRequest("v1/chat/completions", method: "POST", body: body, timeout: 600)
                     let (bytes, response) = try await URLSession.shared.bytes(for: request)
@@ -200,7 +261,7 @@ struct LMStudioClient: Sendable {
                             data.append(byte)
                             if data.count > 64_000 { break }
                         }
-                        throw LMStudioError.http(http.statusCode, Self.errorMessage(from: data))
+                        throw LLMError.http(provider, http.statusCode, Self.errorMessage(from: data))
                     }
 
                     let decoder = JSONDecoder()
@@ -215,7 +276,7 @@ struct LMStudioClient: Sendable {
                         guard let data = payload.data(using: .utf8),
                               let chunk = try? decoder.decode(StreamChunk.self, from: data) else { continue }
 
-                        if let error = chunk.error { throw LMStudioError.server(error.message) }
+                        if let error = chunk.error { throw LLMError.server(error.message) }
                         if !reportedModel, let answering = chunk.model {
                             reportedModel = true
                             continuation.yield(.model(answering))
@@ -255,7 +316,8 @@ struct LMStudioClient: Sendable {
         }
     }
 
-    /// Single, non-streamed completion. With `jsonSchema`, LM Studio constrains the answer to that schema.
+    /// Single, non-streamed completion, without thinking where the server can switch it off. With `jsonSchema`,
+    /// the server constrains the answer to that schema.
     func complete(
         model: String,
         messages: [ChatPayloadMessage],
@@ -271,6 +333,7 @@ struct LMStudioClient: Sendable {
             "max_tokens": maxTokens,
             "stream": false,
         ]
+        if provider.switchesThinking { body["chat_template_kwargs"] = ["enable_thinking": false] }
         // A schema given as JSON text keeps the order of its properties, which the model then writes in.
         let placeholder = "__ordered_schema__"
         if let schema = jsonSchema.map({ ($0.name, $0.schema as Any) }) ?? orderedSchema.map({ ($0.name, placeholder as Any) }) {
@@ -286,7 +349,7 @@ struct LMStudioClient: Sendable {
         let request = makeRequest("v1/chat/completions", method: "POST", body: requestBody, timeout: 300)
         let (data, response) = try await URLSession.shared.data(for: request)
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
-            throw LMStudioError.http(http.statusCode, Self.errorMessage(from: data))
+            throw LLMError.http(provider, http.statusCode, Self.errorMessage(from: data))
         }
 
         struct Completion: Decodable {
@@ -298,7 +361,7 @@ struct LMStudioClient: Sendable {
         }
         guard let content = try JSONDecoder().decode(Completion.self, from: data).choices.first?.message.content,
               !content.isEmpty else {
-            throw LMStudioError.server("LM Studio hat eine leere Antwort geliefert.")
+            throw LLMError.server("\(provider.label) hat eine leere Antwort geliefert.")
         }
         return content
     }
@@ -331,7 +394,7 @@ struct LMStudioClient: Sendable {
         }
         let (data, response) = try await URLSession.shared.data(for: makeRequest("api/v1/models", timeout: 5))
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
-            throw LMStudioError.http(http.statusCode, Self.errorMessage(from: data))
+            throw LLMError.http(provider, http.statusCode, Self.errorMessage(from: data))
         }
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
@@ -354,7 +417,46 @@ struct LMStudioClient: Sendable {
         let request = makeRequest(path, method: "POST", body: try JSONSerialization.data(withJSONObject: body), timeout: timeout)
         let (data, response) = try await URLSession.shared.data(for: request)
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
-            throw LMStudioError.http(http.statusCode, Self.errorMessage(from: data))
+            throw LLMError.http(provider, http.statusCode, Self.errorMessage(from: data))
+        }
+    }
+
+    // MARK: - Kapitsa
+
+    /// Kapitsa lists its whole catalog; only the active model answers (requests naming another one are ignored unless the
+    /// server runs with `--allow-switch`, and then it may download gigabytes), so the others are left out.
+    private func fetchKapitsaModels() async throws -> [LMModel] {
+        struct Entry: Decodable {
+            let id: String
+            let displayName: String?
+            let contextLength: Int?
+            let active: Bool?
+            let quant: String?
+        }
+        struct ListResponse: Decodable { let data: [Entry] }
+        let (data, response) = try await URLSession.shared.data(for: makeRequest("v1/models", timeout: 5))
+        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            throw LLMError.http(provider, http.statusCode, Self.errorMessage(from: data))
+        }
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        return try decoder.decode(ListResponse.self, from: data).data.filter { $0.active == true }.map { entry in
+            // "qwen3.5-9b:4bit" names the precision after the colon; the long description ("MLX affine 4-bit, group 64")
+            // is the fallback.
+            let variant = entry.displayName?.split(separator: ":").dropFirst().first.map(String.init)
+            let lowercased = entry.id.lowercased()
+            return LMModel(
+                id: entry.id,
+                // Kapitsa's Qwen 3.5 models read pictures (its log says "images on"); the text-only Nemotrons don't.
+                type: lowercased.contains("qwen") || lowercased.contains("-vl") ? "vlm" : "llm",
+                compatibilityType: "mlx",
+                quantization: variant ?? entry.quant,
+                state: "loaded",
+                maxContextLength: entry.contextLength,
+                loadedContextLength: entry.contextLength,
+                capabilities: ["tool_use"],
+                contextBudget: LMModel.kapitsaContextBudget
+            )
         }
     }
 
@@ -364,7 +466,7 @@ struct LMStudioClient: Sendable {
         struct ListResponse: Decodable { let data: [LMModel] }
         let (data, response) = try await URLSession.shared.data(for: makeRequest(path, timeout: 5))
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
-            throw LMStudioError.http(http.statusCode, Self.errorMessage(from: data))
+            throw LLMError.http(provider, http.statusCode, Self.errorMessage(from: data))
         }
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
@@ -425,7 +527,7 @@ private struct StreamChunk: Decodable {
     let error: FlexibleError?
 }
 
-/// LM Studio reports errors either as a plain string or as `{ "message": … }`.
+/// Servers report errors either as a plain string or as `{ "message": … }`.
 private struct FlexibleError: Decodable {
     let message: String
 

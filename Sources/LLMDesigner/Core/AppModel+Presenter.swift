@@ -230,7 +230,7 @@ extension AppModel {
     /// are set right away; they show a placeholder until their picture is done.
     func generateSlideBackgrounds(_ id: WriterDocument.ID, _ request: SlideBackgroundRequest, progress: @escaping (String) -> Void) async throws {
         guard let client, let model = currentModelId else {
-            throw LMStudioError.server("Kein Modell gewählt. Wähle eines unten links in der Seitenleiste.")
+            throw LLMError.server("Kein Modell gewählt. Wähle eines unten links in der Seitenleiste.")
         }
         guard let document = document(id), let deck = document.deck else { return }
         // One picture per kind of slide; a single slide gets one for its own kind.
@@ -306,7 +306,7 @@ extension AppModel {
     /// Writes one slide's speaker notes and keeps them with the slide.
     func generateNotes(_ id: WriterDocument.ID, _ slideID: PresentationSlide.ID) async throws -> String {
         guard let client, let model = currentModelId else {
-            throw LMStudioError.server("Kein Modell gewählt. Wähle eines unten links in der Seitenleiste.")
+            throw LLMError.server("Kein Modell gewählt. Wähle eines unten links in der Seitenleiste.")
         }
         guard let document = document(id), let deck = document.deck, let index = deck.index(of: slideID) else {
             throw CancellationError()
@@ -319,7 +319,7 @@ extension AppModel {
         )
         var notes = PresenterPrompts.cleanNotes(answer)
         if index > 0 { notes = PresenterPrompts.removingCopies(of: deck.slides[index - 1].notes, from: notes) }
-        guard !notes.isEmpty else { throw LMStudioError.server("Das Modell hat keinen Text geliefert.") }
+        guard !notes.isEmpty else { throw LLMError.server("Das Modell hat keinen Text geliefert.") }
         setSlideNotes(id, slideID, notes)
         return notes
     }

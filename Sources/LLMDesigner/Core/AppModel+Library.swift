@@ -338,7 +338,7 @@ extension AppModel {
         if let persona = activePersona {
             let prompt = PersonaPrompt.compose(base: systemPrompt, persona: persona)
             let memories = newChatMemory == .on
-                ? thalamusBlock(of: persona.id, excluding: nil, contextLength: newChatContextLength) : nil
+                ? thalamusBlock(of: persona.id, excluding: nil, contextLength: newChatBudget) : nil
             return [prompt, memories].compactMap { $0 }.joined(separator: "\n\n")
         }
         return SkillPrompt.compose(base: systemPrompt, skills: activeSkills)

@@ -34,7 +34,13 @@ struct SettingsView: View {
             }
 
             Section {
-                TextField("Endpoint", text: $app.endpoint, prompt: Text(AppModel.defaultEndpoint))
+                Picker("Quelle", selection: $app.provider) {
+                    ForEach(LLMProvider.allCases) { provider in
+                        Text(provider.label).tag(provider)
+                    }
+                }
+                .pickerStyle(.segmented)
+                TextField("Endpoint", text: $app.endpoint, prompt: Text(app.provider.defaultEndpoint))
                 SecureField("API-Token (optional)", text: $app.apiKey)
                 LabeledContent("Status") {
                     HStack(spacing: 8) {
@@ -46,9 +52,9 @@ struct SettingsView: View {
                     }
                 }
             } header: {
-                Text("LM Studio")
+                Text("Sprachmodelle")
             } footer: {
-                Text("Adresse des lokalen LM-Studio-Servers. Ein Token ist nur nötig, wenn in LM Studio die Authentifizierung aktiviert ist.")
+                Text(providerFooter)
                     .foregroundStyle(Theme.textTertiary)
             }
 
@@ -185,8 +191,23 @@ struct SettingsView: View {
     private var statusText: String {
         switch app.connection {
         case .connecting: "Verbinde…"
-        case .connected: "Verbunden · \(app.chatModels.count) Modelle, \(app.loadedModels.count) geladen"
+        case .connected:
+            if app.provider == .kapitsa {
+                app.loadedModels.first.map { "Verbunden · \($0.displayName), \(LMModel.formatTokens($0.loadedContextLength ?? 0)) Kontext" }
+                    ?? "Verbunden · kein aktives Modell"
+            } else {
+                "Verbunden · \(app.chatModels.count) Modelle, \(app.loadedModels.count) geladen"
+            }
         case .failed(let message): message
+        }
+    }
+
+    private var providerFooter: String {
+        switch app.provider {
+        case .lmStudio:
+            "Adresse des lokalen LM-Studio-Servers. Ein Token ist nur nötig, wenn in LM Studio die Authentifizierung aktiviert ist."
+        case .kapitsa:
+            "Kapitsa führt Qwen 3.5 auf Apple Silicon besonders schnell aus, im Terminal gestartet mit „kapitsa serve --model 9b“. Es stellt genau das Modell bereit, mit dem es gestartet wurde, mit dessen Kontextlänge; der Denkmodus lässt sich pro Chat ein- und ausschalten. Ein Token ist nur nötig, wenn Kapitsa mit --api-key läuft. Adresse, Token und gewähltes Modell merkt sich jede Quelle für sich."
         }
     }
 }

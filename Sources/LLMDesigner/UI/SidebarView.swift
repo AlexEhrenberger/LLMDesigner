@@ -980,8 +980,8 @@ private struct SidebarFooter: View {
     /// The model the chats and documents use; the green dot alone says the connection stands.
     private var title: String {
         switch app.connection {
-        case .connecting: "Verbinde mit LM Studio…"
-        case .failed: "LM Studio nicht erreichbar"
+        case .connecting: "Verbinde mit \(app.provider.label)…"
+        case .failed: "\(app.provider.label) nicht erreichbar"
         case .connected:
             if let model = app.currentModel { model.displayName }
             else if let id = app.currentModelId { id }

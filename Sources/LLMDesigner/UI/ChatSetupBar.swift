@@ -72,7 +72,7 @@ private struct ContextControl: View {
 
     var body: some View {
         if let chat = app.selectedChat {
-            if let reload = app.contextReload, reload.modelID == (chat.modelId ?? app.preferredModelId) {
+            if let reload = app.contextReload, reload.modelID == app.modelId(for: chat) {
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.mini)
                     Text("Lädt das Modell mit \(LMModel.formatTokens(reload.length)) …")
@@ -81,11 +81,30 @@ private struct ContextControl: View {
                 }
                 .padding(.horizontal, 11)
             } else {
-                ContextMeter(usage: app.contextUsage(for: chat), choice: chat.contextLength)
+                let fixed = !app.provider.loadsModels
+                ContextMeter(usage: app.contextUsage(for: chat), choice: fixed ? nil : chat.contextLength, fixedBy: fixed ? app.provider : nil)
             }
+        } else if let fixed = app.fixedContextLength {
+            fixedLabel(fixed)
         } else {
             menu
         }
+    }
+
+    /// Kapitsa's context isn't chosen per chat: it was set when Kapitsa started.
+    private func fixedLabel(_ length: Int) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: "gauge.with.dots.needle.33percent")
+                .font(.system(size: 11, weight: .medium))
+            Text("Kontext: \(LMModel.formatTokens(length))")
+                .font(.system(size: 11.5, weight: .medium))
+        }
+        .foregroundStyle(Theme.textSecondary)
+        .padding(.leading, 9)
+        .padding(.trailing, 11)
+        .frame(height: 26)
+        .contentShape(Rectangle())
+        .help("\(app.provider.label) hält \(LMModel.formatTokens(length)) Kontext für jedes Gespräch bereit, festgelegt beim Start (kapitsa serve --context …)")
     }
 
     private var menu: some View {
@@ -105,7 +124,7 @@ private struct ContextControl: View {
                     .disabled(!app.modelAllows(contextLength: length))
                 }
             }
-            if let loaded, loaded != current, app.currentModel?.state != nil {
+            if let loaded, loaded != current, app.provider.loadsModels, app.currentModel?.state != nil {
                 Section {
                     Text("Geladen mit \(LMModel.formatTokens(loaded)): wird beim Senden neu geladen")
                 }
@@ -183,6 +202,8 @@ private struct ContextMeter: View {
     let usage: ContextUsage
     /// The chat's choice; nil for chats from before the setting.
     let choice: Int?
+    /// The source whose context the chat runs in, when it can't be chosen (Kapitsa).
+    var fixedBy: LLMProvider? = nil
     @State private var hovering = false
 
     var body: some View {
@@ -203,7 +224,7 @@ private struct ContextMeter: View {
         .onHover { hovering = $0 }
         .overlay(alignment: .bottomLeading) {
             if hovering {
-                ContextCard(usage: usage, choice: choice)
+                ContextCard(usage: usage, choice: choice, fixedBy: fixedBy)
                     .fixedSize()
                     .offset(x: -8, y: -34)
                     .allowsHitTesting(false)
@@ -217,6 +238,7 @@ private struct ContextMeter: View {
 private struct ContextCard: View {
     let usage: ContextUsage
     let choice: Int?
+    let fixedBy: LLMProvider?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -224,7 +246,8 @@ private struct ContextCard: View {
                 Text("Kontext")
                     .font(.system(size: 12.5, weight: .semibold))
                     .foregroundStyle(Theme.textPrimary)
-                Text(choice.map { "\(ContextChoice.label(for: $0)) (\(LMModel.formatTokens($0)))" } ?? "\(LMModel.formatTokens(usage.capacity)) geladen")
+                Text(choice.map { "\(ContextChoice.label(for: $0)) (\(LMModel.formatTokens($0)))" }
+                     ?? "\(LMModel.formatTokens(usage.capacity)) " + (fixedBy.map { "in \($0.label)" } ?? "geladen"))
                     .font(.system(size: 11.5))
                     .foregroundStyle(Theme.textTertiary)
                 Spacer(minLength: 12)
@@ -277,13 +300,18 @@ private struct ContextCard: View {
 
     private var footnote: String {
         var lines = [usage.isCalibrated
-            ? "Geschätzt und mit der Zählung von LM Studio zur letzten Antwort abgeglichen."
+            ? "Geschätzt und mit der Zählung des Servers zur letzten Antwort abgeglichen."
             : "Geschätzt, etwa 3,5 Zeichen pro Token."]
         if let loaded = usage.loadedLength {
             lines.append("Das Modell ist gerade mit \(LMModel.formatTokens(loaded)) geladen; vor der nächsten Antwort lädt die App es mit \(LMModel.formatTokens(usage.capacity)) neu.")
         }
+        if let fixedBy {
+            lines.append("Festgelegt beim Start von \(fixedBy.label) (kapitsa serve --context …).")
+        }
         if usage.fraction >= 0.9 {
-            lines.append("Der Kontext ist fast voll. Für längere Gespräche einen neuen Chat mit mehr Kontext beginnen.")
+            lines.append(fixedBy == nil
+                ? "Der Kontext ist fast voll. Für längere Gespräche einen neuen Chat mit mehr Kontext beginnen."
+                : "Der Kontext ist fast voll. Für längere Gespräche einen neuen Chat beginnen.")
         }
         return lines.joined(separator: " ")
     }

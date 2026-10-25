@@ -55,7 +55,7 @@ final class ImageGeneratorModel {
     /// The loaded model turns the description into a prompt for Qwen-Image (and suggests a caption).
     func writePrompt(_ app: AppModel) async {
         guard let client = app.client, let model = app.currentModelId else {
-            message = "Kein Sprachmodell gewählt. Wähle eines unten links in der Seitenleiste („LM Studio verbunden“)."
+            message = "Kein Sprachmodell gewählt. Wähle eines unten links in der Seitenleiste."
             return
         }
         isWritingPrompt = true

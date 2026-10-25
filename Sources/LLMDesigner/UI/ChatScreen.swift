@@ -459,7 +459,9 @@ private struct EmptyChatView: View {
             .font(.system(size: 13))
             .foregroundStyle(Theme.textSecondary)
         } else if app.connection == .connected {
-            Text("Lade ein Modell in LM Studio, um loszulegen.")
+            Text(app.provider == .kapitsa
+                 ? "Kapitsa meldet kein aktives Modell."
+                 : "Lade ein Modell in LM Studio, um loszulegen.")
                 .font(.system(size: 13))
                 .foregroundStyle(Theme.textSecondary)
         }
@@ -486,10 +488,10 @@ private struct ConnectionHelpCard: View {
                 .font(.system(size: 18))
                 .foregroundStyle(Theme.danger)
             VStack(alignment: .leading, spacing: 4) {
-                Text("LM Studio ist unter \(app.hostDescription) nicht erreichbar")
+                Text("\(app.provider.label) ist unter \(app.hostDescription) nicht erreichbar")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Theme.textPrimary)
-                Text("Starte in LM Studio den lokalen Server (Developer → Start Server) oder passe den Endpoint in den Einstellungen an.")
+                Text(startHint)
                     .font(.system(size: 12.5))
                     .foregroundStyle(Theme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -498,16 +500,31 @@ private struct ConnectionHelpCard: View {
                     .foregroundStyle(Theme.textTertiary)
             }
             Spacer(minLength: 0)
-            Button("Erneut versuchen") { Task { await app.refreshModels() } }
-                .buttonStyle(.plain)
-                .font(.system(size: 12.5, weight: .medium))
-                .foregroundStyle(Theme.textPrimary)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.elevated))
+            VStack(alignment: .trailing, spacing: 8) {
+                Button("Erneut versuchen") { Task { await app.refreshModels() } }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12.5, weight: .medium))
+                    .foregroundStyle(Theme.textPrimary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.elevated))
+                // The other source may be the one that runs.
+                let other: LLMProvider = app.provider == .kapitsa ? .lmStudio : .kapitsa
+                Button("\(other.label) verwenden") { app.provider = other }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Theme.textSecondary)
+            }
         }
         .padding(14)
         .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.danger.opacity(0.07)))
         .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.danger.opacity(0.25)))
+    }
+
+    private var startHint: String {
+        switch app.provider {
+        case .lmStudio: "Starte in LM Studio den lokalen Server (Developer → Start Server) oder passe den Endpoint in den Einstellungen an."
+        case .kapitsa: "Starte Kapitsa im Terminal mit „kapitsa serve --model 9b“ oder passe den Endpoint in den Einstellungen an."
+        }
     }
 }

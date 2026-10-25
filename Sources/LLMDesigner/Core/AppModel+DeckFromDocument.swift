@@ -66,7 +66,7 @@ extension AppModel {
             return
         }
         deckGeneration = DeckGeneration(documentID: id, phase: .outlining, before: before, replacedEmpty: true)
-        let contextLength = currentModel?.loadedContextLength ?? 8_192
+        let contextLength = currentModel?.workingContextLength ?? 8_192
         let titleSlideID = before.slides.first?.id ?? UUID()
 
         deckGenerationTask = Task { [weak self] in
@@ -177,11 +177,11 @@ extension AppModel {
     }
 
     /// A text without usable headings: the model divides it into chapters and slides over numbered paragraphs.
-    private static func planWithModel(_ material: DeckMaterial, client: LMStudioClient, model: String, contextLength: Int) async throws -> DeckPlan {
+    private static func planWithModel(_ material: DeckMaterial, client: LLMClient, model: String, contextLength: Int) async throws -> DeckPlan {
         let paragraphs = DocumentOutlineBuilder.blocks(of: material.markdown).map {
             ContentAnalysisBuilder.Paragraph(index: $0.index, text: $0.text, isHeading: $0.isHeading, key: $0.key)
         }
-        guard !paragraphs.isEmpty else { throw LMStudioError.server("Im Dokument steht kein Text, aus dem sich Folien machen ließen.") }
+        guard !paragraphs.isEmpty else { throw LLMError.server("Im Dokument steht kein Text, aus dem sich Folien machen ließen.") }
         let source = ContentAnalysisBuilder.source(paragraphs, budget: ContentAnalysisBuilder.budget(contextLength: contextLength))
         let answer = try await client.complete(
             model: model,
@@ -191,7 +191,7 @@ extension AppModel {
             orderedSchema: ("gliederung", PresenterPrompts.documentOutlineSchema.json)
         )
         let outline = try JSONDecoder().decode(PresenterPrompts.DocumentOutline.self, from: Data(ContentAnalysisBuilder.jsonObject(in: answer).utf8))
-        guard outline.kapitel.contains(where: { !$0.folien.isEmpty }) else { throw LMStudioError.server("Das Modell hat keine Gliederung geliefert.") }
+        guard outline.kapitel.contains(where: { !$0.folien.isEmpty }) else { throw LLMError.server("Das Modell hat keine Gliederung geliefert.") }
 
         // The Markdown of each block, so a slide's passage keeps its formulas, code and tables.
         let blocks = MarkdownParser.parse(WriterBookmark.strip(material.markdown)).map(DeckBlockText.markdown(of:))

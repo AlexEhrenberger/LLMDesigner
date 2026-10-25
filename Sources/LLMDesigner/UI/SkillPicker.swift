@@ -258,7 +258,7 @@ private struct SkillPickerPanel: View {
 
     private func footer(active: [Skill]) -> some View {
         let tokens = SkillPrompt.estimatedTokens(app.activeSystemPrompt)
-        let context = app.currentModel?.loadedContextLength
+        let context = app.currentModel?.workingContextLength
         let isLarge = context.map { tokens * 4 > $0 } ?? false
         return HStack(spacing: 10) {
             Button {

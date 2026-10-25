@@ -483,7 +483,7 @@ private struct PromptSize: View {
 
     var body: some View {
         let tokens = SkillPrompt.estimatedTokens(PersonaPrompt.instructions(for: persona))
-        let context = app.currentModel?.loadedContextLength
+        let context = app.currentModel?.workingContextLength
         let isLarge = context.map { tokens * 4 > $0 } ?? false
         HStack(spacing: 5) {
             if isLarge {

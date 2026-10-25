@@ -252,7 +252,7 @@ enum DocumentOutlineBuilder {
             points += topicPoints
         }
         sections.sort { $0.anchor.block < $1.anchor.block }
-        guard !sections.isEmpty else { throw LMStudioError.server("Das Modell hat kein verwertbares Inhaltsverzeichnis geliefert.") }
+        guard !sections.isEmpty else { throw LLMError.server("Das Modell hat kein verwertbares Inhaltsverzeichnis geliefert.") }
 
         var seen = Set<String>()
         for point in points.sorted(by: { $0.anchor.block < $1.anchor.block }) {

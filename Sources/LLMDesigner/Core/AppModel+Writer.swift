@@ -166,7 +166,7 @@ extension AppModel {
         writerFlush?()
         if let running = documentOutlineTasks[id] { return running }
         guard let client, let model = currentModelId, let snapshot = document(id) else {
-            documentOutlineErrors[id] = "Kein Modell gewählt. Wähle eines unten links in der Seitenleiste („LM Studio verbunden“)."
+            documentOutlineErrors[id] = "Kein Modell gewählt. Wähle eines unten links in der Seitenleiste."
             return nil
         }
         let markdown = snapshot.markdown

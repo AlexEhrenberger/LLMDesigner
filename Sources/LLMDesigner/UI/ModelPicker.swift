@@ -1,20 +1,31 @@
 import SwiftUI
 
-/// The models LM Studio has loaded (and the others it offers) to choose from. Opens from the connection row at the
-/// bottom of the sidebar.
+/// The source (LM Studio or Kapitsa) and the models it has loaded (and the others it offers) to choose from. Opens from
+/// the connection row at the bottom of the sidebar.
 struct ModelPickerPanel: View {
     @Environment(AppModel.self) private var app
     let close: () -> Void
     @State private var showAvailable = false
 
     var body: some View {
+        @Bindable var app = app
+
         VStack(alignment: .leading, spacing: 2) {
-            sectionLabel("In LM Studio geladen")
+            Picker("Quelle", selection: $app.provider) {
+                ForEach(LLMProvider.allCases) { provider in
+                    Text(provider.label).tag(provider)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding(.horizontal, 10)
+            .padding(.top, 4)
+            .padding(.bottom, 6)
+
+            sectionLabel(app.provider == .kapitsa ? "In Kapitsa aktiv" : "In LM Studio geladen")
 
             if app.loadedModels.isEmpty {
-                Text(app.connection == .connected
-                     ? "Aktuell ist kein Modell geladen. Lade eines in LM Studio oder wähle unten ein verfügbares Modell."
-                     : "Keine Verbindung zu LM Studio.")
+                Text(emptyText)
                     .font(.system(size: 12.5))
                     .foregroundStyle(Theme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -71,6 +82,15 @@ struct ModelPickerPanel: View {
                 }
             }
 
+            if app.provider == .kapitsa, !app.loadedModels.isEmpty {
+                Text("Kapitsa stellt das Modell bereit, mit dem es gestartet wurde (kapitsa serve --model …).")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Theme.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 10)
+                    .padding(.top, 4)
+            }
+
             Divider().overlay(Theme.border).padding(.vertical, 6)
             HStack(spacing: 8) {
                 StatusDot(color: app.connection.color, size: 6)
@@ -95,6 +115,15 @@ struct ModelPickerPanel: View {
         .background(Theme.elevated)
         .onAppear {
             showAvailable = app.currentModel.map { !$0.isLoaded } ?? false
+        }
+    }
+
+    private var emptyText: String {
+        switch (app.provider, app.connection) {
+        case (.kapitsa, .connected): "Kapitsa meldet kein aktives Modell."
+        case (.kapitsa, _): "Keine Verbindung zu Kapitsa. Im Terminal starten mit „kapitsa serve --model 9b“."
+        case (.lmStudio, .connected): "Aktuell ist kein Modell geladen. Lade eines in LM Studio oder wähle unten ein verfügbares Modell."
+        case (.lmStudio, _): "Keine Verbindung zu LM Studio."
         }
     }
 

@@ -91,7 +91,7 @@ extension AppModel {
                 )
                 let outline = try JSONDecoder().decode(PresenterPrompts.Outline.self, from: Data(ContentAnalysisBuilder.jsonObject(in: answer).utf8))
                 guard outline.kapitel.contains(where: { !$0.folien.isEmpty }) else {
-                    throw LMStudioError.server("Das Modell hat keine Gliederung geliefert.")
+                    throw LLMError.server("Das Modell hat keine Gliederung geliefert.")
                 }
                 try Task.checkCancellation()
                 guard let self else { return }
