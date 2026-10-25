@@ -31,6 +31,13 @@ enum WriterBlock: String, CaseIterable, Sendable {
     /// A paragraph that is one object: a picture, a display formula or the table of contents. It is selected,
     /// moved and deleted as a whole, and text is never typed into it.
     var isEmbed: Bool { self == .image || self == .math || self == .toc }
+    /// Text that can be aligned on its own (`WriterAlignment`); table cells follow their column.
+    var takesAlignment: Bool {
+        switch self {
+        case .paragraph, .chapter, .heading1, .heading2, .heading3, .quote: true
+        default: false
+        }
+    }
 
     var label: String {
         switch self {
@@ -50,6 +57,56 @@ enum WriterBlock: String, CaseIterable, Sendable {
         case .table: "Tabelle"
         case .raw: "Markdown"
         }
+    }
+}
+
+/// How a paragraph is set. Stored on every character of the paragraph (`.writerAlignment`); nil is the default
+/// (left, or centred on a title slide). Markdown has no alignment: a Pandoc div holds it, `::: {.center}` … `:::`
+/// around the paragraphs, which other programs show as text and Pandoc keeps.
+enum WriterAlignment: String, CaseIterable, Sendable {
+    case left, center, right, justify
+
+    var textAlignment: NSTextAlignment {
+        switch self {
+        case .left: .left
+        case .center: .center
+        case .right: .right
+        case .justify: .justified
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .left: "Linksbündig"
+        case .center: "Zentriert"
+        case .right: "Rechtsbündig"
+        case .justify: "Blocksatz"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .left: "text.alignleft"
+        case .center: "text.aligncenter"
+        case .right: "text.alignright"
+        case .justify: "text.justify"
+        }
+    }
+
+    /// The alignment a div's class names (`center`, `right`, …); nil for any other class.
+    init?(className: String) {
+        switch className.lowercased() {
+        case "left", "flushleft": self = .left
+        case "center", "centre", "centered": self = .center
+        case "right", "flushright": self = .right
+        case "justify", "justified": self = .justify
+        default: return nil
+        }
+    }
+
+    /// The innermost alignment among a block's div classes.
+    static func from(classes: [String]) -> WriterAlignment? {
+        classes.reversed().lazy.compactMap(WriterAlignment.init(className:)).first
     }
 }
 
@@ -74,6 +131,10 @@ extension NSAttributedString.Key {
     /// The passage's own colour (six hex digits, see `WriterColors`) and font (`WriterFont.rawValue`).
     static let writerColor = NSAttributedString.Key("LLMDesigner.writer.color")
     static let writerFont = NSAttributedString.Key("LLMDesigner.writer.font")
+    /// The passage's own size in points of the print (a `Double`, see `WriterSpanStyle`).
+    static let writerFontSize = NSAttributedString.Key("LLMDesigner.writer.fontSize")
+    /// `WriterAlignment.rawValue` of the paragraph, when it isn't the default.
+    static let writerAlignment = NSAttributedString.Key("LLMDesigner.writer.alignment")
 }
 
 /// A bookmark in a document: a marked passage with a name. In Markdown it is an HTML span around the passage,
@@ -143,15 +204,22 @@ final class WriterBookmark: NSObject {
 final class WriterTable: NSObject {
     let columns: Int
     let alignments: [MarkdownBlock.Alignment]
+    /// Each column's share of the table's text width (without the cells' padding), adding up to 1; nil: equal columns.
+    let widths: [CGFloat]?
     /// AppKit's table, which lays out the cells.
     let textTable: NSTextTable
 
-    init(columns: Int, alignments: [MarkdownBlock.Alignment]) {
+    /// The narrowest a column gets when its border is dragged.
+    static let minimumWidth: CGFloat = 0.06
+
+    init(columns: Int, alignments: [MarkdownBlock.Alignment], widths: [CGFloat]? = nil) {
         self.columns = max(1, columns)
         self.alignments = (0..<self.columns).map { $0 < alignments.count ? alignments[$0] : .leading }
+        self.widths = Self.normalized(widths, columns: self.columns)
         let table = NSTextTable()
         table.numberOfColumns = self.columns
-        table.layoutAlgorithm = .automaticLayoutAlgorithm
+        // Widths of their own are kept even when a cell's text would want more room.
+        table.layoutAlgorithm = self.widths == nil ? .automaticLayoutAlgorithm : .fixedLayoutAlgorithm
         table.collapsesBorders = true
         table.hidesEmptyCells = false
         table.setContentWidth(100, type: .percentageValueType)
@@ -162,6 +230,44 @@ final class WriterTable: NSObject {
 
     func alignment(of column: Int) -> MarkdownBlock.Alignment {
         column < alignments.count ? alignments[column] : .leading
+    }
+
+    /// The share of a column, also for equal columns.
+    func width(of column: Int) -> CGFloat {
+        guard let widths, column < widths.count else { return 1 / CGFloat(columns) }
+        return widths[column]
+    }
+
+    /// Shares that add up to 1, none narrower than `minimumWidth`; nil when they are missing, don't fit the columns
+    /// or are all the same.
+    static func normalized(_ widths: [CGFloat]?, columns: Int) -> [CGFloat]? {
+        guard let widths, widths.count == columns, columns > 1, widths.allSatisfy({ $0.isFinite && $0 > 0 }) else { return nil }
+        var shares = widths.map { max($0, minimumWidth) }
+        let total = shares.reduce(0, +)
+        shares = shares.map { $0 / total }
+        guard let first = shares.first, shares.contains(where: { abs($0 - first) > 0.004 }) else { return nil }
+        return shares
+    }
+
+    /// The dashes of each column in the Markdown separator line: the percentages, adding up to exactly 100
+    /// (`MarkdownParser.widths(of:)` reads them back only then).
+    static func dashCounts(_ widths: [CGFloat]) -> [Int] {
+        let exact = widths.map { $0 * 100 }
+        var counts = exact.map { max(1, Int($0.rounded(.down))) }
+        // The largest remainders get the dashes that are missing; a surplus comes off the widest columns.
+        var missing = 100 - counts.reduce(0, +)
+        let byRemainder = exact.indices.sorted { exact[$0] - exact[$0].rounded(.down) > exact[$1] - exact[$1].rounded(.down) }
+        var index = 0
+        while missing > 0, !byRemainder.isEmpty {
+            counts[byRemainder[index % byRemainder.count]] += 1
+            missing -= 1
+            index += 1
+        }
+        while missing < 0, let widest = counts.indices.max(by: { counts[$0] < counts[$1] }), counts[widest] > 1 {
+            counts[widest] -= 1
+            missing += 1
+        }
+        return counts
     }
 }
 
@@ -196,12 +302,13 @@ extension MarkdownBlock.Alignment {
         }
     }
 
-    /// The column's separator in a Markdown table.
-    var separator: String {
+    /// The column's separator in a Markdown table; the number of dashes says its width (see `WriterTable.dashCounts`).
+    func separator(dashes: Int = 3) -> String {
+        let line = String(repeating: "-", count: max(1, dashes))
         switch self {
-        case .leading: "---"
-        case .center: ":---:"
-        case .trailing: "---:"
+        case .leading: return line
+        case .center: return ":" + line + ":"
+        case .trailing: return line + ":"
         }
     }
 }
@@ -258,14 +365,18 @@ final class WriterRuleAttachment: NSTextAttachment {
 enum WriterMarkdown {
     static let lineSeparator: Character = "\u{2028}"
     /// The attributes that say what a paragraph is; text inserted into a paragraph takes these along.
-    static let paragraphKeys: Set<NSAttributedString.Key> = [.writerBlock, .writerListLevel, .writerTable, .writerTableRow, .writerTableColumn]
+    static let paragraphKeys: Set<NSAttributedString.Key> = [.writerBlock, .writerListLevel, .writerAlignment, .writerTable, .writerTableRow, .writerTableColumn]
     static let tableKeys: [NSAttributedString.Key] = [.writerTable, .writerTableRow, .writerTableColumn]
+    /// What a passage carries besides the inline marks: its colour, font and size.
+    static let passageKeys: [NSAttributedString.Key] = [.writerColor, .writerFont, .writerFontSize]
 
     // MARK: Markdown → text
 
     static func attributedString(from markdown: String) -> NSMutableAttributedString {
         let result = NSMutableAttributedString()
         var previous: [NSAttributedString.Key: Any]?
+        /// The alignment of the div the current Markdown block stands in.
+        var alignment: WriterAlignment?
 
         /// Appends a paragraph. Its newline comes with the next paragraph but carries this paragraph's
         /// attributes, so empty paragraphs keep their block too.
@@ -273,6 +384,7 @@ enum WriterMarkdown {
             if let previous { result.append(NSAttributedString(string: "\n", attributes: previous)) }
             var attributes: [NSAttributedString.Key: Any] = cell?.attributes ?? [.writerBlock: block.rawValue, .writerListLevel: level]
             if let language, !language.isEmpty { attributes[.writerCodeLanguage] = language }
+            if let alignment, block.takesAlignment, cell == nil { attributes[.writerAlignment] = alignment.rawValue }
             let start = result.length
             result.append(paragraph)
             result.addAttributes(attributes, range: NSRange(location: start, length: result.length - start))
@@ -281,7 +393,9 @@ enum WriterMarkdown {
 
         var endsWithTable = false
         var previousWasCode = false
-        for block in MarkdownParser.parse(markdown) {
+        for annotated in MarkdownParser.parseAnnotated(markdown) {
+            let block = annotated.block
+            alignment = WriterAlignment.from(classes: annotated.classes)
             endsWithTable = false
             let followsCode = previousWasCode
             previousWasCode = false
@@ -334,9 +448,9 @@ enum WriterMarkdown {
             case .rule:
                 let attachment = WriterRuleAttachment()
                 add(NSAttributedString(attachment: attachment), block: .rule)
-            case .table(let header, let rows, let alignments):
+            case .table(let header, let rows, let alignments, let widths):
                 let columns = max(header.count, rows.map(\.count).max() ?? 0, 1)
-                let table = WriterTable(columns: columns, alignments: alignments)
+                let table = WriterTable(columns: columns, alignments: alignments, widths: widths?.map { CGFloat($0) })
                 for (index, cells) in ([header] + rows).enumerated() {
                     for column in 0..<columns {
                         let text = column < cells.count ? cells[column] : ""
@@ -359,6 +473,22 @@ enum WriterMarkdown {
         // Every cell ends with its newline, the last one too: text after the table is never part of a cell.
         if endsWithTable, let previous { result.append(NSAttributedString(string: "\n", attributes: previous)) }
         return result
+    }
+
+    /// The Markdown without the fence lines of divs (the alignment of paragraphs): for the model, which needn't see
+    /// them, and for text that is laid out anew elsewhere (slides from a document, a handout from slides).
+    static func removingDivFences(_ markdown: String) -> String {
+        guard markdown.contains(":::") else { return markdown }
+        return markdown.components(separatedBy: "\n").filter { line in
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            return MarkdownParser.divOpening(trimmed) == nil && !MarkdownParser.isDivClosing(trimmed)
+        }.joined(separator: "\n")
+    }
+
+    /// Text that changes its kind of page: without alignment, and without the sizes of passages, which are points of
+    /// the print in a document and points of the canvas on a slide.
+    static func forOtherLayout(_ markdown: String) -> String {
+        WriterSpans.strippingSizes(removingDivFences(markdown))
     }
 
     /// A heading's text without Pandoc's trailing attributes (`Titel {.chapter}`), and the classes in them.
@@ -607,6 +737,8 @@ enum WriterMarkdown {
         /// Set for a table cell. A paragraph is a cell when its newline belongs to a table; text typed or pasted
         /// in front of a cell can't make another paragraph one.
         let cell: WriterTableCell?
+        /// Its own alignment (from its first character), for blocks that take one.
+        let alignment: WriterAlignment?
     }
 
     static func paragraphs(of text: NSAttributedString, in range: NSRange? = nil) -> [Paragraph] {
@@ -631,7 +763,8 @@ enum WriterMarkdown {
                 block: block,
                 level: attributes[.writerListLevel] as? Int ?? 0,
                 language: attributes[.writerCodeLanguage] as? String,
-                cell: cell
+                cell: cell,
+                alignment: block.takesAlignment ? (attributes[.writerAlignment] as? String).flatMap(WriterAlignment.init(rawValue:)) : nil
             ))
             location = NSMaxRange(paragraph)
         } while location < end && location < string.length
@@ -639,9 +772,10 @@ enum WriterMarkdown {
     }
 
     static func markdown(from text: NSAttributedString) -> String {
-        var blocks: [String] = []
+        var blocks: [(text: String, alignment: WriterAlignment?)] = []
         var pending: [String] = []
         var pendingKind: WriterBlock?
+        var pendingAlignment: WriterAlignment?
         var listCounters: [Int] = []
         var currentLanguage: String?
         var currentTable: WriterTable?
@@ -651,21 +785,22 @@ enum WriterMarkdown {
             defer {
                 pending = []
                 pendingKind = nil
+                pendingAlignment = nil
                 listCounters = []
                 currentTable = nil
                 tableCells = [:]
             }
             if pendingKind == .table, let table = currentTable {
-                blocks.append(tableMarkdown(table, cells: tableCells))
+                blocks.append((tableMarkdown(table, cells: tableCells), nil))
                 return
             }
             guard let kind = pendingKind, !pending.isEmpty else { return }
             switch kind {
             case .code:
                 let language = currentLanguage ?? ""
-                blocks.append("```\(language)\n" + pending.joined(separator: "\n") + "\n```")
+                blocks.append(("```\(language)\n" + pending.joined(separator: "\n") + "\n```", nil))
             default:
-                blocks.append(pending.joined(separator: "\n"))
+                blocks.append((pending.joined(separator: "\n"), pendingAlignment))
             }
         }
 
@@ -673,7 +808,8 @@ enum WriterMarkdown {
             let content = text.attributedSubstring(from: paragraph.contentRange)
             let group: WriterBlock = paragraph.block.isList ? .bullet : paragraph.block
             let grouped: Set<WriterBlock> = [.bullet, .quote, .code, .raw, .table]
-            if pendingKind != group || !grouped.contains(group) || (group == .table && paragraph.cell?.table !== currentTable) { flush() }
+            if pendingKind != group || !grouped.contains(group) || (group == .table && paragraph.cell?.table !== currentTable)
+                || paragraph.alignment != pendingAlignment { flush() }
 
             switch paragraph.block {
             case .table:
@@ -731,19 +867,36 @@ enum WriterMarkdown {
                 if !line.trimmingCharacters(in: .whitespaces).isEmpty { pending.append(line) }
             }
             pendingKind = group
+            pendingAlignment = paragraph.alignment
             // A picture that ended up inside text (after joining paragraphs) is kept as a paragraph of its own.
             if !paragraph.block.isEmbed, paragraph.block != .table {
                 let inlineImages = images(in: content)
                 if !inlineImages.isEmpty {
                     flush()
-                    blocks += inlineImages.map(\.markdown)
+                    blocks += inlineImages.map { ($0.markdown, nil) }
                 }
             }
         }
         flush()
         // Drop quote lines that were only empty and trailing "> " noise.
-        return blocks.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && $0 != ">" }
-            .joined(separator: "\n\n") + "\n"
+        let kept = blocks.filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && $0.text != ">" }
+        // Aligned paragraphs in a row share one div.
+        var output: [String] = []
+        var index = 0
+        while index < kept.count {
+            let alignment = kept[index].alignment
+            var run: [String] = []
+            while index < kept.count, kept[index].alignment == alignment {
+                run.append(kept[index].text)
+                index += 1
+            }
+            if let alignment {
+                output.append("::: {.\(alignment.rawValue)}\n" + run.joined(separator: "\n\n") + "\n:::")
+            } else {
+                output += run
+            }
+        }
+        return output.joined(separator: "\n\n") + "\n"
     }
 
     private static func formulas(in text: NSAttributedString) -> [WriterMathAttachment] {
@@ -768,7 +921,10 @@ enum WriterMarkdown {
         for row in 0..<rows {
             let values = (0..<table.columns).map { cells[row]?[$0] ?? "" }
             lines.append("| " + values.joined(separator: " | ") + " |")
-            if row == 0 { lines.append("| " + table.alignments.map(\.separator).joined(separator: " | ") + " |") }
+            if row == 0 {
+                let dashes = table.widths.map(WriterTable.dashCounts) ?? Array(repeating: 3, count: table.columns)
+                lines.append("| " + zip(table.alignments, dashes).map { $0.separator(dashes: $1) }.joined(separator: " | ") + " |")
+            }
         }
         return lines.joined(separator: "\n")
     }
@@ -902,6 +1058,9 @@ enum WriterMarkdown {
                 output += "\\" + String(character)
             } else if lineStart, "#>".contains(character) {
                 output += "\\" + String(character)
+            } else if lineStart, character == ":", index + 2 < characters.count, characters[index + 1] == ":", characters[index + 2] == ":" {
+                // ":::" would open or close a div.
+                output += "\\:"
             } else if lineStart, "-+".contains(character), index + 1 < characters.count, characters[index + 1] == " " {
                 output += "\\" + String(character)
             } else if character == ".", index + 1 < characters.count, characters[index + 1] == " ",

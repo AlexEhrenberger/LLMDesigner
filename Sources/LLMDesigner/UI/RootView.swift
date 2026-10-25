@@ -3,6 +3,7 @@ import SwiftUI
 struct RootView: View {
     @Environment(AppModel.self) private var app
     @Environment(LibrarySession.self) private var session
+    @State private var workspaceWidth: CGFloat = 0
 
     var body: some View {
         Group {
@@ -43,7 +44,7 @@ struct RootView: View {
 
     private var workspace: some View {
         HStack(spacing: 0) {
-            if app.sidebarVisible {
+            if app.isSidebarDocked {
                 SidebarView()
                     .frame(width: Theme.sidebarWidth)
                     .transition(.move(edge: .leading))
@@ -74,13 +75,62 @@ struct RootView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .animation(.easeInOut(duration: 0.4), value: app.selectedDocumentID == nil)
             .animation(.easeInOut(duration: 0.25), value: app.citationStudioOpen)
-            if app.sidebarMode == .chats, app.selectedDocumentID == nil, !app.citationStudioOpen, app.isOutlinePanelShown, let chat = app.selectedChat {
+            if showsChatOutline, app.isPanelDocked, let chat = app.selectedChat {
                 OutlinePanel(chat: chat)
                     .frame(width: Theme.outlineWidth)
                     .transition(.move(edge: .trailing))
             }
         }
+        // In a narrow window the chat's outline and the sidebar lie over the content (the studios lay out their own panel).
+        .overlay {
+            FloatingPanel(isShown: showsChatOutline && app.panelCollapsed && app.panelOverlay, edge: .trailing, width: Theme.outlineWidth) {
+                if let chat = app.selectedChat { OutlinePanel(chat: chat) }
+            }
+        }
+        .overlay {
+            FloatingPanel(isShown: app.sidebarCollapsed && app.sidebarOverlay, edge: .leading, width: Theme.sidebarWidth) {
+                SidebarView()
+            }
+        }
         .clipped()
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { workspaceWidth = $0 }
+        .onChange(of: foldingKey) { _, _ in foldSidebars() }
+        // Whatever is opened from the sidebar gets the room: the sidebar over it closes.
+        .onChange(of: openedKey) { _, _ in app.closeOverlays() }
+    }
+
+    private var showsChatOutline: Bool {
+        app.sidebarMode == .chats && app.selectedDocumentID == nil && !app.citationStudioOpen && app.isOutlinePanelShown && app.selectedChat != nil
+    }
+
+    /// What decides whether the sidebars fit: the width and the screen, whose content needs more or less room.
+    private var foldingKey: [Double] {
+        [Double(workspaceWidth), contentMinimum, app.sidebarVisible ? 1 : 0]
+    }
+
+    private var openedKey: String {
+        "\(app.selectedChatID?.uuidString ?? "")|\(app.selectedDocumentID?.uuidString ?? "")|\(app.sidebarMode)|\(app.citationStudioOpen)"
+    }
+
+    /// The room the content needs before a sidebar may stand beside it: the studios have a sheet and a toolbar to show.
+    private var contentMinimum: CGFloat {
+        app.sidebarMode == .chats && (app.selectedDocumentID != nil || app.citationStudioOpen) ? 880 : 620
+    }
+
+    /// The sidebar folds away when the content would get too narrow beside it; the panel on the right before it.
+    private func foldSidebars() {
+        guard workspaceWidth > 0 else { return }
+        let sidebar = workspaceWidth - Theme.sidebarWidth < contentMinimum
+        let besideSidebar = app.sidebarVisible && !sidebar ? Theme.sidebarWidth : 0
+        let panel = workspaceWidth - besideSidebar - Theme.outlineWidth < contentMinimum
+        if app.sidebarCollapsed != sidebar {
+            app.sidebarCollapsed = sidebar
+            app.sidebarOverlay = false
+        }
+        if app.panelCollapsed != panel {
+            app.panelCollapsed = panel
+            app.panelOverlay = false
+        }
     }
 
     private var dictationErrorBinding: Binding<Bool> {

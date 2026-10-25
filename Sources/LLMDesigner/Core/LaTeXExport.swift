@@ -105,8 +105,10 @@ enum LaTeXWriter {
         }
         let contents = outline.map { tableOfContents($0, math: math) } ?? ""
         let spanFonts = parts.filter { $0.figures != nil }.flatMap { WriterSpans.fonts(in: $0.text) }
+        // Writer Studio's text is left-aligned like in the editor; a paragraph may be justified, centred or right-aligned.
+        let isWriterDocument = parts.contains { $0.figures != nil }
         return preamble(paper, documentClass: hasChapters ? "report" : "article", typeface: typeface, spanFonts: spanFonts)
-            + "\\begin{document}\n" + contents
+            + "\\begin{document}\n" + (isWriterDocument ? "\\raggedright\n" : "") + contents
             + body.joined(separator: "\n\n\\bigskip\n\n") + "\n\\end{document}\n"
     }
 
@@ -209,7 +211,7 @@ enum LaTeXWriter {
     private static func preamble(_ paper: PaperSize, documentClass: String = "article", typeface: WriterFont? = nil,
                                  spanFonts: [WriterFont] = []) -> String {
         #"""
-        \documentclass[11pt]{\#(documentClass)}
+        \documentclass[\#(Int(WriterFont.printSize))pt]{\#(documentClass)}
         \usepackage[\#(paper.geometry)]{geometry}
         \usepackage{amsmath}
         \usepackage{fontspec}
@@ -224,6 +226,7 @@ enum LaTeXWriter {
         \newcolumntype{L}{>{\raggedright\arraybackslash}X}
         \newcolumntype{C}{>{\centering\arraybackslash}X}
         \newcolumntype{R}{>{\raggedleft\arraybackslash}X}
+        \newcommand{\llmdjustify}{\leftskip=0pt\rightskip=0pt\parfillskip=0pt plus 1fil\relax}
         \usepackage{float}
         \usepackage[font=small,labelfont=bf]{caption}
         \usepackage{enumitem}
@@ -261,7 +264,10 @@ enum LaTeXWriter {
                                figureFolder: String? = nil, structure: Structure? = nil, contents: Outline? = nil,
                                bibliography: [StyledText]? = nil) -> String {
         var output: [String] = []
-        for (index, block) in MarkdownParser.parse(markdown).enumerated() {
+        for (index, annotated) in MarkdownParser.parseAnnotated(markdown).enumerated() {
+            let block = annotated.block
+            // Writer Studio aligns paragraphs with divs (`::: {.center}`); chats have none.
+            let alignment = structure == nil ? nil : WriterAlignment.from(classes: annotated.classes)
             let start = output.count
             defer {
                 // The label sits directly in front of the block it points to.
@@ -283,6 +289,8 @@ enum LaTeXWriter {
                     }
                 } else if let figures, !images.isEmpty, images.count == lines.count {
                     output.append(images.map { figure($0, file: figures[$0.source], folder: figureFolder, math: math) }.joined(separator: "\n\n"))
+                } else if structure != nil {
+                    output.append(paragraph(inline(text, math: math), alignment: alignment, largestSize: WriterSpans.largestSize(in: text)))
                 } else {
                     output.append(inline(text, math: math))
                 }
@@ -292,7 +300,14 @@ enum LaTeXWriter {
                     let (title, classes) = WriterMarkdown.headingAttributes(text)
                     let command = classes.contains("chapter") && level == 1 && structure.chapters
                         ? "chapter" : ["section", "subsection", "subsubsection"][min(max(level, 1), 3) - 1]
-                    output.append("\\\(command)\(structure.numbered ? "" : "*"){\(inline(title, math: math))}")
+                    let set = inline(title, math: math)
+                    // A centred or right-aligned title: the switch goes inside, the table of contents gets the title alone.
+                    if let switchCommand = alignment.flatMap(headingAlignment) {
+                        let short = structure.numbered ? "[\(set)]" : ""
+                        output.append("\\\(command)\(structure.numbered ? "" : "*")\(short){\(switchCommand) \(set)}")
+                    } else {
+                        output.append("\\\(command)\(structure.numbered ? "" : "*"){\(set)}")
+                    }
                     break
                 }
                 let command = ["section", "subsection", "subsubsection"][min(max(level, 1), 3) - 1]
@@ -302,9 +317,10 @@ enum LaTeXWriter {
             case .list(let items):
                 output.append(list(items, math: math))
             case .quote(let text):
-                output.append("\\begin{quote}\n\(inline(text, math: math))\n\\end{quote}")
-            case .table(let header, let rows, let alignments):
-                output.append(table(header: header, rows: rows, alignments: alignments, math: math))
+                let switchCommand = alignmentCommand(alignment).map { $0 + "\n" } ?? ""
+                output.append("\\begin{quote}\n\(switchCommand)\(inline(text, math: math))\n\\end{quote}")
+            case .table(let header, let rows, let alignments, let widths):
+                output.append(table(header: header, rows: rows, alignments: alignments, widths: widths, math: math))
             case .math(let latex, _):
                 output.append(displayMath(latex, math: math))
             case .rule:
@@ -312,6 +328,32 @@ enum LaTeXWriter {
             }
         }
         return output.joined(separator: "\n\n")
+    }
+
+    /// The switch that sets a Writer Studio paragraph as the editor shows it; nil for left, which is the text's own.
+    private static func alignmentCommand(_ alignment: WriterAlignment?) -> String? {
+        switch alignment {
+        case .center: "\\centering"
+        case .right: "\\raggedleft"
+        case .justify: "\\llmdjustify"
+        case .left, nil: nil
+        }
+    }
+
+    /// Headings are short: only centred and right-aligned ones need a switch.
+    private static func headingAlignment(_ alignment: WriterAlignment) -> String? {
+        alignment == .center || alignment == .right ? alignmentCommand(alignment) : nil
+    }
+
+    /// A paragraph of Writer Studio, aligned, and with room between its lines for the largest letters in it.
+    private static func paragraph(_ text: String, alignment: WriterAlignment?, largestSize: Double?) -> String {
+        var switches: [String] = []
+        if let command = alignmentCommand(alignment) { switches.append(command) }
+        if let largestSize, largestSize > Double(WriterFont.printSize) {
+            switches.append("\\setlength{\\baselineskip}{\(WriterSpanStyle.format(largestSize * 1.2))pt}")
+        }
+        guard !switches.isEmpty else { return text }
+        return "{" + switches.joined() + " " + text + "\\par}"
     }
 
     private static func plainText(_ text: String) -> String {
@@ -435,13 +477,27 @@ enum LaTeXWriter {
         return output + "\\end{figure}"
     }
 
-    private static func table(header: [String], rows: [[String]], alignments: [MarkdownBlock.Alignment], math: MathMode) -> String {
+    private static func table(header: [String], rows: [[String]], alignments: [MarkdownBlock.Alignment], widths: [Double]?,
+                              math: MathMode) -> String {
         let columns = max(header.count, 1)
+        let widths = widths?.count == columns ? widths : nil
         let spec = (0..<columns).map { column -> String in
-            switch column < alignments.count ? alignments[column] : .leading {
-            case .leading: "L"
-            case .center: "C"
-            case .trailing: "R"
+            let alignment = column < alignments.count ? alignments[column] : .leading
+            // Columns of their own width: tabularx shares the width by the factors of `\hsize`, which add up to the
+            // number of columns.
+            if let widths {
+                let factor = String(format: "%.3f", widths[column] * Double(columns))
+                let justification = switch alignment {
+                case .leading: "\\raggedright"
+                case .center: "\\centering"
+                case .trailing: "\\raggedleft"
+                }
+                return ">{\\hsize=\(factor)\\hsize\\linewidth=\\hsize\(justification)\\arraybackslash}X"
+            }
+            switch alignment {
+            case .leading: return "L"
+            case .center: return "C"
+            case .trailing: return "R"
             }
         }.joined()
         var output = "\\begin{xltabular}{\\linewidth}{@{}\(spec)@{}}\n\\toprule\n"
@@ -545,6 +601,10 @@ enum LaTeXWriter {
                 var result = piece
                 let color = styleStack.reversed().compactMap(\.color).first
                 let font = styleStack.reversed().compactMap(\.font).first
+                let size = styleStack.reversed().compactMap(\.size).first
+                if let size {
+                    result = "{\\fontsize{\(WriterSpanStyle.format(size))pt}{\(WriterSpanStyle.format(size * 1.2))pt}\\selectfont{}\(result)}"
+                }
                 if let font { result = "{\\\(fontMacro(font)){}\(result)}" }
                 if let color { result = "\\textcolor[HTML]{\(color)}{\(result)}" }
                 if underlined > 0 { result = "\\uline{\(result)}" }

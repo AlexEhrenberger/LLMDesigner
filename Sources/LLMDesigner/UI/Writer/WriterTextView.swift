@@ -453,6 +453,11 @@ final class WriterTextView: NSTextView {
         /// The colour (six hex digits) and font of the passage; nil: the text's own.
         var passageColor: String?
         var passageFont: WriterFont?
+        /// The size of the text at the caret in points as printed, and whether it is its own (not the block's).
+        var fontSize: Double = Double(WriterFont.printSize)
+        var hasOwnFontSize = false
+        /// How the paragraph is aligned (the column, in a table); nil where nothing can be aligned.
+        var alignment: WriterAlignment?
         var hasLink = false
         var hasSelection = false
         /// The start of the selected text, for the assistant bar.
@@ -484,6 +489,8 @@ final class WriterTextView: NSTextView {
             var rows: Int
             var columns: Int
             var alignment: MarkdownBlock.Alignment
+            /// The columns' widths were dragged.
+            var hasOwnWidths = false
         }
     }
 
@@ -507,6 +514,10 @@ final class WriterTextView: NSTextView {
         let passage = WriterSpanStyle(attributes)
         state.passageColor = passage.color
         state.passageFont = passage.font
+        let size = passageSize
+        state.fontSize = size.size
+        state.hasOwnFontSize = size.isOwn
+        state.alignment = alignmentAtCaret
         if hasTextSelection {
             let text = (storage.string as NSString).substring(with: range)
                 .replacingOccurrences(of: "\n", with: " ").replacingOccurrences(of: "\u{FFFC}", with: "")
@@ -637,10 +648,11 @@ final class WriterTextView: NSTextView {
             for paragraph in paragraphs where paragraph.range.length > 0 {
                 storage.addAttributes([.writerBlock: target.rawValue, .writerListLevel: target.isList ? paragraph.level : 0], range: paragraph.range)
                 if target == .code || target == .raw {
-                    for key in [NSAttributedString.Key.writerBold, .writerItalic, .writerCode, .underlineStyle, .strikethroughStyle, .link, .writerColor, .writerFont] {
+                    for key in [NSAttributedString.Key.writerBold, .writerItalic, .writerCode, .underlineStyle, .strikethroughStyle, .link] + WriterMarkdown.passageKeys {
                         storage.removeAttribute(key, range: paragraph.range)
                     }
                 }
+                if !target.takesAlignment { storage.removeAttribute(.writerAlignment, range: paragraph.range) }
             }
             storage.endEditing()
             didChangeText()
@@ -802,7 +814,7 @@ final class WriterTextView: NSTextView {
             if shouldChangeText(in: paragraph, replacementString: nil) {
                 storage.beginEditing()
                 storage.addAttributes([.writerBlock: block.rawValue, .writerListLevel: 0], range: paragraph)
-                for key in [NSAttributedString.Key.writerBold, .writerItalic, .writerCode, .underlineStyle, .strikethroughStyle, .link, .writerColor, .writerFont] {
+                for key in [NSAttributedString.Key.writerBold, .writerItalic, .writerCode, .underlineStyle, .strikethroughStyle, .link, .writerAlignment] + WriterMarkdown.passageKeys {
                     storage.removeAttribute(key, range: paragraph)
                 }
                 storage.endEditing()
@@ -812,6 +824,31 @@ final class WriterTextView: NSTextView {
         typingAttributes = WriterStyler.typingAttributes(block: block, level: 0, semantic: [:], family: family, palette: palette)
         needsDisplay = true
         onStateChange?()
+    }
+
+    // MARK: Mouse
+
+    /// Over the border between two table columns the pointer becomes a resize cursor; dragging it changes the widths.
+    override func mouseMoved(with event: NSEvent) {
+        if columnBorder(at: convert(event.locationInWindow, from: nil)) != nil {
+            NSCursor.resizeLeftRight.set()
+            return
+        }
+        super.mouseMoved(with: event)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        if event.clickCount == 1, !event.modifierFlags.contains(.command), let border = columnBorder(at: convert(event.locationInWindow, from: nil)) {
+            return dragColumnBorder(border, from: event)
+        }
+        super.mouseDown(with: event)
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if !trackingAreas.contains(where: { $0.owner === self && $0.userInfo?["columns"] != nil }) {
+            addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .activeInKeyWindow, .inVisibleRect], owner: self, userInfo: ["columns": true]))
+        }
     }
 
     // MARK: Keys
@@ -829,8 +866,14 @@ final class WriterTextView: NSTextView {
             case "e": toggle(.code); return true
             case "k": editLink(); return true
             case "j": onAssistant?(.focusBar); return true
+            // ⌘+ (⌘= on English keyboards) and ⌘−: the text one size larger or smaller.
+            case "+", "=": changeFontSize(by: 1); return true
+            case "-": changeFontSize(by: -1); return true
             default: break
             }
+        case [.command, .shift] where key == "+" || key == "=":
+            changeFontSize(by: 1)
+            return true
         case [.command, .option] where key == "l":
             onReadAloud?()
             return true
@@ -1151,12 +1194,17 @@ final class WriterTextView: NSTextView {
         let isInline = !parsed.string.contains("\n") && WriterStyler.block(in: parsed, at: 0) == .paragraph
         let insertion: NSAttributedString
         if let cell = tableCellAtCaret, !isInline {
-            let flat = trimmed.components(separatedBy: .newlines).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }.joined(separator: " ")
+            let flat = trimmed.components(separatedBy: .newlines).filter { line in
+                let line = line.trimmingCharacters(in: .whitespaces)
+                return !line.isEmpty && MarkdownParser.divOpening(line) == nil && !MarkdownParser.isDivClosing(line)
+            }.joined(separator: " ")
             let inline = NSMutableAttributedString(attributedString: WriterMarkdown.inline(flat))
             inline.addAttributes(cell.attributes, range: NSRange(location: 0, length: inline.length))
             insertion = inline
         } else if isInline {
-            let inline = NSMutableAttributedString(attributedString: WriterMarkdown.inline(trimmed))
+            // The paragraph's text (a copied paragraph may come in a div), with the block of the paragraph it lands in.
+            let inline = NSMutableAttributedString(attributedString: parsed)
+            for key in WriterMarkdown.paragraphKeys { inline.removeAttribute(key, range: NSRange(location: 0, length: inline.length)) }
             let block = typingAttributes.filter { WriterMarkdown.paragraphKeys.contains($0.key) }
             inline.addAttributes(block, range: NSRange(location: 0, length: inline.length))
             insertion = inline

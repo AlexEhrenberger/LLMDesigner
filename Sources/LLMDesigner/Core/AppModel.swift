@@ -130,6 +130,39 @@ final class AppModel {
         didSet { settings.set(sidebarVisible, forKey: Keys.sidebarVisible) }
     }
 
+    // MARK: Narrow windows
+
+    /// The window is too narrow for the sidebar (or the right-hand panel) beside the content: it is folded away and
+    /// opens over the content instead (`RootView` sets this from the window's width). The preferences stay as they are.
+    var sidebarCollapsed = false
+    var panelCollapsed = false
+    /// The folded sidebar (or panel) lies open over the content.
+    var sidebarOverlay = false
+    var panelOverlay = false
+
+    /// The sidebar stands beside the content.
+    var isSidebarDocked: Bool { sidebarVisible && !sidebarCollapsed }
+    /// The sidebar is to be seen, beside the content or over it.
+    var isSidebarShown: Bool { sidebarCollapsed ? sidebarOverlay : sidebarVisible }
+    var isPanelDocked: Bool { outlinePanelVisible && !panelCollapsed }
+    var isPanelShown: Bool { panelCollapsed ? panelOverlay : outlinePanelVisible }
+
+    /// Closes what lies over the content.
+    func closeOverlays() {
+        guard sidebarOverlay || panelOverlay else { return }
+        withAnimation(.smooth(duration: 0.24)) {
+            sidebarOverlay = false
+            panelOverlay = false
+        }
+    }
+
+    /// Shows the right-hand panel because something new is in it (a bookmark); a folded panel stays closed, so it doesn't
+    /// cover the text being written.
+    func revealSidePanel() {
+        guard !panelCollapsed, !outlinePanelVisible else { return }
+        withAnimation(.smooth(duration: 0.28)) { outlinePanelVisible = true }
+    }
+
     // MARK: PDF export settings
 
     var pdfPaperSize: PaperSize {
@@ -688,7 +721,14 @@ final class AppModel {
     // MARK: Chat management
 
     func toggleSidebar() {
-        withAnimation(.smooth(duration: 0.28)) { sidebarVisible.toggle() }
+        withAnimation(.smooth(duration: 0.28)) {
+            if sidebarCollapsed {
+                sidebarOverlay.toggle()
+                if sidebarOverlay { panelOverlay = false }
+            } else {
+                sidebarVisible.toggle()
+            }
+        }
     }
 
     func newChat() {
@@ -712,7 +752,7 @@ final class AppModel {
         showChats()
         selectedChatID = id
         editingMessageID = nil
-        if outlinePanelVisible { refreshOutlineIfNeeded(id) }
+        if isPanelShown { refreshOutlineIfNeeded(id) }
         // Leaving a chat catches up on a memory that gave way to typing.
         // Leaving a chat makes it quiet: its impressions are consolidated.
         if let previous, previous != id { consolidateThalamus(previous) }
@@ -1430,13 +1470,20 @@ final class AppModel {
     }
 
     var isOutlinePanelShown: Bool {
-        outlinePanelVisible && selectedChat.map(showsSidePanel) == true
+        isPanelShown && selectedChat.map(showsSidePanel) == true
     }
 
     func toggleOutlinePanel() {
-        withAnimation(.smooth(duration: 0.28)) { outlinePanelVisible.toggle() }
+        withAnimation(.smooth(duration: 0.28)) {
+            if panelCollapsed {
+                panelOverlay.toggle()
+                if panelOverlay { sidebarOverlay = false }
+            } else {
+                outlinePanelVisible.toggle()
+            }
+        }
         // In Writer Studio the panel makes its own table of contents when it needs one.
-        if outlinePanelVisible, selectedDocumentID == nil, let id = selectedChatID { refreshOutlineIfNeeded(id) }
+        if isPanelShown, selectedDocumentID == nil, let id = selectedChatID { refreshOutlineIfNeeded(id) }
     }
 
     @discardableResult
@@ -1505,7 +1552,7 @@ final class AppModel {
         store.save(chats[index])
 
         sidePanelTab = .bookmarks
-        if !outlinePanelVisible { withAnimation(.smooth(duration: 0.28)) { outlinePanelVisible = true } }
+        revealSidePanel()
         recentBookmarkID = bookmark.id
         Task {
             try? await Task.sleep(for: .seconds(1.8))
@@ -1570,7 +1617,7 @@ final class AppModel {
         Task {
             // Suggestions first: they appear right under the answer the user is reading.
             if completed && suggestFollowUps { await generateFollowUps(chatID, answerID: answerID) }
-            guard outlinePanelVisible, !isGenerating(chatID) else { return }
+            guard isPanelShown, !isGenerating(chatID) else { return }
             try? await Task.sleep(for: .milliseconds(500))
             refreshOutlineIfNeeded(chatID)
         }

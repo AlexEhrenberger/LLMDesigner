@@ -79,7 +79,8 @@ enum HandoutBuilder {
         }
 
         for (number, slide) in deck.slides.enumerated() {
-            let parts = split(slide.markdown)
+            // The handout is set like a document: the slide's alignment and canvas sizes stay behind.
+            let parts = split(WriterMarkdown.forOtherLayout(slide.markdown))
             let notes = slide.notes.trimmingCharacters(in: .whitespacesAndNewlines)
             let picture = slidePictures[slide.id].map { "![Folie \(number + 1)](\($0))" }
             let pictures = parts.images + slide.images.map(imageLine)

@@ -1,31 +1,38 @@
 import AppKit
 
-/// What Markdown can't say about a passage: its colour and its font. A document stores it as an HTML span,
-/// `<span style="color:#C0392B;font-family:'Georgia'">…</span>`: other programs show it, and the Markdown export
-/// can leave it out (`WriterSpans.strippingStyles`).
+/// What Markdown can't say about a passage: its colour, its font and its size. A document stores it as an HTML
+/// span, `<span style="color:#C0392B;font-family:'Georgia';font-size:14pt">…</span>`: other programs show it, and the
+/// Markdown export can leave it out (`WriterSpans.strippingStyles`).
 struct WriterSpanStyle: Hashable {
     /// Six hex digits, upper case, without "#". For the palette colours this is the colour on white paper.
     var color: String?
     var font: WriterFont?
+    /// Points as printed (a document's text is 11 pt there); on a slide, points of its 720-point canvas.
+    var size: Double?
 
-    init(color: String? = nil, font: WriterFont? = nil) {
+    static let sizeRange: ClosedRange<Double> = 4...400
+
+    init(color: String? = nil, font: WriterFont? = nil, size: Double? = nil) {
         self.color = color
         self.font = font
+        self.size = size
     }
 
-    /// The style a stretch of text carries (`.writerColor`, `.writerFont`).
+    /// The style a stretch of text carries (`.writerColor`, `.writerFont`, `.writerFontSize`).
     init(_ attributes: [NSAttributedString.Key: Any]) {
         color = attributes[.writerColor] as? String
         font = (attributes[.writerFont] as? String).flatMap(WriterFont.init(rawValue:))
+        size = attributes[.writerFontSize] as? Double
     }
 
-    var isEmpty: Bool { color == nil && font == nil }
+    var isEmpty: Bool { color == nil && font == nil && size == nil }
 
     /// The meaning attributes of this style.
     var attributes: [NSAttributedString.Key: Any] {
         var attributes: [NSAttributedString.Key: Any] = [:]
         if let color { attributes[.writerColor] = color }
         if let font { attributes[.writerFont] = font.rawValue }
+        if let size { attributes[.writerFontSize] = size }
         return attributes
     }
 
@@ -33,7 +40,31 @@ struct WriterSpanStyle: Hashable {
         var parts: [String] = []
         if let color { parts.append("color:#\(color)") }
         if let font { parts.append("font-family:\(font.cssFamily)") }
+        if let size { parts.append("font-size:\(Self.format(size))pt") }
         return "<span style=\"\(parts.joined(separator: ";"))\">"
+    }
+
+    /// "14", "10.5": a size without needless decimals.
+    static func format(_ size: Double) -> String {
+        let rounded = (size * 10).rounded() / 10
+        return rounded == rounded.rounded() ? String(Int(rounded)) : String(format: "%.1f", rounded)
+    }
+
+    /// Points in a CSS `font-size`: `14pt`, `14px` and `14` alike; `1.2em` and `120%` of the printed text size.
+    static func parseSize(_ value: String) -> Double? {
+        let text = value.trimmingCharacters(in: .whitespaces).lowercased()
+        let number: Double?
+        if text.hasSuffix("em") {
+            number = Double(text.dropLast(2)).map { $0 * Double(WriterFont.printSize) }
+        } else if text.hasSuffix("%") {
+            number = Double(text.dropLast()).map { $0 / 100 * Double(WriterFont.printSize) }
+        } else if text.hasSuffix("pt") || text.hasSuffix("px") {
+            number = Double(text.dropLast(2))
+        } else {
+            number = Double(text)
+        }
+        guard let number, number.isFinite else { return nil }
+        return min(sizeRange.upperBound, max(sizeRange.lowerBound, (number * 10).rounded() / 10))
     }
 
     /// The style in a `<span style="…">` tag; nil if the tag has none (a bookmark, or an unknown span).
@@ -47,6 +78,7 @@ struct WriterSpanStyle: Hashable {
             switch property {
             case "color": parsed.color = WriterColors.parse(value)
             case "font-family": parsed.font = WriterFont.fromCSS(value)
+            case "font-size": parsed.size = Self.parseSize(value)
             default: break
             }
         }
@@ -56,7 +88,7 @@ struct WriterSpanStyle: Hashable {
 
     /// This style on top of an outer one: what it sets wins.
     func over(_ outer: WriterSpanStyle?) -> WriterSpanStyle {
-        WriterSpanStyle(color: color ?? outer?.color, font: font ?? outer?.font)
+        WriterSpanStyle(color: color ?? outer?.color, font: font ?? outer?.font, size: size ?? outer?.size)
     }
 }
 
@@ -202,8 +234,38 @@ enum WriterSpans {
         return seen
     }
 
+    /// The largest size the spans of a text set (for the room between its lines in print).
+    static func largestSize(in text: String) -> Double? {
+        tokens(in: text).filter(\.isOpening).compactMap { WriterSpanStyle(tag: $0.tag)?.size }.max()
+    }
+
     static func hasStyles(_ markdown: String) -> Bool {
         tokens(in: markdown).contains { $0.isOpening && WriterSpanStyle(tag: $0.tag) != nil }
+    }
+
+    /// Markdown without the sizes of its passages; a span that only had a size goes.
+    static func strippingSizes(_ markdown: String) -> String {
+        let tokens = tokens(in: markdown)
+        guard !tokens.isEmpty, markdown.contains("font-size") else { return markdown }
+        var stack: [Bool] = []
+        var replacements: [(NSRange, String)] = []
+        for token in tokens {
+            if token.isOpening {
+                guard WriterSpans.attributes(of: token.tag)["id"] == nil, var style = WriterSpanStyle(tag: token.tag), style.size != nil else {
+                    stack.append(false)
+                    continue
+                }
+                style.size = nil
+                let removes = style.isEmpty
+                stack.append(removes)
+                replacements.append((token.range, removes ? "" : style.openingTag))
+            } else if let removes = stack.popLast(), removes {
+                replacements.append((token.range, ""))
+            }
+        }
+        let result = NSMutableString(string: markdown)
+        for (range, text) in replacements.sorted(by: { $0.0.location > $1.0.location }) { result.replaceCharacters(in: range, with: text) }
+        return result as String
     }
 
     /// Markdown without the colour and font spans (bookmark spans stay): plain Markdown for programs that only know

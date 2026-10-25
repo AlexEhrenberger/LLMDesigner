@@ -300,3 +300,156 @@ struct CodeLanguageMenu: View {
         .help("Sprache des Code-Blocks (Python, SQL) – der Code wird dafür eingefärbt, eingerückt und lässt sich formatieren")
     }
 }
+
+// MARK: Size
+
+/// The size of the selection (or of the text typed from the caret on), in points as printed; on slides, points of the
+/// slide. The button shows the size at the caret.
+struct FontSizeMenu: View {
+    let controller: WriterEditorController
+    let document: WriterDocument
+    @State private var showsPopover = false
+    @State private var hovering = false
+
+    var body: some View {
+        let state = controller.state
+        Button { showsPopover.toggle() } label: {
+            HStack(spacing: 4) {
+                Text(WriterSpanStyle.format(state.fontSize))
+                    .font(.system(size: 12.5, weight: state.hasOwnFontSize ? .semibold : .medium).monospacedDigit())
+                    .foregroundStyle(state.hasOwnFontSize ? Theme.textPrimary : (hovering || showsPopover ? Theme.textPrimary : Theme.textSecondary))
+                    .frame(minWidth: 18)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(Theme.textTertiary)
+            }
+            .padding(.horizontal, 8)
+            .frame(height: 28)
+            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(hovering || showsPopover ? Theme.hover : .clear))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .focusable(false)
+        .fixedSize()
+        .onHover { hovering = $0 }
+        .popover(isPresented: $showsPopover, arrowEdge: .bottom) {
+            FontSizePicker(controller: controller, isSlide: document.deck != nil) { showsPopover = false }
+        }
+        .help("Schriftgröße in Punkt – der Auswahl, sonst des Textes ab dem Cursor. ⌘+ und ⌘− vergrößern und verkleinern.")
+    }
+}
+
+private struct FontSizePicker: View {
+    let controller: WriterEditorController
+    let isSlide: Bool
+    let close: () -> Void
+    @State private var text = ""
+    @FocusState private var fieldFocused: Bool
+
+    private var presets: [Double] {
+        isSlide ? [12, 14, 16, 18, 20, 24, 28, 32, 36, 40, 44, 48, 54, 60, 72, 96] : [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 60, 72]
+    }
+
+    var body: some View {
+        let state = controller.state
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Schriftgröße")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Theme.textSecondary)
+            HStack(spacing: 6) {
+                ToolbarButton(symbol: "textformat.size.smaller", help: "Kleiner (⌘−)", isActive: false) { controller.changeFontSize(by: -1) }
+                TextField("", text: $text)
+                    .textFieldStyle(.roundedBorder)
+                    .multilineTextAlignment(.center)
+                    .frame(width: 58)
+                    .focused($fieldFocused)
+                    .onSubmit(applyTyped)
+                Text("pt")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.textTertiary)
+                ToolbarButton(symbol: "textformat.size.larger", help: "Größer (⌘+)", isActive: false) { controller.changeFontSize(by: 1) }
+            }
+            LazyVGrid(columns: Array(repeating: GridItem(.fixed(44), spacing: 6), count: 4), spacing: 6) {
+                ForEach(presets, id: \.self) { size in
+                    SizeChip(size: size, isCurrent: abs(state.fontSize - size) < 0.05) {
+                        controller.setFontSize(size)
+                        close()
+                    }
+                }
+            }
+            Divider()
+            PopoverActionRow(title: "Standardgröße", symbol: "arrow.uturn.backward", isDisabled: !state.hasOwnFontSize) {
+                controller.setFontSize(nil)
+                close()
+            }
+            Text(state.hasSelection
+                 ? "Nur die markierte Stelle. ⌘+ und ⌘− vergrößern jede Stelle für sich – Überschriften bleiben größer als der Text."
+                 : "Der Text, der ab dem Cursor getippt wird. Mit ⌘A und ⌘+ wird alles größer, Überschriften bleiben größer als der Text.")
+                .font(.system(size: 10.5))
+                .foregroundStyle(Theme.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(12)
+        .frame(width: 222)
+        .onAppear { text = WriterSpanStyle.format(state.fontSize) }
+        .onChange(of: state.fontSize) { _, size in
+            if !fieldFocused { text = WriterSpanStyle.format(size) }
+        }
+    }
+
+    /// A typed size; "10,5" counts like "10.5".
+    private func applyTyped() {
+        let value = Double(text.replacingOccurrences(of: ",", with: ".").trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "pt", with: ""))
+        guard let value, WriterSpanStyle.sizeRange.contains(value) else {
+            text = WriterSpanStyle.format(controller.state.fontSize)
+            return
+        }
+        controller.setFontSize((value * 10).rounded() / 10)
+        close()
+    }
+}
+
+private struct SizeChip: View {
+    let size: Double
+    let isCurrent: Bool
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Text(WriterSpanStyle.format(size))
+                .font(.system(size: 12, weight: isCurrent ? .semibold : .regular).monospacedDigit())
+                .foregroundStyle(isCurrent ? Theme.accent : (hovering ? Theme.textPrimary : Theme.textSecondary))
+                .frame(width: 44, height: 26)
+                .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(isCurrent ? Theme.accent.opacity(0.16) : (hovering ? Theme.hover : Color.white.opacity(0.04))))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .focusable(false)
+        .onHover { hovering = $0 }
+    }
+}
+
+// MARK: Alignment
+
+/// Left, centred, right, justified: the paragraphs of the selection, or the column of the table with the caret.
+struct AlignmentButtons: View {
+    let controller: WriterEditorController
+
+    var body: some View {
+        let state = controller.state
+        HStack(spacing: 2) {
+            ForEach(WriterAlignment.allCases, id: \.self) { alignment in
+                ToolbarButton(symbol: alignment.symbol, help: help(alignment, inTable: state.table != nil), isActive: state.alignment == alignment) {
+                    controller.setAlignment(alignment)
+                }
+                .disabled(state.alignment == nil || (state.table != nil && alignment == .justify))
+            }
+        }
+    }
+
+    private func help(_ alignment: WriterAlignment, inTable: Bool) -> String {
+        if inTable { return alignment == .justify ? "Blocksatz gibt es in Tabellen nicht" : "Spalte: \(alignment.label.lowercased())" }
+        return "\(alignment.label) – die markierten Absätze, sonst der Absatz mit dem Cursor"
+    }
+}

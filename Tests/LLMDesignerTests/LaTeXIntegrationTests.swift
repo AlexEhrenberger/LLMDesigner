@@ -35,6 +35,48 @@ struct LaTeXIntegrationTests {
         }
     }
 
+    @Test func alignmentSizesAndColumnWidthsCompile() async throws {
+        let wide = String(repeating: "-", count: 70)
+        let narrow = String(repeating: "-", count: 30)
+        let markdown = """
+        [TOC]
+
+        ::: {.center}
+        # Zentrierter Titel {.chapter}
+        :::
+
+        ## Rechts
+
+        Linksbündiger Text, wie im Editor, mit einem <span style="font-size:20pt">großen</span> und einem <span style="font-size:8pt">kleinen</span> Wort, und so weiter, damit die Zeile umbricht und man den Flattersatz sieht.
+
+        ::: {.justify}
+        Ein Absatz im Blocksatz, lang genug, dass er über mehrere Zeilen geht und man sieht, dass beide Ränder gerade sind. Noch ein Satz für die zweite Zeile.
+        :::
+
+        ::: {.center}
+        Zentriert.
+
+        > Ein zentriertes Zitat
+        :::
+
+        ::: {.right}
+        ### Rechtsbündige Überschrift
+
+        Rechtsbündig.
+        :::
+
+        | Schmal | Breit |
+        | \(narrow) | :\(wide): |
+        | a | ein längerer Text in der breiten Spalte, der umbricht |
+
+        """
+        guard let pdf = try await typeset(markdown, typeface: .palatino) else { return }
+        #expect(pdf.count > 5_000)
+        if let directory = ProcessInfo.processInfo.environment["LLMD_PDF_OUT"] {
+            try pdf.write(to: URL(fileURLWithPath: directory).appendingPathComponent("layout.pdf"))
+        }
+    }
+
     @Test func codeCompilesWithColours() async throws {
         let markdown = """
         # Code

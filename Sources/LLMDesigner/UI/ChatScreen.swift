@@ -86,7 +86,7 @@ private struct TopBar: View {
 
     var body: some View {
         HStack(spacing: 2) {
-            if !app.sidebarVisible {
+            if !app.isSidebarDocked {
                 SidebarToggleButton()
                 IconButton(systemName: "square.and.pencil", help: "Neuer Chat (⌘N)", frameSize: Theme.titleBarControlSize) { app.newChat() }
                     .padding(.trailing, 6)
@@ -102,7 +102,7 @@ private struct TopBar: View {
                 }
             }
         }
-        .padding(.leading, app.sidebarVisible ? 14 : Theme.trafficLightInset)
+        .padding(.leading, app.isSidebarDocked ? 14 : Theme.trafficLightInset)
         .padding(.trailing, 14)
         .frame(height: Theme.titleBarHeight)
         .padding(.bottom, Theme.topBarBottomPadding)

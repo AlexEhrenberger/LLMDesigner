@@ -171,7 +171,7 @@ enum WriterStyler {
     }
 
     static func paragraphStyle(_ block: WriterBlock, level: Int, family: WriterFont, previous: WriterBlock?, next: WriterBlock?,
-                               cell: WriterTableCell? = nil, palette: WriterPalette = .dark) -> NSParagraphStyle {
+                               cell: WriterTableCell? = nil, alignment: WriterAlignment? = nil, palette: WriterPalette = .dark) -> NSParagraphStyle {
         let style = NSMutableParagraphStyle()
         style.lineHeightMultiple = 1.32
         style.paragraphSpacing = 10
@@ -236,7 +236,14 @@ enum WriterStyler {
         if palette.alignment != .natural, cell == nil, [.paragraph, .chapter, .heading1, .heading2, .heading3].contains(block) {
             style.alignment = palette.alignment
         }
+        // The paragraph's own alignment wins over both.
+        if let alignment, cell == nil, block.takesAlignment { style.alignment = alignment.textAlignment }
         return style
+    }
+
+    /// How a paragraph without an alignment of its own is set: centred on a title slide, otherwise left.
+    static func defaultAlignment(_ block: WriterBlock, palette: WriterPalette) -> WriterAlignment {
+        palette.alignment == .center && [.paragraph, .chapter, .heading1, .heading2, .heading3].contains(block) ? .center : .left
     }
 
     /// The cell's box in AppKit's table: thin lines, a little room around the text, a tinted header row.
@@ -248,6 +255,10 @@ enum WriterStyler {
         block.setWidth(9, type: .absoluteValueType, for: .padding, edge: .maxX)
         block.setWidth(5, type: .absoluteValueType, for: .padding, edge: .minY)
         block.setWidth(6, type: .absoluteValueType, for: .padding, edge: .maxY)
+        // A share of the text width, like the shares LaTeX gets (`X` columns without their padding).
+        if cell.table.widths != nil {
+            block.setContentWidth(cell.table.width(of: cell.column) * 100, type: .percentageValueType)
+        }
         block.verticalAlignment = .topAlignment
         if cell.row == 0 { block.backgroundColor = palette.tableHeader }
         return block
@@ -268,12 +279,13 @@ enum WriterStyler {
             attributes[.foregroundColor] = block == .raw ? palette.tertiaryText : palette.text
             return attributes
         }
-        // A passage's own font replaces the document's for this stretch.
+        // A passage's own font replaces the document's for this stretch, its own size the block's.
         let passage = WriterSpanStyle(semantic)
         let family = passage.font ?? family
         let color = passage.color.flatMap { WriterColors.display($0, onDark: !palette.isLight) }
+        let ownSize = passage.size.map { CGFloat($0) * family.screenScale(onSlide: palette.isSlide) }
         if marks.contains(.code) {
-            let size = blockFont(block, family: family).pointSize * 0.86
+            let size = (ownSize ?? blockFont(block, family: family).pointSize) * 0.86
             attributes[.font] = font(family, size: size, weight: marks.contains(.bold) ? .semibold : .regular, monospaced: true)
             attributes[.foregroundColor] = color ?? palette.inlineCodeText
             attributes[.backgroundColor] = palette.inlineCodeBackground
@@ -289,6 +301,9 @@ enum WriterStyler {
         }
         if block.isHeading, marks.contains(.bold) {
             attributes[.font] = blockFont(block, family: family, italic: marks.contains(.italic)).withWeight(.heavy)
+        }
+        if let ownSize, let current = attributes[.font] as? NSFont {
+            attributes[.font] = current.withSize(ownSize)
         }
         attributes[.foregroundColor] = color ?? (block == .quote ? palette.secondaryText : palette.text)
         return attributes
@@ -327,15 +342,22 @@ enum WriterStyler {
             var semantic: [NSAttributedString.Key: Any] = paragraph.cell?.attributes
                 ?? [.writerBlock: block.rawValue, .writerListLevel: block.isList ? paragraph.level : 0]
             if block == .code, let language = paragraph.language { semantic[.writerCodeLanguage] = language }
+            // The whole paragraph is aligned like its first character.
+            let alignment = block.takesAlignment && paragraph.cell == nil ? paragraph.alignment : nil
+            if let alignment { semantic[.writerAlignment] = alignment.rawValue }
             storage.addAttributes(semantic, range: paragraph.range)
             if block != .code { storage.removeAttribute(.writerCodeLanguage, range: paragraph.range) }
+            if alignment == nil { storage.removeAttribute(.writerAlignment, range: paragraph.range) }
+            // Code has no sizes of its own.
+            if block == .code || block == .raw { storage.removeAttribute(.writerFontSize, range: paragraph.range) }
             if paragraph.cell == nil {
                 for key in WriterMarkdown.tableKeys { storage.removeAttribute(key, range: paragraph.range) }
             }
 
             let previous = index > 0 ? paragraphs[index - 1].block : previousBlock(in: storage, before: paragraph.range.location)
             let next = index + 1 < paragraphs.count ? paragraphs[index + 1].block : nextBlock(in: storage, after: NSMaxRange(paragraph.range))
-            let style = paragraphStyle(block, level: paragraph.level, family: family, previous: previous, next: next, cell: paragraph.cell, palette: palette)
+            let style = paragraphStyle(block, level: paragraph.level, family: family, previous: previous, next: next, cell: paragraph.cell,
+                                       alignment: alignment, palette: palette)
 
             for key in displayKeys { storage.removeAttribute(key, range: paragraph.range) }
             storage.addAttribute(.paragraphStyle, value: style, range: paragraph.range)
@@ -369,20 +391,33 @@ enum WriterStyler {
 
     /// Typing attributes for a paragraph with this block and these marks.
     static func typingAttributes(block: WriterBlock, level: Int, semantic: [NSAttributedString.Key: Any], family: WriterFont, palette: WriterPalette) -> [NSAttributedString.Key: Any] {
-        var attributes = semantic.filter { [.writerBold, .writerItalic, .writerCode, .underlineStyle, .strikethroughStyle, .link, .writerColor, .writerFont].contains($0.key) }
-        // Code has no colours or fonts of its own.
-        if block == .code || block == .raw {
-            attributes.removeValue(forKey: .writerColor)
-            attributes.removeValue(forKey: .writerFont)
+        var attributes = semantic.filter {
+            [.writerBold, .writerItalic, .writerCode, .underlineStyle, .strikethroughStyle, .link, .writerColor, .writerFont, .writerFontSize, .writerAlignment].contains($0.key)
         }
+        // Code has no colours, fonts or sizes of its own.
+        if block == .code || block == .raw {
+            for key in WriterMarkdown.passageKeys { attributes.removeValue(forKey: key) }
+        }
+        if !block.takesAlignment { attributes.removeValue(forKey: .writerAlignment) }
         let cell = block == .table ? WriterTableCell(semantic) : nil
         let block: WriterBlock = block == .table && cell == nil ? .paragraph : block
         attributes[.writerBlock] = block.rawValue
         attributes[.writerListLevel] = block.isList ? level : 0
         if let cell { attributes.merge(cell.attributes) { $1 } }
         attributes.merge(displayAttributes(for: attributes, block: block, family: family, palette: palette)) { $1 }
-        attributes[.paragraphStyle] = paragraphStyle(block, level: level, family: family, previous: nil, next: nil, cell: cell, palette: palette)
+        let alignment = (attributes[.writerAlignment] as? String).flatMap(WriterAlignment.init(rawValue:))
+        attributes[.paragraphStyle] = paragraphStyle(block, level: level, family: family, previous: nil, next: nil, cell: cell, alignment: alignment, palette: palette)
         return attributes
+    }
+
+    /// The size a stretch of text has in points of the print (or of the slide): its own, or its block's.
+    static func printedSize(of semantic: [NSAttributedString.Key: Any], block: WriterBlock, family: WriterFont, palette: WriterPalette) -> Double {
+        let passage = WriterSpanStyle(semantic)
+        if let size = passage.size { return size }
+        let family = passage.font ?? family
+        let isHeader = block == .table && semantic[.writerTableRow] as? Int == 0
+        let screen = blockFont(block, family: family, bold: isHeader).pointSize
+        return (Double(screen / family.screenScale(onSlide: palette.isSlide)) * 2).rounded() / 2
     }
 }
 

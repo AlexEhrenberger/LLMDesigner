@@ -5,6 +5,8 @@ enum WriterTableAction: Hashable {
     case insertRowAbove, insertRowBelow, insertColumnLeft, insertColumnRight
     case deleteRow, deleteColumn, deleteTable
     case align(MarkdownBlock.Alignment)
+    /// Every column as wide as the others again (their widths were dragged).
+    case equalizeColumns
 }
 
 /// Tables in the editor. Every cell is a paragraph whose attributes name its `WriterTable`, row and column
@@ -58,7 +60,7 @@ extension WriterTextView {
 
     /// Puts an empty table below the current paragraph and the caret into its first cell.
     func insertTable(rows: Int, columns: Int) {
-        let table = WriterTable(columns: columns, alignments: [])
+        let table = WriterTable(columns: columns, alignments: [], widths: nil)
         let text = NSMutableAttributedString()
         for row in 0..<max(1, rows) {
             for column in 0..<table.columns {
@@ -120,6 +122,8 @@ extension WriterTextView {
             row.map { $0.location == NSNotFound ? NSAttributedString() : storage.attributedSubstring(from: $0) }
         }
         var alignments = model.table.alignments
+        // The columns' shares; a new column gets an average one, the rest make room.
+        var widths = model.table.widths
         var caret = (row: cell.row, column: cell.column)
         let empty = NSAttributedString()
 
@@ -132,6 +136,7 @@ extension WriterTextView {
             let column = action == .insertColumnLeft ? cell.column : cell.column + 1
             for row in contents.indices { contents[row].insert(empty, at: column) }
             alignments.insert(.leading, at: column)
+            widths?.insert(1 / CGFloat(model.table.columns), at: column)
             caret = (cell.row, column)
         case .deleteRow:
             guard model.rows > 1 else { return deleteTable(model) }
@@ -141,20 +146,25 @@ extension WriterTextView {
             guard model.table.columns > 1 else { return deleteTable(model) }
             for row in contents.indices { contents[row].remove(at: cell.column) }
             alignments.remove(at: cell.column)
+            widths?.remove(at: cell.column)
             caret = (cell.row, min(cell.column, alignments.count - 1))
         case .deleteTable:
             return deleteTable(model)
         case .align(let alignment):
             guard alignments[cell.column] != alignment else { return }
             alignments[cell.column] = alignment
+        case .equalizeColumns:
+            guard widths != nil else { return }
+            return setColumnWidths(nil, of: model)
         }
-        rebuild(model, contents: contents, alignments: alignments, caret: caret)
+        rebuild(model, contents: contents, alignments: alignments, widths: widths, caret: caret)
     }
 
     /// Replaces the table with a new one of these cells, in one undoable step, and puts the caret at the end
     /// of the text of the cell `caret`.
-    private func rebuild(_ model: TableModel, contents: [[NSAttributedString]], alignments: [MarkdownBlock.Alignment], caret: (row: Int, column: Int)) {
-        let table = WriterTable(columns: alignments.count, alignments: alignments)
+    private func rebuild(_ model: TableModel, contents: [[NSAttributedString]], alignments: [MarkdownBlock.Alignment], widths: [CGFloat]?,
+                         caret: (row: Int, column: Int)) {
+        let table = WriterTable(columns: alignments.count, alignments: alignments, widths: widths)
         let text = NSMutableAttributedString()
         var caretLocation = model.range.location
         for (row, cells) in contents.enumerated() {
@@ -183,7 +193,7 @@ extension WriterTextView {
     var tableState: State.TableState? {
         guard let cell = tableCellAtCaret, let model = tableModel(at: selectedRange().location) else { return nil }
         return State.TableState(row: cell.row, column: cell.column, rows: model.rows, columns: model.table.columns,
-                                alignment: model.table.alignment(of: cell.column))
+                                alignment: model.table.alignment(of: cell.column), hasOwnWidths: model.table.widths != nil)
     }
 
     /// An edit of the table's structure (or of text around it) that is already safe: undoable, one step, and
@@ -300,6 +310,105 @@ extension WriterTextView {
         onStateChange?()
     }
 
+    // MARK: Column widths
+
+    /// A border between two columns: the table, the column on its left and every column's edges in the view (the
+    /// left edge of each column, then the table's right edge), with the width of the text of all cells of a row.
+    struct ColumnBorder {
+        let model: TableModel
+        let column: Int
+        let edges: [CGFloat]
+        let textWidth: CGFloat
+    }
+
+    /// The border between two columns at this point of the view (within a few points).
+    func columnBorder(at point: NSPoint) -> ColumnBorder? {
+        guard let layoutManager, let container = textContainer, let storage = textStorage, storage.length > 0 else { return nil }
+        let origin = textContainerOrigin
+        let inContainer = NSPoint(x: point.x - origin.x, y: point.y - origin.y)
+        let glyph = layoutManager.glyphIndex(for: inContainer, in: container, fractionOfDistanceThroughGlyph: nil)
+        guard glyph < layoutManager.numberOfGlyphs else { return nil }
+        let character = layoutManager.characterIndexForGlyph(at: glyph)
+        guard character < storage.length, let model = tableModel(at: character), model.table.columns > 1,
+              let first = cellBounds(model, row: 0), let last = cellBounds(model, row: model.rows - 1) else { return nil }
+        let top = first.map(\.bounds.minY).min() ?? 0
+        let bottom = last.map(\.bounds.maxY).max() ?? 0
+        guard inContainer.y >= top - 2, inContainer.y <= bottom + 2 else { return nil }
+        let edges = first.map { $0.bounds.minX + origin.x } + [(first.last?.bounds.maxX ?? 0) + origin.x]
+        let textWidth = first.map(\.content.width).reduce(0, +)
+        for column in 0..<(model.table.columns - 1) where abs(point.x - edges[column + 1]) <= 4 {
+            return ColumnBorder(model: model, column: column, edges: edges, textWidth: textWidth)
+        }
+        return nil
+    }
+
+    /// The boxes of a row's cells in the text container: the whole cell and its text.
+    private func cellBounds(_ model: TableModel, row: Int) -> [(bounds: NSRect, content: NSRect)]? {
+        guard let layoutManager, let storage = textStorage, row < model.rows else { return nil }
+        var result: [(bounds: NSRect, content: NSRect)] = []
+        for column in 0..<model.table.columns {
+            let content = model.cells[row][column]
+            guard content.location != NSNotFound, content.location < storage.length,
+                  let style = storage.attribute(.paragraphStyle, at: content.location, effectiveRange: nil) as? NSParagraphStyle,
+                  let block = style.textBlocks.last as? NSTextTableBlock else { return nil }
+            let glyphs = layoutManager.glyphRange(forCharacterRange: NSRange(location: content.location, length: min(content.length + 1, storage.length - content.location)),
+                                                  actualCharacterRange: nil)
+            result.append((layoutManager.boundsRect(for: block, glyphRange: glyphs), layoutManager.layoutRect(for: block, glyphRange: glyphs)))
+        }
+        return result
+    }
+
+    /// Drags the border: the two columns beside it share their width anew while the mouse moves (shown at once, not
+    /// saved), and the result is one undoable step when the button comes up.
+    func dragColumnBorder(_ border: ColumnBorder, from event: NSEvent) {
+        guard let window, let storage = textStorage, border.textWidth > 0 else { return }
+        let model = border.model
+        let start = convert(event.locationInWindow, from: nil).x
+        let shares = (0..<model.table.columns).map { model.table.width(of: $0) }
+        let left = border.column, right = border.column + 1
+        let pair = shares[left] + shares[right]
+        var current = shares
+        var moved = false
+
+        func show(_ widths: [CGFloat]?, table: WriterTable? = nil) {
+            let shown = table ?? WriterTable(columns: model.table.columns, alignments: model.table.alignments, widths: widths)
+            storage.beginEditing()
+            storage.addAttribute(.writerTable, value: shown, range: model.range)
+            storage.endEditing()
+        }
+
+        NSCursor.resizeLeftRight.push()
+        defer { NSCursor.pop() }
+        while let next = window.nextEvent(matching: [.leftMouseDragged, .leftMouseUp]) {
+            if next.type == .leftMouseUp { break }
+            let delta = (convert(next.locationInWindow, from: nil).x - start) / border.textWidth
+            let share = min(max(shares[left] + delta, WriterTable.minimumWidth), pair - WriterTable.minimumWidth)
+            current[left] = share
+            current[right] = pair - share
+            moved = true
+            show(current)
+        }
+        guard moved else { return }
+        // Back to the table as it was, then the change itself, so undo returns to it.
+        show(nil, table: model.table)
+        setColumnWidths(current, of: model)
+    }
+
+    /// Gives the table these column shares (nil: equal columns) in one undoable step; the text and the caret stay.
+    func setColumnWidths(_ widths: [CGFloat]?, of model: TableModel) {
+        guard let storage = textStorage else { return }
+        let table = WriterTable(columns: model.table.columns, alignments: model.table.alignments, widths: widths)
+        let selection = selectedRange()
+        guard shouldChangeText(in: model.range, replacementString: nil) else { return }
+        storage.beginEditing()
+        storage.addAttribute(.writerTable, value: table, range: model.range)
+        storage.endEditing()
+        didChangeText()
+        setSelectedRange(selection)
+        resetTypingAttributes()
+        onStateChange?()
+    }
+
     // MARK: Menu
 
     /// The table's entries for the context menu.
@@ -321,6 +430,7 @@ extension WriterTextView {
         item("Spalte linksbündig", "text.alignleft", .align(.leading), on: state.alignment == .leading)
         item("Spalte zentriert", "text.aligncenter", .align(.center), on: state.alignment == .center)
         item("Spalte rechtsbündig", "text.alignright", .align(.trailing), on: state.alignment == .trailing)
+        item("Spalten gleich breit", "rectangle.split.3x1", .equalizeColumns, enabled: state.hasOwnWidths)
         menu.addItem(.separator())
         item("Zeile löschen", "minus.square", .deleteRow)
         item("Spalte löschen", "minus.rectangle.portrait", .deleteColumn)

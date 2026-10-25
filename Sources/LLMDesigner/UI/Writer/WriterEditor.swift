@@ -35,6 +35,9 @@ final class WriterEditorController {
     func toggle(_ mark: WriterInline) { perform { $0.toggle(mark) } }
     func setTextColor(_ hex: String?) { perform { $0.setTextColor(hex) } }
     func setTextFont(_ font: WriterFont?) { perform { $0.setTextFont(font) } }
+    func setFontSize(_ size: Double?) { perform { $0.setFontSize(size) } }
+    func changeFontSize(by step: Int) { perform { $0.changeFontSize(by: step) } }
+    func setAlignment(_ alignment: WriterAlignment) { perform { $0.setAlignment(alignment) } }
     func setCodeLanguage(_ language: CodeLanguage?) { perform { $0.setCodeLanguage(language) } }
     func formatCode() { perform { $0.formatCode() } }
     /// macOS's palette of special characters, symbols and emoji; what is chosen goes in at the caret.
@@ -114,7 +117,7 @@ final class WriterEditorController {
     func bookmarkAdded(_ id: String) {
         guard let app else { return }
         app.documentPanelTab = .bookmarks
-        if !app.outlinePanelVisible { withAnimation(.smooth(duration: 0.28)) { app.outlinePanelVisible = true } }
+        app.revealSidePanel()
         recentBookmarkID = id
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(1.8))

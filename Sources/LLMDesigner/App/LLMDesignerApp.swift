@@ -123,7 +123,7 @@ struct AppCommands: Commands {
                 .disabled(app.selectedDocument == nil || app.exportingIDs.contains(app.selectedDocumentID ?? UUID()))
         }
         CommandGroup(before: .toolbar) {
-            Button(app.sidebarVisible ? "Seitenleiste ausblenden" : "Seitenleiste einblenden") { app.toggleSidebar() }
+            Button(app.isSidebarShown ? "Seitenleiste ausblenden" : "Seitenleiste einblenden") { app.toggleSidebar() }
                 .keyboardShortcut("s", modifiers: [.control, .command])
             Button("Chats") { app.showChats() }
                 .keyboardShortcut("1")
@@ -132,6 +132,20 @@ struct AppCommands: Commands {
             Button("Personas") { app.showPersonas() }
                 .keyboardShortcut("3")
             Divider()
+        }
+        CommandMenu("Format") {
+            Group {
+                Button("Schrift größer") { app.formatText { $0.changeFontSize(by: 1) } }
+                    .keyboardShortcut("+")
+                Button("Schrift kleiner") { app.formatText { $0.changeFontSize(by: -1) } }
+                    .keyboardShortcut("-")
+                Button("Standardgröße") { app.formatText { $0.setFontSize(nil) } }
+                Divider()
+                ForEach(WriterAlignment.allCases, id: \.self) { alignment in
+                    Button(alignment.label) { app.formatText { $0.setAlignment(alignment) } }
+                }
+            }
+            .disabled(!app.canFormatText)
         }
         CommandMenu("Chat") {
             Button("Generierung stoppen") { app.stop() }
@@ -168,7 +182,7 @@ struct AppCommands: Commands {
             Button("Chat mit Inhaltsverzeichnis exportieren …") { app.exportChat(withOutline: true) }
                 .keyboardShortcut("e", modifiers: [.command, .shift, .option])
                 .disabled(app.selectedChat == nil || app.isGenerating)
-            Button(app.outlinePanelVisible ? "Inhaltsverzeichnis ausblenden" : "Inhaltsverzeichnis einblenden") { app.toggleOutlinePanel() }
+            Button(app.isPanelShown ? "Inhaltsverzeichnis ausblenden" : "Inhaltsverzeichnis einblenden") { app.toggleOutlinePanel() }
                 .keyboardShortcut("i", modifiers: [.command, .option])
             Divider()
             Button("Modelle aktualisieren") { Task { await app.refreshModels() } }

@@ -23,7 +23,8 @@ extension AppModel {
     // MARK: Material
 
     func deckMaterial(from document: WriterDocument) -> DeckMaterial {
-        DeckMaterial(title: document.displayTitle, markdown: document.markdown, sourceName: document.displayTitle)
+        // The slides get their own layout: the document's alignment and print sizes stay behind.
+        DeckMaterial(title: document.displayTitle, markdown: WriterMarkdown.forOtherLayout(document.markdown), sourceName: document.displayTitle)
     }
 
     func deckMaterial(from url: URL) throws -> DeckMaterial {
@@ -218,7 +219,7 @@ enum DeckBlockText {
         case .list(let items):
             items.map { String(repeating: "  ", count: $0.level) + ($0.marker ?? "-") + " " + $0.text }.joined(separator: "\n")
         case .quote(let text): text.components(separatedBy: "\n").map { "> " + $0 }.joined(separator: "\n")
-        case .table(let header, let rows, _):
+        case .table(let header, let rows, _, _):
             ([header] + rows).enumerated().flatMap { index, cells -> [String] in
                 let line = "| " + cells.joined(separator: " | ") + " |"
                 return index == 0 ? [line, "| " + header.map { _ in "---" }.joined(separator: " | ") + " |"] : [line]

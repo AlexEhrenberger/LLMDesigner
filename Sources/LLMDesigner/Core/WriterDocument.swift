@@ -67,6 +67,7 @@ struct WriterDocument: Identifiable, Hashable, Sendable {
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .first { !$0.isEmpty && !$0.hasPrefix("```") && !$0.hasPrefix("|") && WriterImageReference.parse($0) == nil
                 && !$0.hasPrefix("$$") && !$0.hasPrefix("\\begin") && !WriterTOCAttachment.isMarker($0)
+                && MarkdownParser.divOpening($0) == nil && !MarkdownParser.isDivClosing($0)
                 && !$0.allSatisfy { "-*_ ".contains($0) } }
             .map { WriterMarkdown.headingAttributes($0).text } ?? ""
         var text = line.drop { "#>-*+ ".contains($0) }

@@ -17,22 +17,40 @@ enum MarkdownBlock: Hashable {
     case code(language: String, code: String)
     case list([ListItem])
     case quote(String)
-    case table(header: [String], rows: [[String]], alignments: [Alignment])
+    /// `widths`: each column's share of the table's text width (they add up to 1), or nil for equal columns.
+    case table(header: [String], rows: [[String]], alignments: [Alignment], widths: [Double]?)
     case math(latex: String, complete: Bool)
     case rule
 }
 
+/// A block and the classes of the Pandoc divs it stands in (`::: {.center}` … `:::`), outermost first.
+struct AnnotatedMarkdownBlock: Hashable {
+    let block: MarkdownBlock
+    let classes: [String]
+}
+
 /// Small block-level Markdown parser tuned for streamed LLM output (unclosed code fences are fine).
 enum MarkdownParser {
+    /// The blocks; the fence lines of divs are no blocks (see `parseAnnotated`).
     static func parse(_ text: String) -> [MarkdownBlock] {
+        parseAnnotated(text).map(\.block)
+    }
+
+    /// The blocks with the divs around them. Writer Studio keeps how paragraphs are aligned in divs.
+    static func parseAnnotated(_ text: String) -> [AnnotatedMarkdownBlock] {
         let lines = text.components(separatedBy: "\n")
-        var blocks: [MarkdownBlock] = []
+        var blocks: [AnnotatedMarkdownBlock] = []
         var paragraph: [String] = []
+        var divs: [[String]] = []
         var index = 0
+
+        func append(_ block: MarkdownBlock) {
+            blocks.append(AnnotatedMarkdownBlock(block: block, classes: divs.flatMap { $0 }))
+        }
 
         func flushParagraph() {
             guard !paragraph.isEmpty else { return }
-            blocks.append(.paragraph(paragraph.joined(separator: "\n")))
+            append(.paragraph(paragraph.joined(separator: "\n")))
             paragraph.removeAll()
         }
 
@@ -54,7 +72,7 @@ enum MarkdownParser {
                     code.append(lines[index])
                     index += 1
                 }
-                blocks.append(.code(language: language, code: code.joined(separator: "\n")))
+                append(.code(language: language, code: code.joined(separator: "\n")))
                 continue
             }
 
@@ -64,11 +82,25 @@ enum MarkdownParser {
                 continue
             }
 
+            // A div's fences: `::: {.center}` opens one, `:::` closes the innermost (and is text when none is open).
+            if let classes = divOpening(trimmed) {
+                flushParagraph()
+                divs.append(classes)
+                index += 1
+                continue
+            }
+            if !divs.isEmpty, isDivClosing(trimmed) {
+                flushParagraph()
+                divs.removeLast()
+                index += 1
+                continue
+            }
+
             if let (open, close) = displayMathDelimiters(for: trimmed) {
                 flushParagraph()
                 let afterOpen = String(trimmed.dropFirst(open.count))
                 if let end = afterOpen.range(of: close) {
-                    blocks.append(.math(latex: afterOpen[..<end.lowerBound].trimmingCharacters(in: .whitespacesAndNewlines), complete: true))
+                    append(.math(latex: afterOpen[..<end.lowerBound].trimmingCharacters(in: .whitespacesAndNewlines), complete: true))
                     let rest = afterOpen[end.upperBound...].trimmingCharacters(in: .whitespaces)
                     if !rest.isEmpty { paragraph.append(rest) }
                     index += 1
@@ -87,7 +119,7 @@ enum MarkdownParser {
                     body.append(lines[index])
                     index += 1
                 }
-                blocks.append(.math(latex: body.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines), complete: complete))
+                append(.math(latex: body.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines), complete: complete))
                 continue
             }
 
@@ -104,20 +136,20 @@ enum MarkdownParser {
                         break
                     }
                 }
-                blocks.append(.math(latex: body.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines), complete: complete))
+                append(.math(latex: body.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines), complete: complete))
                 continue
             }
 
             if let heading = heading(in: trimmed) {
                 flushParagraph()
-                blocks.append(heading)
+                append(heading)
                 index += 1
                 continue
             }
 
             if isRule(trimmed) {
                 flushParagraph()
-                blocks.append(.rule)
+                append(.rule)
                 index += 1
                 continue
             }
@@ -131,14 +163,15 @@ enum MarkdownParser {
                     quote.append(String(current.dropFirst().drop(while: { $0 == " " })))
                     index += 1
                 }
-                blocks.append(.quote(quote.joined(separator: "\n")))
+                append(.quote(quote.joined(separator: "\n")))
                 continue
             }
 
             if trimmed.hasPrefix("|"), index + 1 < lines.count, isTableSeparator(lines[index + 1]) {
                 flushParagraph()
                 let header = cells(of: trimmed)
-                let alignments = cells(of: lines[index + 1]).map { alignment(of: $0) }
+                let separators = cells(of: lines[index + 1])
+                let alignments = separators.map { alignment(of: $0) }
                 var rows: [[String]] = []
                 index += 2
                 while index < lines.count {
@@ -147,7 +180,7 @@ enum MarkdownParser {
                     rows.append(cells(of: current))
                     index += 1
                 }
-                blocks.append(.table(header: header, rows: rows, alignments: alignments))
+                append(.table(header: header, rows: rows, alignments: alignments, widths: widths(of: separators)))
                 continue
             }
 
@@ -171,7 +204,7 @@ enum MarkdownParser {
                         break
                     }
                 }
-                blocks.append(.list(items))
+                append(.list(items))
                 continue
             }
 
@@ -256,6 +289,31 @@ enum MarkdownParser {
         }
         cells.append(current)
         return cells.map { $0.trimmingCharacters(in: .whitespaces) }
+    }
+
+    /// The columns' widths from the dashes of the separator line, as Pandoc reads them. Only when the dashes add up to
+    /// exactly 100 (Writer Studio writes them as percentages): a table from elsewhere keeps equal columns.
+    static func widths(of separators: [String]) -> [Double]? {
+        let dashes = separators.map { $0.filter { $0 == "-" }.count }
+        guard dashes.count > 1, dashes.allSatisfy({ $0 > 0 }), dashes.reduce(0, +) == 100 else { return nil }
+        return dashes.map { Double($0) / 100 }
+    }
+
+    /// The classes of a line that opens a div: `::: {.center}`, `::: {.note #id}` or `::: note`.
+    static func divOpening(_ line: String) -> [String]? {
+        guard line.hasPrefix(":::") else { return nil }
+        // Pandoc allows colons after the attributes, too.
+        let core = line.drop(while: { $0 == ":" }).trimmingCharacters(in: CharacterSet(charactersIn: ": "))
+        guard !core.isEmpty else { return nil }
+        if core.hasPrefix("{"), core.hasSuffix("}") {
+            return core.dropFirst().dropLast().split(separator: " ").filter { $0.hasPrefix(".") }.map { String($0.dropFirst()) }
+        }
+        guard core.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }) else { return nil }
+        return [core]
+    }
+
+    static func isDivClosing(_ line: String) -> Bool {
+        line.count >= 3 && line.allSatisfy { $0 == ":" }
     }
 
     private static func alignment(of separator: String) -> MarkdownBlock.Alignment {

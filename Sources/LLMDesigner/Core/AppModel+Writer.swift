@@ -33,6 +33,16 @@ extension AppModel {
         activeApplication == .writer || activeApplication == .presenter
     }
 
+    /// The Format menu (size and alignment) works on the text of the open document or slide.
+    var canFormatText: Bool {
+        canFindInDocument && writerTab == .document
+    }
+
+    func formatText(_ command: (WriterEditorController) -> Void) {
+        guard canFormatText, let controller = documentFind?.controller else { return }
+        command(controller)
+    }
+
     func findInDocument(_ command: DocumentFind.Command) {
         guard canFindInDocument else { return }
         if writerTab != .document { showWriterTab(.document) }
@@ -425,7 +435,7 @@ enum WriterMarkdownExport {
     /// Markdown without what Markdown can't say: the spans of colours, fonts and bookmarks and the underline tags go;
     /// the text stays. (The Markdown the library stores keeps them, as HTML in the text, which most programs show.)
     static func plain(_ markdown: String) -> String {
-        WriterBookmark.strip(markdown)
+        WriterBookmark.strip(WriterMarkdown.removingDivFences(markdown))
             .replacingOccurrences(of: "<u>", with: "")
             .replacingOccurrences(of: "</u>", with: "")
     }

@@ -235,10 +235,12 @@ private struct CitationTopBar: View {
     @Bindable var model: CitationStudioModel
     let library: CitationLibrary
     @FocusState private var importFocused: Bool
+    /// In a narrow window the counts give way to the import field.
+    @State private var width: CGFloat = 1200
 
     var body: some View {
         HStack(spacing: 10) {
-            if !app.sidebarVisible {
+            if !app.isSidebarDocked {
                 SidebarToggleButton()
                     .padding(.trailing, 4)
             }
@@ -248,9 +250,15 @@ private struct CitationTopBar: View {
             Text("Citation Studio")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(Theme.textPrimary)
-            Text("\(library.sources.count) Quellen · \(library.quotes.count) Zitate")
-                .font(.system(size: 12).monospacedDigit())
-                .foregroundStyle(Theme.textTertiary)
+                .lineLimit(1)
+                .fixedSize()
+            if width >= 900 {
+                Text("\(library.sources.count) Quellen · \(library.quotes.count) Zitate")
+                    .font(.system(size: 12).monospacedDigit())
+                    .foregroundStyle(Theme.textTertiary)
+                    .lineLimit(1)
+                    .fixedSize()
+            }
             Spacer(minLength: 16)
             importField
                 .frame(maxWidth: 460)
@@ -269,9 +277,10 @@ private struct CitationTopBar: View {
                 withAnimation(.easeInOut(duration: 0.25)) { app.closeCitationStudio() }
             }
         }
-        .padding(.leading, app.sidebarVisible ? 16 : Theme.trafficLightInset)
+        .padding(.leading, app.isSidebarDocked ? 16 : Theme.trafficLightInset)
         .padding(.trailing, 12)
         .frame(height: Theme.titleBarHeight)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .padding(.bottom, Theme.topBarBottomPadding + 4)
         .background(WindowDragArea())
     }

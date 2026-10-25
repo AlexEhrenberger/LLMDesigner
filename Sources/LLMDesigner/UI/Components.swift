@@ -30,7 +30,7 @@ struct SidebarToggleButton: View {
     var body: some View {
         IconButton(
             systemName: "sidebar.left",
-            help: app.sidebarVisible ? "Seitenleiste ausblenden (⌃⌘S)" : "Seitenleiste einblenden (⌃⌘S)",
+            help: app.isSidebarShown ? "Seitenleiste ausblenden (⌃⌘S)" : "Seitenleiste einblenden (⌃⌘S)",
             frameSize: Theme.titleBarControlSize
         ) { app.toggleSidebar() }
     }
@@ -170,6 +170,34 @@ extension ConnectionState {
         case .connecting: Theme.textTertiary
         case .connected: Theme.success
         case .failed: Theme.danger
+        }
+    }
+}
+
+/// A sidebar or panel that lies over the content, because the window is too narrow for it beside the content
+/// (`AppModel.sidebarCollapsed`). A click beside it closes it.
+struct FloatingPanel<Content: View>: View {
+    @Environment(AppModel.self) private var app
+    let isShown: Bool
+    let edge: HorizontalEdge
+    let width: CGFloat
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        ZStack(alignment: edge == .leading ? .leading : .trailing) {
+            if isShown {
+                Color.black.opacity(0.3)
+                    .contentShape(Rectangle())
+                    .onTapGesture { app.closeOverlays() }
+                    .transition(.opacity)
+            }
+            if isShown {
+                content()
+                    .frame(width: width)
+                    .frame(maxHeight: .infinity)
+                    .shadow(color: .black.opacity(0.55), radius: 26, x: edge == .leading ? 6 : -6)
+                    .transition(.move(edge: edge == .leading ? .leading : .trailing))
+            }
         }
     }
 }

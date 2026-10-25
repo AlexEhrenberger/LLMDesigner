@@ -8,7 +8,7 @@ struct PersonaLibraryScreen: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 2) {
-                if !app.sidebarVisible {
+                if !app.isSidebarDocked {
                     SidebarToggleButton()
                     IconButton(systemName: "plus", help: "Neue Persona (⌥⇧⌘N)", frameSize: Theme.titleBarControlSize) { app.createPersona() }
                         .padding(.trailing, 6)
@@ -19,7 +19,7 @@ struct PersonaLibraryScreen: View {
                     .padding(.horizontal, 10)
                 Spacer(minLength: 0)
             }
-            .padding(.leading, app.sidebarVisible ? 14 : Theme.trafficLightInset)
+            .padding(.leading, app.isSidebarDocked ? 14 : Theme.trafficLightInset)
             .padding(.trailing, 14)
             .frame(height: Theme.titleBarHeight)
             .padding(.bottom, Theme.topBarBottomPadding)

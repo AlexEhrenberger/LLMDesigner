@@ -179,7 +179,7 @@ extension WriterTextView {
             marker(WriterPrompts.cursorMarker, at: min(cursor, copy.length))
         }
         // Bookmarks are the user's; the model doesn't need them (and would copy them).
-        var markdown = WriterBookmark.strip(WriterMarkdown.markdown(from: copy)).trimmingCharacters(in: .whitespacesAndNewlines)
+        var markdown = WriterMarkdown.removingDivFences(WriterBookmark.strip(WriterMarkdown.markdown(from: copy))).trimmingCharacters(in: .whitespacesAndNewlines)
         if markdown.isEmpty { markdown = WriterPrompts.cursorMarker }
         guard markdown.count > limit else { return markdown }
 
@@ -198,7 +198,7 @@ extension WriterTextView {
         let range = selectedRange()
         let selection = storage.attributedSubstring(from: range)
         let markdown = selection.string.contains("\n") ? WriterMarkdown.markdown(from: selection) : WriterMarkdown.inlineMarkdown(selection)
-        let trimmed = WriterBookmark.strip(markdown).trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = WriterMarkdown.removingDivFences(WriterBookmark.strip(markdown)).trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
     }
 
@@ -360,6 +360,12 @@ extension WriterTextView {
                 let last = replacement.attributes(at: replacement.length - 1, effectiveRange: nil)
                     .filter { WriterMarkdown.paragraphKeys.contains($0.key) }
                 replacement.append(NSAttributedString(string: "\n", attributes: last))
+            }
+            // The model sees no alignment: rewritten paragraphs keep the passage's.
+            if range.location < storage.length, let alignment = storage.attribute(.writerAlignment, at: range.location, effectiveRange: nil) as? String {
+                for paragraph in WriterMarkdown.paragraphs(of: replacement) where paragraph.block.takesAlignment && paragraph.alignment == nil {
+                    replacement.addAttribute(.writerAlignment, value: alignment, range: paragraph.range)
+                }
             }
         } else {
             let flat = text.replacingOccurrences(of: "\n\n", with: " ").replacingOccurrences(of: "\n", with: " ")

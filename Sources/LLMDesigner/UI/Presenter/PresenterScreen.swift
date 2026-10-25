@@ -31,10 +31,17 @@ struct PresenterScreen: View {
                             .transition(.opacity)
                     }
                 }
-                if app.outlinePanelVisible, app.writerTab == .document, !assistant.isPanelShown {
+                if app.isPanelDocked, app.writerTab == .document, !assistant.isPanelShown {
                     PresenterPanel(document: document, deck: deck, currentSlideID: slide.id, controller: controller)
                         .frame(width: Theme.outlineWidth)
                         .transition(.move(edge: .trailing))
+                }
+            }
+            // In a narrow window the panel lies over the slide.
+            .overlay {
+                FloatingPanel(isShown: app.panelCollapsed && app.panelOverlay && app.writerTab == .document && !assistant.isPanelShown,
+                              edge: .trailing, width: Theme.outlineWidth) {
+                    PresenterPanel(document: document, deck: deck, currentSlideID: slide.id, controller: controller)
                 }
             }
             .background(Theme.background)
@@ -252,10 +259,12 @@ struct PresenterScreen: View {
 private struct PresenterTopBar: View {
     @Environment(AppModel.self) private var app
     let document: WriterDocument
+    /// In a narrow window the app's name and the slide count give way, so the controls keep their room.
+    @State private var width: CGFloat = 1200
 
     var body: some View {
         HStack(spacing: 8) {
-            if !app.sidebarVisible {
+            if !app.isSidebarDocked {
                 SidebarToggleButton()
                 IconButton(systemName: "square.and.pencil", help: "Neuer Chat (⌘N)", frameSize: Theme.titleBarControlSize) { app.newChat() }
                     .padding(.trailing, 6)
@@ -263,9 +272,13 @@ private struct PresenterTopBar: View {
             Image(systemName: StudioApplication.presenter.symbol)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(Theme.accent)
-            Text("Presenter Studio")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Theme.textPrimary)
+            if width >= 1000 {
+                Text("Presenter Studio")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Theme.textPrimary)
+                    .lineLimit(1)
+                    .fixedSize()
+            }
             Text(document.displayTitle)
                 .font(.system(size: 13))
                 .foregroundStyle(Theme.textTertiary)
@@ -276,11 +289,16 @@ private struct PresenterTopBar: View {
                 .layoutPriority(1)
             Spacer(minLength: 12)
             PresenterExportMenu(document: document)
-            Text(slideCount)
-                .font(.system(size: 11.5).monospacedDigit())
-                .foregroundStyle(Theme.textTertiary)
+            if width >= 860 {
+                Text(slideCount)
+                    .font(.system(size: 11.5).monospacedDigit())
+                    .foregroundStyle(Theme.textTertiary)
+                    .lineLimit(1)
+                    .fixedSize()
+            }
             PresentButton(document: document)
-            if !app.outlinePanelVisible, app.writerTab == .document {
+                .fixedSize()
+            if !app.isPanelDocked, app.writerTab == .document {
                 IconButton(systemName: "sidebar.right", help: "Inhalt, Lesezeichen und Quellen einblenden (⌥⌘I)", frameSize: Theme.titleBarControlSize) {
                     app.toggleOutlinePanel()
                 }
@@ -289,11 +307,12 @@ private struct PresenterTopBar: View {
                 withAnimation(.easeInOut(duration: 0.3)) { app.closeDocument() }
             }
         }
-        .padding(.leading, app.sidebarVisible ? 16 : Theme.trafficLightInset)
+        .padding(.leading, app.isSidebarDocked ? 16 : Theme.trafficLightInset)
         .padding(.trailing, 12)
         .frame(height: Theme.titleBarHeight)
         .padding(.bottom, Theme.topBarBottomPadding)
         .background(WindowDragArea())
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
     }
 
     private var slideCount: String {
@@ -381,59 +400,81 @@ private struct PresenterToolbar: View {
 
     var body: some View {
         let state = controller.state
-        HStack(spacing: 2) {
-            NewSlideButton(document: document, slideID: slide.id)
+        let isText = !(state.block == .code || state.block == .raw || state.block.isEmbed)
+        ToolbarFlow {
+            HStack(spacing: 2) {
+                NewSlideButton(document: document, slideID: slide.id)
+            }
             divider
-            RoleMenu(document: document, slide: slide)
-            BackgroundButton(document: document, deck: deck, slide: slide)
+            HStack(spacing: 2) {
+                RoleMenu(document: document, slide: slide)
+                BackgroundButton(document: document, deck: deck, slide: slide)
+            }
             divider
-            FontMenu(controller: controller, document: document)
-            BlockMenu(controller: controller, current: state.block)
-            if state.block == .code { CodeLanguageMenu(controller: controller, state: state) }
+            HStack(spacing: 2) {
+                FontMenu(controller: controller, document: document)
+                FontSizeMenu(controller: controller, document: document).disabled(!isText)
+            }
+            HStack(spacing: 2) {
+                BlockMenu(controller: controller, current: state.block)
+                if state.block == .code { CodeLanguageMenu(controller: controller, state: state) }
+            }
             divider
-            markButton("bold", .bold, "Fett (⌘B)", state)
-            markButton("italic", .italic, "Kursiv (⌘I)", state)
-            markButton("underline", .underline, "Unterstrichen (⌘U)", state)
-            markButton("strikethrough", .strikethrough, "Durchgestrichen (⇧⌘X)", state)
-            ColorMenu(controller: controller).disabled(state.block == .code || state.block == .raw || state.block.isEmbed)
+            HStack(spacing: 2) {
+                markButton("bold", .bold, "Fett (⌘B)", state)
+                markButton("italic", .italic, "Kursiv (⌘I)", state)
+                markButton("underline", .underline, "Unterstrichen (⌘U)", state)
+                markButton("strikethrough", .strikethrough, "Durchgestrichen (⇧⌘X)", state)
+                ColorMenu(controller: controller).disabled(!isText)
+            }
             divider
-            ToolbarButton(symbol: "list.bullet", help: "Aufzählung (⇧⌘8)", isActive: state.block == .bullet) { controller.setBlock(.bullet) }
-                .disabled(state.block.isEmbed || state.block == .table)
-            ToolbarButton(symbol: "list.number", help: "Nummerierte Liste (⇧⌘7)", isActive: state.block == .numbered) { controller.setBlock(.numbered) }
-                .disabled(state.block.isEmbed || state.block == .table)
-            ToolbarButton(symbol: "text.quote", help: "Zitat (⇧⌘9)", isActive: state.block == .quote) { controller.setBlock(.quote) }
-                .disabled(state.block.isEmbed || state.block == .table)
+            AlignmentButtons(controller: controller)
             divider
-            ToolbarButton(
-                symbol: state.bookmarkID != nil ? "bookmark.fill" : "bookmark",
-                help: state.bookmarkID != nil ? "Lesezeichen entfernen (⌥⌘B)" : "Lesezeichen anlegen (⌥⌘B)",
-                isActive: state.bookmarkID != nil
-            ) { controller.toggleBookmark() }
-            ToolbarButton(symbol: "photo", help: "Bild einfügen …", isActive: state.image != nil) { controller.chooseImages() }
-            ToolbarButton(symbol: "wand.and.stars", help: "Bild mit Draw Things generieren (⌥⌘G)", isActive: false) { controller.generateImage() }
-            TableButton(controller: controller, isInTable: state.table != nil)
-            ToolbarButton(symbol: "x.squareroot", help: "Formel (⌥⌘E)", isActive: state.isFormulaSelected) { controller.editFormula() }
-            CitationMenu(controller: controller)
+            HStack(spacing: 2) {
+                ToolbarButton(symbol: "list.bullet", help: "Aufzählung (⇧⌘8)", isActive: state.block == .bullet) { controller.setBlock(.bullet) }
+                    .disabled(state.block.isEmbed || state.block == .table)
+                ToolbarButton(symbol: "list.number", help: "Nummerierte Liste (⇧⌘7)", isActive: state.block == .numbered) { controller.setBlock(.numbered) }
+                    .disabled(state.block.isEmbed || state.block == .table)
+                ToolbarButton(symbol: "text.quote", help: "Zitat (⇧⌘9)", isActive: state.block == .quote) { controller.setBlock(.quote) }
+                    .disabled(state.block.isEmbed || state.block == .table)
+            }
             divider
-            ToolbarButton(
-                symbol: app.dictationIntoDocument ? "mic.fill" : "mic",
-                help: app.dictationIntoDocument ? "Diktat beenden (⌘D)" : "Auf die Folie diktieren (⌘D)",
-                isActive: app.dictationIntoDocument
-            ) { controller.toggleDictation() }
-            .disabled(!app.isDictationAvailable)
-            ToolbarButton(
-                symbol: app.speakingDocumentID != nil ? "stop.fill" : "speaker.wave.2",
-                help: app.speakingDocumentID != nil ? "Vorlesen stoppen (esc)" : "Folie vorlesen (⌥⌘L)",
-                isActive: app.speakingDocumentID != nil
-            ) { controller.readAloud() }
-            ToolbarButton(
-                symbol: app.presenterNotesVisible ? "text.bubble.fill" : "text.bubble",
-                help: app.presenterNotesVisible ? "Moderatorenkarte ausblenden" : "Moderatorenkarte einblenden",
-                isActive: app.presenterNotesVisible
-            ) { app.presenterNotesVisible.toggle() }
+            HStack(spacing: 2) {
+                ToolbarButton(
+                    symbol: state.bookmarkID != nil ? "bookmark.fill" : "bookmark",
+                    help: state.bookmarkID != nil ? "Lesezeichen entfernen (⌥⌘B)" : "Lesezeichen anlegen (⌥⌘B)",
+                    isActive: state.bookmarkID != nil
+                ) { controller.toggleBookmark() }
+                ToolbarButton(symbol: "photo", help: "Bild einfügen …", isActive: state.image != nil) { controller.chooseImages() }
+                ToolbarButton(symbol: "wand.and.stars", help: "Bild mit Draw Things generieren (⌥⌘G)", isActive: false) { controller.generateImage() }
+            }
+            HStack(spacing: 2) {
+                TableButton(controller: controller, isInTable: state.table != nil)
+                ToolbarButton(symbol: "x.squareroot", help: "Formel (⌥⌘E)", isActive: state.isFormulaSelected) { controller.editFormula() }
+                CitationMenu(controller: controller)
+            }
+            divider
+            HStack(spacing: 2) {
+                ToolbarButton(
+                    symbol: app.dictationIntoDocument ? "mic.fill" : "mic",
+                    help: app.dictationIntoDocument ? "Diktat beenden (⌘D)" : "Auf die Folie diktieren (⌘D)",
+                    isActive: app.dictationIntoDocument
+                ) { controller.toggleDictation() }
+                .disabled(!app.isDictationAvailable)
+                ToolbarButton(
+                    symbol: app.speakingDocumentID != nil ? "stop.fill" : "speaker.wave.2",
+                    help: app.speakingDocumentID != nil ? "Vorlesen stoppen (esc)" : "Folie vorlesen (⌥⌘L)",
+                    isActive: app.speakingDocumentID != nil
+                ) { controller.readAloud() }
+                ToolbarButton(
+                    symbol: app.presenterNotesVisible ? "text.bubble.fill" : "text.bubble",
+                    help: app.presenterNotesVisible ? "Moderatorenkarte ausblenden" : "Moderatorenkarte einblenden",
+                    isActive: app.presenterNotesVisible
+                ) { app.presenterNotesVisible.toggle() }
+            }
         }
         .padding(.horizontal, 6)
-        .frame(height: 38)
+        .padding(.vertical, 5)
         .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(Color.white.opacity(0.035)))
         .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(Theme.border))
         .frame(maxWidth: .infinity)
@@ -441,7 +482,8 @@ private struct PresenterToolbar: View {
     }
 
     private var divider: some View {
-        Rectangle().fill(Theme.border).frame(width: 1, height: 18).padding(.horizontal, 5)
+        ToolbarDivider()
+            .layoutValue(key: ToolbarFlow.IsDivider.self, value: true)
     }
 
     private func markButton(_ symbol: String, _ mark: WriterInline, _ help: String, _ state: WriterTextView.State) -> some View {

@@ -40,7 +40,7 @@ extension AppModel {
         MainWindow.restoreAfterConversation { [weak self] in
             guard let self else { return }
             self.conversation = nil
-            if let chatID = session.chatID, self.outlinePanelVisible { self.refreshOutlineIfNeeded(chatID) }
+            if let chatID = session.chatID, self.isPanelShown { self.refreshOutlineIfNeeded(chatID) }
         }
     }
 

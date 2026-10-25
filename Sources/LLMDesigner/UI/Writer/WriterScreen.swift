@@ -17,10 +17,17 @@ struct WriterScreen: View {
             HStack(spacing: 0) {
                 main(document)
                 // The document's contents and bookmarks; the check results take its place while they are open.
-                if app.outlinePanelVisible, !assistant.isPanelShown, showsToolbar, app.writerTab == .document {
+                if app.isPanelDocked, !assistant.isPanelShown, showsToolbar, app.writerTab == .document {
                     DocumentPanel(document: document, controller: controller, assistant: assistant)
                         .frame(width: Theme.outlineWidth)
                         .transition(.move(edge: .trailing))
+                }
+            }
+            // In a narrow window the panel lies over the sheet.
+            .overlay {
+                FloatingPanel(isShown: app.panelCollapsed && app.panelOverlay && !assistant.isPanelShown && app.writerTab == .document,
+                              edge: .trailing, width: Theme.outlineWidth) {
+                    DocumentPanel(document: document, controller: controller, assistant: assistant)
                 }
             }
             .background(Theme.background)
@@ -69,7 +76,7 @@ struct WriterScreen: View {
     }
 
     private func followsDynamicOutline(_ document: WriterDocument) -> Bool {
-        let panelShowsIt = app.outlinePanelVisible && app.documentPanelTab == .contents && document.effectiveTOCMode == .dynamic
+        let panelShowsIt = app.isPanelShown && app.documentPanelTab == .contents && document.effectiveTOCMode == .dynamic
         return panelShowsIt || WriterTOCAttachment.kind(in: document.markdown) == true
     }
 
@@ -331,10 +338,12 @@ private struct MicrophoneLevel: View {
 private struct WriterTopBar: View {
     @Environment(AppModel.self) private var app
     let document: WriterDocument
+    /// In a narrow window the app's name and the word count give way, so the controls keep their room.
+    @State private var width: CGFloat = 1200
 
     var body: some View {
         HStack(spacing: 8) {
-            if !app.sidebarVisible {
+            if !app.isSidebarDocked {
                 SidebarToggleButton()
                 IconButton(systemName: "square.and.pencil", help: "Neuer Chat (⌘N)", frameSize: Theme.titleBarControlSize) { app.newChat() }
                     .padding(.trailing, 6)
@@ -342,9 +351,13 @@ private struct WriterTopBar: View {
             Image(systemName: StudioApplication.writer.symbol)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(Theme.accent)
-            Text("Writer Studio")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Theme.textPrimary)
+            if width >= 960 {
+                Text("Writer Studio")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Theme.textPrimary)
+                    .lineLimit(1)
+                    .fixedSize()
+            }
             Text(document.displayTitle)
                 .font(.system(size: 13))
                 .foregroundStyle(Theme.textTertiary)
@@ -355,11 +368,15 @@ private struct WriterTopBar: View {
                 .layoutPriority(1)
             Spacer(minLength: 12)
             ExportMenu(document: document)
-            Text(wordCount)
-                .font(.system(size: 11.5).monospacedDigit())
-                .foregroundStyle(Theme.textTertiary)
+            if width >= 820 {
+                Text(wordCount)
+                    .font(.system(size: 11.5).monospacedDigit())
+                    .foregroundStyle(Theme.textTertiary)
+                    .lineLimit(1)
+                    .fixedSize()
+            }
             PaperSwitch()
-            if !app.outlinePanelVisible, app.writerTab == .document {
+            if !app.isPanelDocked, app.writerTab == .document {
                 IconButton(systemName: "sidebar.right", help: "Inhaltsverzeichnis und Lesezeichen einblenden (⌥⌘I)", frameSize: Theme.titleBarControlSize) {
                     app.toggleOutlinePanel()
                 }
@@ -368,17 +385,22 @@ private struct WriterTopBar: View {
                 withAnimation(.easeInOut(duration: 0.3)) { app.closeDocument() }
             }
         }
-        .padding(.leading, app.sidebarVisible ? 16 : Theme.trafficLightInset)
+        .padding(.leading, app.isSidebarDocked ? 16 : Theme.trafficLightInset)
         .padding(.trailing, 12)
         .frame(height: Theme.titleBarHeight)
         .padding(.bottom, Theme.topBarBottomPadding)
         .background(WindowDragArea())
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
     }
 
     private var wordCount: String {
         // Pictures, formulas, bookmarks and the table of contents don't count; table cells do.
         let text = WriterBookmark.strip(document.markdown).components(separatedBy: "\n")
-            .filter { WriterImageReference.parse($0) == nil && !WriterTOCAttachment.isMarker($0) }
+            .filter { line in
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                return WriterImageReference.parse(line) == nil && !WriterTOCAttachment.isMarker(line)
+                    && MarkdownParser.divOpening(trimmed) == nil && !MarkdownParser.isDivClosing(trimmed)
+            }
             .joined(separator: "\n")
             .replacingOccurrences(of: #"\$\$[\s\S]*?\$\$"#, with: " ", options: .regularExpression)
             .replacingOccurrences(of: #"(?<!\\)\$[^$\n]+\$"#, with: " ", options: .regularExpression)
@@ -469,101 +491,115 @@ private struct WriterToolbar: View {
 
     var body: some View {
         let state = controller.state
-        HStack(spacing: 2) {
-            group(0) { FontMenu(controller: controller, document: document) }
+        let isText = !(state.block == .code || state.block == .raw || state.block.isEmbed)
+        ToolbarFlow {
+            HStack(spacing: 2) {
+                group(0) { FontMenu(controller: controller, document: document) }
+                group(1) { FontSizeMenu(controller: controller, document: document).disabled(!isText) }
+            }
             divider(1)
-            group(2) { BlockMenu(controller: controller, current: state.block) }
-            if state.block == .code {
-                group(2) { CodeLanguageMenu(controller: controller, state: state) }
+            HStack(spacing: 2) {
+                group(2) { BlockMenu(controller: controller, current: state.block) }
+                if state.block == .code {
+                    group(2) { CodeLanguageMenu(controller: controller, state: state) }
+                }
             }
             divider(3)
-            group(4) { markButton("bold", .bold, "Fett (⌘B)", state) }
-            group(5) { markButton("italic", .italic, "Kursiv (⌘I)", state) }
-            group(6) { markButton("underline", .underline, "Unterstrichen (⌘U)", state) }
-            group(7) { markButton("strikethrough", .strikethrough, "Durchgestrichen (⇧⌘X)", state) }
-            group(8) { markButton("chevron.left.forwardslash.chevron.right", .code, "Code im Text (⌘E)", state) }
-            group(9) { ColorMenu(controller: controller).disabled(state.block == .code || state.block == .raw || state.block.isEmbed) }
+            HStack(spacing: 2) {
+                group(4) { markButton("bold", .bold, "Fett (⌘B)", state) }
+                group(5) { markButton("italic", .italic, "Kursiv (⌘I)", state) }
+                group(6) { markButton("underline", .underline, "Unterstrichen (⌘U)", state) }
+                group(7) { markButton("strikethrough", .strikethrough, "Durchgestrichen (⇧⌘X)", state) }
+                group(8) { markButton("chevron.left.forwardslash.chevron.right", .code, "Code im Text (⌘E)", state) }
+                group(9) { ColorMenu(controller: controller).disabled(!isText) }
+            }
             divider(9)
-            group(10) {
-                ToolbarButton(symbol: "list.bullet", help: "Aufzählung (⇧⌘8)", isActive: state.block == .bullet) { controller.setBlock(.bullet) }
-                    .disabled(isStructure(state))
+            group(10) { AlignmentButtons(controller: controller) }
+            divider(11)
+            HStack(spacing: 2) {
+                group(12) {
+                    ToolbarButton(symbol: "list.bullet", help: "Aufzählung (⇧⌘8)", isActive: state.block == .bullet) { controller.setBlock(.bullet) }
+                        .disabled(isStructure(state))
+                }
+                group(13) {
+                    ToolbarButton(symbol: "list.number", help: "Nummerierte Liste (⇧⌘7)", isActive: state.block == .numbered) { controller.setBlock(.numbered) }
+                        .disabled(isStructure(state))
+                }
+                group(14) {
+                    ToolbarButton(symbol: "decrease.indent", help: "Weniger einrücken (⇧⇥)", isActive: false) { controller.changeListLevel(by: -1) }
+                        .disabled(!state.block.isList)
+                }
+                group(15) {
+                    ToolbarButton(symbol: "increase.indent", help: "Weiter einrücken (⇥)", isActive: false) { controller.changeListLevel(by: 1) }
+                        .disabled(!state.block.isList)
+                }
+                group(16) {
+                    ToolbarButton(symbol: "text.quote", help: "Zitat (⇧⌘9)", isActive: state.block == .quote) { controller.setBlock(.quote) }
+                        .disabled(isStructure(state))
+                }
             }
-            group(11) {
-                ToolbarButton(symbol: "list.number", help: "Nummerierte Liste (⇧⌘7)", isActive: state.block == .numbered) { controller.setBlock(.numbered) }
-                    .disabled(isStructure(state))
-            }
-            group(12) {
-                ToolbarButton(symbol: "decrease.indent", help: "Weniger einrücken (⇧⇥)", isActive: false) { controller.changeListLevel(by: -1) }
-                    .disabled(!state.block.isList)
-            }
-            group(13) {
-                ToolbarButton(symbol: "increase.indent", help: "Weiter einrücken (⇥)", isActive: false) { controller.changeListLevel(by: 1) }
-                    .disabled(!state.block.isList)
-            }
-            group(14) {
-                ToolbarButton(symbol: "text.quote", help: "Zitat (⇧⌘9)", isActive: state.block == .quote) { controller.setBlock(.quote) }
-                    .disabled(isStructure(state))
-            }
-            divider(15)
-            group(16) {
-                ToolbarButton(symbol: "link", help: "Link (⌘K)", isActive: state.hasLink) { controller.editLink() }
-            }
-            group(17) {
-                ToolbarButton(
-                    symbol: state.bookmarkID != nil ? "bookmark.fill" : "bookmark",
-                    help: state.bookmarkID != nil ? "Lesezeichen entfernen (⌥⌘B)" : "Lesezeichen anlegen (⌥⌘B) – für die Markierung oder den Absatz",
-                    isActive: state.bookmarkID != nil
-                ) { controller.toggleBookmark() }
-            }
-            group(18) {
-                HStack(spacing: 0) {
+            divider(17)
+            HStack(spacing: 0) {
+                group(18) {
+                    ToolbarButton(symbol: "link", help: "Link (⌘K)", isActive: state.hasLink) { controller.editLink() }
+                }
+                group(19) {
+                    ToolbarButton(
+                        symbol: state.bookmarkID != nil ? "bookmark.fill" : "bookmark",
+                        help: state.bookmarkID != nil ? "Lesezeichen entfernen (⌥⌘B)" : "Lesezeichen anlegen (⌥⌘B) – für die Markierung oder den Absatz",
+                        isActive: state.bookmarkID != nil
+                    ) { controller.toggleBookmark() }
+                }
+                group(20) {
                     ToolbarButton(symbol: "minus", help: "Trennlinie / Abschnittsmarke", isActive: false) { controller.insertRule() }
+                }
+                group(20) {
                     ToolbarButton(symbol: "character.textbox", help: "Sonderzeichen und Symbole (⌃⌘Leertaste) – Pfeile, Griechisch, Mathesymbole, Emoji", isActive: false) {
                         controller.showCharacterPalette()
                     }
                 }
             }
-            group(19) {
-                HStack(spacing: 0) {
+            HStack(spacing: 0) {
+                group(21) {
                     ToolbarButton(symbol: "photo", help: "Bild einfügen … – Bilder lassen sich auch hineinziehen oder einfügen", isActive: state.image != nil) {
                         controller.chooseImages()
                     }
+                }
+                group(21) {
                     ToolbarButton(symbol: "wand.and.stars", help: "Bild mit Draw Things generieren (⌥⌘G) – beschreiben, die KI schreibt den Prompt für Qwen Image", isActive: false) {
                         controller.generateImage()
                     }
                 }
-            }
-            group(20) { TableButton(controller: controller, isInTable: state.table != nil) }
-            group(21) {
-                ToolbarButton(symbol: "x.squareroot", help: "Formel (⌥⌘E) – visueller Formeleditor, auf eigener Zeile auch mit Plot", isActive: state.isFormulaSelected) {
-                    controller.editFormula()
+                group(22) { TableButton(controller: controller, isInTable: state.table != nil) }
+                group(23) {
+                    ToolbarButton(symbol: "x.squareroot", help: "Formel (⌥⌘E) – visueller Formeleditor, auf eigener Zeile auch mit Plot", isActive: state.isFormulaSelected) {
+                        controller.editFormula()
+                    }
                 }
+                group(24) { TableOfContentsMenu(controller: controller, isActive: state.block == .toc) }
+                group(24) { CitationMenu(controller: controller) }
             }
-            group(22) {
-                HStack(spacing: 0) {
-                    TableOfContentsMenu(controller: controller, isActive: state.block == .toc)
-                    CitationMenu(controller: controller)
+            divider(25)
+            HStack(spacing: 2) {
+                group(26) {
+                    ToolbarButton(
+                        symbol: app.dictationIntoDocument ? "mic.fill" : "mic",
+                        help: app.dictationIntoDocument ? "Diktat beenden (⌘D)" : "Ins Dokument diktieren (⌘D) – „neuer Absatz“ beginnt einen neuen Absatz",
+                        isActive: app.dictationIntoDocument
+                    ) { controller.toggleDictation() }
+                    .disabled(!app.isDictationAvailable)
                 }
-            }
-            divider(23)
-            group(24) {
-                ToolbarButton(
-                    symbol: app.dictationIntoDocument ? "mic.fill" : "mic",
-                    help: app.dictationIntoDocument ? "Diktat beenden (⌘D)" : "Ins Dokument diktieren (⌘D) – „neuer Absatz“ beginnt einen neuen Absatz",
-                    isActive: app.dictationIntoDocument
-                ) { controller.toggleDictation() }
-                .disabled(!app.isDictationAvailable)
-            }
-            group(25) {
-                ToolbarButton(
-                    symbol: app.speakingDocumentID != nil ? "stop.fill" : "speaker.wave.2",
-                    help: app.speakingDocumentID != nil ? "Vorlesen stoppen (esc)" : "Vorlesen (⌥⌘L): die Markierung, sonst ab dem Absatz mit dem Cursor",
-                    isActive: app.speakingDocumentID != nil
-                ) { controller.readAloud() }
+                group(27) {
+                    ToolbarButton(
+                        symbol: app.speakingDocumentID != nil ? "stop.fill" : "speaker.wave.2",
+                        help: app.speakingDocumentID != nil ? "Vorlesen stoppen (esc)" : "Vorlesen (⌥⌘L): die Markierung, sonst ab dem Absatz mit dem Cursor",
+                        isActive: app.speakingDocumentID != nil
+                    ) { controller.readAloud() }
+                }
             }
         }
         .padding(.horizontal, 6)
-        .frame(height: 38)
+        .padding(.vertical, 5)
         .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(Color.white.opacity(0.035)))
         .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(Theme.border))
         .frame(maxWidth: .infinity)
@@ -579,9 +615,8 @@ private struct WriterToolbar: View {
     }
 
     private func divider(_ index: Int) -> some View {
-        group(index) {
-            Rectangle().fill(Theme.border).frame(width: 1, height: 18).padding(.horizontal, 5)
-        }
+        group(index) { ToolbarDivider() }
+            .layoutValue(key: ToolbarFlow.IsDivider.self, value: true)
     }
 
     private func markButton(_ symbol: String, _ mark: WriterInline, _ help: String, _ state: WriterTextView.State) -> some View {
@@ -592,6 +627,90 @@ private struct WriterToolbar: View {
     /// Pictures and table cells have no list or quote formatting.
     private func isStructure(_ state: WriterTextView.State) -> Bool {
         state.block.isEmbed || state.block == .table
+    }
+}
+
+/// Toolbar controls in one row, or in more rows when the window is too narrow for one: nothing is cut off. A divider
+/// that would start or end a row is left out; every row is centred.
+struct ToolbarFlow: Layout {
+    var spacing: CGFloat = 2
+    var rowSpacing: CGFloat = 4
+
+    /// Marks a divider between groups of controls (see `ToolbarDivider`).
+    struct IsDivider: LayoutValueKey {
+        static let defaultValue = false
+    }
+
+    private struct Row {
+        var items: [(index: Int, size: CGSize)] = []
+        var width: CGFloat = 0
+        var height: CGFloat = 0
+    }
+
+    private func rows(_ subviews: Subviews, width: CGFloat?) -> [Row] {
+        let limit = width ?? .infinity
+        var rows: [Row] = []
+        var row = Row()
+        func trimmed(_ row: Row) -> Row {
+            var row = row
+            while let last = row.items.last, subviews[last.index][IsDivider.self] {
+                row.items.removeLast()
+            }
+            row.width = row.items.map(\.size.width).reduce(0, +) + spacing * CGFloat(max(0, row.items.count - 1))
+            row.height = row.items.map(\.size.height).max() ?? 0
+            return row
+        }
+        for index in subviews.indices {
+            let size = subviews[index].sizeThatFits(.unspecified)
+            let isDivider = subviews[index][IsDivider.self]
+            if row.items.isEmpty, isDivider { continue }
+            let width = row.items.map(\.size.width).reduce(0, +) + spacing * CGFloat(row.items.count) + size.width
+            if !row.items.isEmpty, width > limit {
+                rows.append(trimmed(row))
+                row = Row()
+                if isDivider { continue }
+            }
+            row.items.append((index, size))
+        }
+        if !row.items.isEmpty { rows.append(trimmed(row)) }
+        return rows
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let rows = rows(subviews, width: proposal.width)
+        let height = rows.map(\.height).reduce(0, +) + rowSpacing * CGFloat(max(0, rows.count - 1))
+        return CGSize(width: rows.map(\.width).max() ?? 0, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let rows = rows(subviews, width: bounds.width)
+        var placed = Set<Int>()
+        var y = bounds.minY
+        for row in rows {
+            var x = bounds.minX + max(0, (bounds.width - row.width) / 2)
+            for item in row.items {
+                subviews[item.index].place(at: CGPoint(x: x, y: y + (row.height - item.size.height) / 2), proposal: ProposedViewSize(item.size))
+                placed.insert(item.index)
+                x += item.size.width + spacing
+            }
+            y += row.height + rowSpacing
+        }
+        // Dividers left out take no room (`ToolbarDivider` shrinks to nothing).
+        for index in subviews.indices where !placed.contains(index) {
+            subviews[index].place(at: CGPoint(x: bounds.minX, y: bounds.minY), proposal: .zero)
+        }
+    }
+}
+
+/// The thin line between groups of toolbar controls; offered no room, it disappears.
+struct ToolbarDivider: View {
+    var body: some View {
+        Rectangle()
+            .fill(Theme.border)
+            .frame(maxWidth: 1, maxHeight: 18)
+            .padding(.horizontal, 5)
+            .frame(minWidth: 0, idealWidth: 11, maxWidth: 11, minHeight: 0, idealHeight: 18, maxHeight: 18)
+            .clipped()
     }
 }
 
@@ -641,7 +760,7 @@ struct CitationMenu: View {
             Divider()
             Button("Quellen in der Seitenleiste", systemImage: "sidebar.right") {
                 app.documentPanelTab = .sources
-                if !app.outlinePanelVisible { app.toggleOutlinePanel() }
+                if !app.isPanelShown { app.toggleOutlinePanel() }
             }
             Button("Citation Studio öffnen", systemImage: "arrow.up.forward.app") { app.openCitationStudio() }
         } label: {
@@ -703,13 +822,16 @@ private struct WriterTablePopover: View {
                     alignment("text.alignright", .trailing, table.alignment, help: "Rechtsbündig")
                 }
                 .padding(.horizontal, 8)
+                if table.hasOwnWidths {
+                    action("Spalten gleich breit", "rectangle.split.3x1", .equalizeColumns)
+                }
                 Divider()
                 VStack(spacing: 2) {
                     action("Zeile löschen", "minus.square", .deleteRow)
                     action("Spalte löschen", "minus.rectangle.portrait", .deleteColumn)
                     action("Tabelle löschen", "trash", .deleteTable, destructive: true)
                 }
-                Text("⇥ nächste Zelle · ↩ Zelle darunter · ⇧↩ neue Zeile in der Zelle")
+                Text("⇥ nächste Zelle · ↩ Zelle darunter · ⇧↩ neue Zeile in der Zelle · die Linie zwischen zwei Spalten ziehen ändert ihre Breite")
                     .font(.system(size: 10.5))
                     .foregroundStyle(Theme.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)

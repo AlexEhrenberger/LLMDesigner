@@ -117,6 +117,15 @@ enum WriterFont: String, CaseIterable, Identifiable, Sendable {
         isSystemDesign ? "im Druck: \(latexFamily)" : nil
     }
 
+    /// The size of a document's text in print: LaTeX sets it at 11 pt (`LaTeXWriter`).
+    static let printSize: CGFloat = 11
+
+    /// Screen points per point of print: the editor shows the text larger than it is printed (`bodySize` for 11 pt).
+    /// A slide's canvas is printed as it is.
+    func screenScale(onSlide: Bool) -> CGFloat {
+        onSlide ? 1 : bodySize / Self.printSize
+    }
+
     /// Text size. Fonts with a small x-height are set a little larger, so every face reads about the same.
     var bodySize: CGFloat {
         switch self {

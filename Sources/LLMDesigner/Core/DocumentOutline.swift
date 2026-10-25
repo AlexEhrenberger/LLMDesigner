@@ -57,7 +57,7 @@ enum DocumentOutlineBuilder {
     private static let textBudget = 12_000
 
     static func wordCount(_ markdown: String) -> Int {
-        WriterBookmark.strip(markdown).split { $0.isWhitespace || $0.isNewline }
+        WriterMarkdown.removingDivFences(WriterBookmark.strip(markdown)).split { $0.isWhitespace || $0.isNewline }
             .filter { $0.contains { $0.isLetter || $0.isNumber } }.count
     }
 
@@ -119,7 +119,7 @@ enum DocumentOutlineBuilder {
                 isHeading = true
             case .list(let items): text = items.map(\.text).joined(separator: " · ")
             case .quote(let quote): text = quote
-            case .table(let header, let rows, _): text = (header + rows.flatMap { $0 }).joined(separator: " | ")
+            case .table(let header, let rows, _, _): text = (header + rows.flatMap { $0 }).joined(separator: " | ")
             case .code: text = "[Code]"
             case .math(let latex, _): text = "[Formel: \(latex)]"
             case .rule: return nil
