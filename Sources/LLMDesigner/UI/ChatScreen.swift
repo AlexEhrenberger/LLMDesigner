@@ -211,7 +211,8 @@ private struct MessageList: View {
                         marks: marks(for: message.id),
                         speech: app.speakingMessageID == message.id ? app.speechState : nil,
                         isEditing: app.editingMessageID == message.id,
-                        persona: persona
+                        persona: persona,
+                        live: message.id == streamingID ? app.liveAnswer(message.id) : nil
                     )
                     .equatable()
                     .scrollAnchor(OutlineTarget.viewID(message.id, nil))
@@ -246,6 +247,12 @@ private struct MessageList: View {
         }
         .onChange(of: chat.messages.last?.content) { scrollIfFollowing() }
         .onChange(of: chat.messages.last?.reasoning) { scrollIfFollowing() }
+        .background {
+            // The answer being written grows outside `chat`.
+            if let live = streamingID.flatMap(app.liveAnswer) {
+                LiveAnswerFollower(live: live, onGrow: scrollIfFollowing)
+            }
+        }
         .onChange(of: chat.messages.last?.toolSteps) { scrollIfFollowing() }
         .onChange(of: chat.messages.count) {
             following = true
@@ -287,6 +294,18 @@ private struct MessageList: View {
 
     private static func isNearBottom(_ geometry: ScrollGeometry) -> Bool {
         geometry.contentOffset.y + geometry.containerSize.height >= geometry.contentSize.height - 60
+    }
+}
+
+/// Calls `onGrow` whenever the answer being written gets longer.
+private struct LiveAnswerFollower: View {
+    let live: LiveAnswer
+    let onGrow: () -> Void
+
+    var body: some View {
+        Color.clear
+            .onChange(of: live.content.utf8.count) { onGrow() }
+            .onChange(of: live.reasoning.utf8.count) { onGrow() }
     }
 }
 

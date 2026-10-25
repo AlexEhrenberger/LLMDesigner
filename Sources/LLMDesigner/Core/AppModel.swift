@@ -25,6 +25,17 @@ struct ScrollRequest: Equatable {
     let token = UUID()
 }
 
+/// The text of an answer while it is being written. It changes many times a second, so it lives apart from `chats`:
+/// only the answer's own view follows it, not everything that shows the chats (sidebar, menus, settings), which
+/// otherwise kept the main thread so busy that the answer fell minutes behind the model. The chat gets the text at the
+/// end of each round.
+@MainActor
+@Observable
+final class LiveAnswer {
+    var content = ""
+    var reasoning = ""
+}
+
 struct ChatGroup: Identifiable {
     let id: String
     let entries: [SidebarEntry]
@@ -368,6 +379,8 @@ final class AppModel {
     var selectedChatID: Chat.ID?
     var searchText = ""
     private(set) var streamingMessageIDs: [Chat.ID: ChatMessage.ID] = [:]
+    /// The text of the answers being written (see `LiveAnswer`); set and removed together with `streamingMessageIDs`.
+    @ObservationIgnored private var liveAnswers: [ChatMessage.ID: LiveAnswer] = [:]
     private var drafts: [UUID: String] = [:]
 
     @ObservationIgnored private let newChatDraftKey = UUID()
@@ -600,6 +613,7 @@ final class AppModel {
 
     var isGenerating: Bool { selectedChatID.map(isGenerating) ?? false }
     func isGenerating(_ chatID: Chat.ID) -> Bool { streamingMessageIDs[chatID] != nil }
+    func liveAnswer(_ messageID: ChatMessage.ID) -> LiveAnswer? { liveAnswers[messageID] }
 
     /// Whether the web search is switched on for the selected chat (or the new one being written).
     var isWebSearchOn: Bool {
@@ -971,6 +985,8 @@ final class AppModel {
         let assistant = ChatMessage(role: .assistant, content: "", model: modelId)
         let messageID = assistant.id
         chats[index].messages.append(assistant)
+        let live = LiveAnswer()
+        liveAnswers[messageID] = live
         streamingMessageIDs[chatID] = messageID
 
         let temperature = useCustomTemperature ? temperature : nil
@@ -998,16 +1014,14 @@ final class AppModel {
             var lastFlush = Date.distantPast
             var failure: String?
 
-            // Writes the accumulated stream into the message; called at most ~20×/s to keep the UI smooth.
+            // Shows the accumulated stream in the answer; called at most ~20×/s to keep the UI smooth.
             @MainActor func flush() {
                 let parts = ThinkingSplitter.split(raw)
                 if roundFirstContent == nil, !parts.content.isEmpty { roundFirstContent = Date() }
                 let content = Self.joined(earlierContent, parts.content)
                 let reasoning = Self.joined(earlierReasoning, reasoningField + parts.reasoning)
-                self?.updateMessage(chatID, messageID) { message in
-                    message.content = content
-                    message.reasoning = reasoning.isEmpty ? nil : reasoning
-                }
+                live.content = content
+                live.reasoning = reasoning
                 if spoken {
                     self?.conversation?.answerChanged(messageID, content: content, isThinking: content.isEmpty && !reasoning.isEmpty)
                 }
@@ -1030,6 +1044,11 @@ final class AppModel {
                 }
                 earlierContent = Self.joined(earlierContent, parts.content)
                 earlierReasoning = Self.joined(earlierReasoning, reasoningField + parts.reasoning)
+                let (content, reasoning) = (earlierContent, earlierReasoning)
+                self?.updateMessage(chatID, messageID) { message in
+                    message.content = content
+                    message.reasoning = reasoning.isEmpty ? nil : reasoning
+                }
                 raw = ""
                 reasoningField = ""
                 roundStart = nil
@@ -1647,6 +1666,7 @@ final class AppModel {
 
     private func finishGeneration(_ chatID: Chat.ID, answerID: ChatMessage.ID, completed: Bool) {
         streamingMessageIDs[chatID] = nil
+        liveAnswers[answerID] = nil
         generationTasks[chatID] = nil
         if let index = index(of: chatID) { store.save(chats[index]) }
         outlineErrors[chatID] = nil

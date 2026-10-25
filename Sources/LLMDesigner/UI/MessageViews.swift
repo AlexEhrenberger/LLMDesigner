@@ -20,6 +20,8 @@ struct MessageRow: View, Equatable {
     let isEditing: Bool
     /// The persona that answers in this chat; its picture and name stand above each answer.
     var persona: Persona? = nil
+    /// The text while this answer is being written; it is newer than `message`.
+    var live: LiveAnswer? = nil
 
     @Environment(AppModel.self) private var app
 
@@ -27,6 +29,7 @@ struct MessageRow: View, Equatable {
         lhs.message == rhs.message && lhs.isStreaming == rhs.isStreaming && lhs.isLast == rhs.isLast
             && lhs.isExporting == rhs.isExporting && lhs.highlight == rhs.highlight && lhs.marks == rhs.marks
             && lhs.speech == rhs.speech && lhs.isEditing == rhs.isEditing && lhs.persona == rhs.persona
+            && lhs.live === rhs.live
     }
 
     var body: some View {
@@ -42,6 +45,7 @@ struct MessageRow: View, Equatable {
         case .assistant:
             AssistantMessageView(
                 message: message,
+                live: live,
                 persona: persona,
                 isStreaming: isStreaming,
                 isLast: isLast,
@@ -209,6 +213,7 @@ private struct PillButtonStyle: ButtonStyle {
 
 private struct AssistantMessageView: View {
     let message: ChatMessage
+    let live: LiveAnswer?
     let persona: Persona?
     let isStreaming: Bool
     let isLast: Bool
@@ -226,6 +231,8 @@ private struct AssistantMessageView: View {
     var body: some View {
         let steps = message.toolSteps ?? []
         let isLookingUp = isStreaming && steps.contains { $0.status == .running }
+        let content = live?.content ?? message.content
+        let reasoning = live?.reasoning ?? message.reasoning ?? ""
         VStack(alignment: .leading, spacing: 12) {
             if let persona {
                 HStack(spacing: 9) {
@@ -241,10 +248,10 @@ private struct AssistantMessageView: View {
                 ThalamusTraceView(trace: thalamus)
             }
 
-            if let reasoning = message.reasoning, !reasoning.isEmpty {
+            if !reasoning.isEmpty {
                 ThinkingView(
                     text: reasoning,
-                    isThinking: isStreaming && message.content.isEmpty && !isLookingUp,
+                    isThinking: isStreaming && content.isEmpty && !isLookingUp,
                     seconds: message.stats?.reasoningSeconds,
                     startedAt: message.createdAt
                 )
@@ -254,14 +261,14 @@ private struct AssistantMessageView: View {
                 ToolStepsView(steps: steps, isStreaming: isStreaming)
             }
 
-            if !message.content.isEmpty {
+            if !content.isEmpty {
                 MarkdownView(
-                    text: message.content,
+                    text: content,
                     anchorMessageID: message.id,
                     highlightedBlock: highlight?.block,
                     bookmarkedBlocks: marks.blocks
                 )
-            } else if isStreaming && !isLookingUp && (message.reasoning ?? "").isEmpty && message.thalamus?.status != .running {
+            } else if isStreaming && !isLookingUp && reasoning.isEmpty && message.thalamus?.status != .running {
                 PulsingDot()
                     .padding(.vertical, 4)
             }
