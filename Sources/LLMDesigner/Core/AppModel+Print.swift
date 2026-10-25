@@ -23,8 +23,10 @@ extension AppModel {
         Task {
             let input = await prepareExport(of: document)
             do {
-                let pdf = try await engine.makePDF(parts: [input.part], paper: paper, typeface: input.document.font)
+                let format = input.document.pageFormat
+                let pdf = try await engine.makePDF(parts: [input.part], paper: paper, typeface: format.font(input.document.font), format: format)
                 exportingIDs.remove(id)
+                // A paperback's small pages are printed at their size in the middle of the printer's paper.
                 showPrintPanel(for: pdf, title: input.document.displayTitle, paper: paper.pointSize, fitsUp: false)
             } catch {
                 exportingIDs.remove(id)

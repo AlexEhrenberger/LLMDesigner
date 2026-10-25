@@ -83,7 +83,7 @@ struct WriterScreen: View {
     private func main(_ document: WriterDocument) -> some View {
             let showsAnalysis = app.writerTab == .analysis
             return VStack(spacing: 0) {
-                WriterTopBar(document: document)
+                WriterTopBar(document: document, pageCount: controller.pageCount)
                     .opacity(showsToolbar ? 1 : 0)
                 Group {
                     if showsAnalysis {
@@ -99,7 +99,7 @@ struct WriterScreen: View {
                         WriterEditor(
                             app: app,
                             document: document,
-                            palette: app.writerLightPaper ? .light : .dark,
+                            palette: (app.writerLightPaper ? WriterPalette.light : .dark).with(format: document.pageFormat),
                             controller: controller,
                             assistant: assistant,
                             isReadingAloud: app.speakingDocumentID != nil,
@@ -136,7 +136,8 @@ struct WriterScreen: View {
                                 .transition(.move(edge: .top).combined(with: .opacity))
                         }
                         if showsGlow {
-                            UnfoldingFrame(progress: unfold, lightPaper: app.writerLightPaper)
+                            UnfoldingFrame(progress: unfold, lightPaper: app.writerLightPaper,
+                                           columnWidth: WriterStyler.columnWidth(document.pageFormat, family: document.textFont) ?? WriterTextView.maxColumnWidth)
                                 .allowsHitTesting(false)
                         }
                     }
@@ -185,6 +186,8 @@ struct WriterScreen: View {
 private struct UnfoldingFrame: View {
     let progress: CGFloat
     let lightPaper: Bool
+    /// The sheet's text column (narrower for a paperback or a Normseite).
+    let columnWidth: CGFloat
 
     var body: some View {
         GeometryReader { geometry in
@@ -195,7 +198,7 @@ private struct UnfoldingFrame: View {
                 width: min(size.width - 40, Theme.contentWidth + 16),
                 height: 92
             )
-            let column = min(WriterTextView.maxColumnWidth, max(260, size.width - 120))
+            let column = min(columnWidth, max(260, size.width - 120))
             let padding = max(20, min(76, (size.width - column) / 2 - 18))
             let end = CGRect(x: (size.width - column) / 2 - padding, y: 28, width: column + 2 * padding, height: size.height + 20)
             let rect = interpolate(start, end, progress)
@@ -338,6 +341,8 @@ private struct MicrophoneLevel: View {
 private struct WriterTopBar: View {
     @Environment(AppModel.self) private var app
     let document: WriterDocument
+    /// The pages of a paperback or a Normseite, as the editor counts them.
+    let pageCount: WriterTextView.PageCount?
     /// In a narrow window the app's name and the word count give way, so the controls keep their room.
     @State private var width: CGFloat = 1200
 
@@ -367,13 +372,15 @@ private struct WriterTopBar: View {
                 .padding(.leading, 10)
                 .layoutPriority(1)
             Spacer(minLength: 12)
+            PageFormatMenu(document: document, showsTitle: width >= 900)
             ExportMenu(document: document)
             if width >= 820 {
-                Text(wordCount)
+                Text(counts)
                     .font(.system(size: 11.5).monospacedDigit())
                     .foregroundStyle(Theme.textTertiary)
                     .lineLimit(1)
                     .fixedSize()
+                    .help(countsHelp)
             }
             PaperSwitch()
             if !app.isPanelDocked, app.writerTab == .document {
@@ -393,6 +400,23 @@ private struct WriterTopBar: View {
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
     }
 
+    /// The words, and the pages of a paperback or a Normseite.
+    private var counts: String {
+        guard let pages = pageCount?.pages, document.pageFormat.isBook else { return wordCount }
+        let label = document.pageFormat == .manuscript
+            ? (pages == 1 ? "1 Normseite" : "\(pages) Normseiten")
+            : (pages == 1 ? "1 Seite" : "\(pages) Seiten")
+        return label + " · " + wordCount
+    }
+
+    /// Publishers also count a Normseite as 1800 characters, spaces included.
+    private var countsHelp: String {
+        guard document.pageFormat == .manuscript, let characters = pageCount?.characters else { return "" }
+        let pages = Double(characters) / Double(WriterPageFormat.manuscriptCharactersPerPage)
+        return "Nach Zeilen gezählt: 30 Zeilen à 60 Anschläge je Seite. Nach Anschlägen: \(characters.formatted()) Zeichen mit Leerzeichen, "
+            + "das sind \(pages.formatted(.number.precision(.fractionLength(1)))) Normseiten zu 1800 Anschlägen."
+    }
+
     private var wordCount: String {
         // Pictures, formulas, bookmarks and the table of contents don't count; table cells do.
         let text = WriterBookmark.strip(document.markdown).components(separatedBy: "\n")
@@ -408,6 +432,59 @@ private struct WriterTopBar: View {
         let words = text.split { $0.isWhitespace || $0.isNewline }
             .filter { $0.contains { $0.isLetter || $0.isNumber } }.count
         return words == 1 ? "1 Wort" : "\(words) Wörter"
+    }
+}
+
+/// DIN A4, paperback or Normseite: how the document is set on the screen and in print.
+private struct PageFormatMenu: View {
+    @Environment(AppModel.self) private var app
+    let document: WriterDocument
+    let showsTitle: Bool
+    @State private var hovering = false
+
+    var body: some View {
+        let current = document.pageFormat
+        Menu {
+            Section("Seitenformat") {
+                ForEach(WriterPageFormat.allCases) { format in
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) { app.setPageFormat(document.id, format) }
+                    } label: {
+                        Label {
+                            Text(title(of: format) + "  ·  " + format.detail)
+                        } icon: {
+                            Image(systemName: format == current ? "checkmark" : format.symbol)
+                        }
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: current.symbol)
+                    .font(.system(size: 12, weight: .medium))
+                if showsTitle {
+                    Text(title(of: current))
+                        .font(.system(size: 12, weight: .medium))
+                        .lineLimit(1)
+                }
+            }
+            .foregroundStyle(hovering ? Theme.textPrimary : Theme.textSecondary)
+            .padding(.horizontal, 7)
+            .frame(height: Theme.titleBarControlSize)
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(hovering ? Theme.hover : .clear))
+            .contentShape(Rectangle())
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .onHover { hovering = $0 }
+        .help("Seitenformat: \(title(of: current)) (\(current.detail)). Der Export und der Druck folgen.")
+    }
+
+    /// The standard sheet is named by its paper.
+    private func title(of format: WriterPageFormat) -> String {
+        format == .standard ? app.pdfPaperSize.label : format.label
     }
 }
 

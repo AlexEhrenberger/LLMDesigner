@@ -14,7 +14,7 @@ enum PaperSize: String, CaseIterable, Identifiable {
         }
     }
 
-    fileprivate var geometry: String {
+    var geometry: String {
         switch self {
         case .a4: "a4paper,margin=2.5cm"
         case .a5: "a5paper,margin=1.8cm"
@@ -82,8 +82,9 @@ enum LaTeXWriter {
 
     /// `figureFolder`: where the figure files are, relative to the document (nil: next to it).
     /// `typeface`: the font of a Writer Studio document (nil: LaTeX's own). Fonts that passages carry are set up too.
+    /// `format`: a Writer Studio document's page format; a paperback or a Normseite brings its own paper.
     static func document(parts: [Part], outline: Outline? = nil, paper: PaperSize, math: MathMode, figureFolder: String? = nil,
-                         typeface: WriterFont? = nil) -> String {
+                         typeface: WriterFont? = nil, format: WriterPageFormat = .standard) -> String {
         var body: [String] = []
         // Writer Studio documents with chapters are set as a report, where \chapter exists.
         let hasChapters = parts.contains { $0.figures != nil && WriterHeadings.hasChapters($0.text) }
@@ -100,15 +101,18 @@ enum LaTeXWriter {
             section += part.isPlainText
                 ? plainText(part.text)
                 : blocks(part.text, math: math, anchors: part.blockAnchors, figures: part.figures, figureFolder: figureFolder, structure: structure,
-                         contents: part.contents, bibliography: part.bibliography)
+                         contents: part.contents, bibliography: part.bibliography, format: format)
             body.append(section)
         }
         let contents = outline.map { tableOfContents($0, math: math) } ?? ""
         let spanFonts = parts.filter { $0.figures != nil }.flatMap { WriterSpans.fonts(in: $0.text) }
-        // Writer Studio's text is left-aligned like in the editor; a paragraph may be justified, centred or right-aligned.
+        // Writer Studio's text is left-aligned like in the editor (a paperback is justified); a paragraph may be
+        // justified, centred or right-aligned. \raggedright takes the indent of a Normseite's paragraphs away.
         let isWriterDocument = parts.contains { $0.figures != nil }
-        return preamble(paper, documentClass: hasChapters ? "report" : "article", typeface: typeface, spanFonts: spanFonts)
-            + "\\begin{document}\n" + (isWriterDocument ? "\\raggedright\n" : "") + contents
+        let start = isWriterDocument && format.isRaggedRight
+            ? "\\raggedright\n" + (format.isBook ? "\\setlength{\\parindent}{\(format.paragraphIndent)}\n" : "") : ""
+        return preamble(paper, documentClass: hasChapters ? "report" : "article", typeface: typeface, spanFonts: spanFonts, format: format)
+            + "\\begin{document}\n" + start + contents
             + body.joined(separator: "\n\n\\bigskip\n\n") + "\n\\end{document}\n"
     }
 
@@ -209,10 +213,10 @@ enum LaTeXWriter {
     static func fontMacro(_ font: WriterFont) -> String { "llmdfont" + font.rawValue }
 
     private static func preamble(_ paper: PaperSize, documentClass: String = "article", typeface: WriterFont? = nil,
-                                 spanFonts: [WriterFont] = []) -> String {
+                                 spanFonts: [WriterFont] = [], format: WriterPageFormat = .standard) -> String {
         #"""
-        \documentclass[\#(Int(WriterFont.printSize))pt]{\#(documentClass)}
-        \usepackage[\#(paper.geometry)]{geometry}
+        \documentclass[\#(Int(format.printSize))pt]{\#(documentClass)}
+        \usepackage[\#(format.geometry(paper: paper))]{geometry}
         \usepackage{amsmath}
         \usepackage{fontspec}
         \#(fontSetup(typeface: typeface, spanFonts: spanFonts))
@@ -231,7 +235,7 @@ enum LaTeXWriter {
         \usepackage[font=small,labelfont=bf]{caption}
         \usepackage{enumitem}
         \usepackage[normalem]{ulem}
-        \usepackage{parskip}
+        \#(format.isBook ? "" : "\\usepackage{parskip}")
         \usepackage{lastpage,refcount}
         \usepackage{fancyhdr}
         \usepackage[hidelinks]{hyperref}
@@ -254,7 +258,7 @@ enum LaTeXWriter {
         \providecommand{\degree}{^\circ}
         \providecommand{\abs}[1]{\left|#1\right|}
         \providecommand{\norm}[1]{\left\|#1\right\|}
-
+        \#(format.latexSetup)
         """#
     }
 
@@ -262,9 +266,10 @@ enum LaTeXWriter {
 
     private static func blocks(_ markdown: String, math: MathMode, anchors: [Int: String] = [:], figures: [String: URL]? = nil,
                                figureFolder: String? = nil, structure: Structure? = nil, contents: Outline? = nil,
-                               bibliography: [StyledText]? = nil) -> String {
+                               bibliography: [StyledText]? = nil, format: WriterPageFormat = .standard) -> String {
         var output: [String] = []
-        for (index, annotated) in MarkdownParser.parseAnnotated(markdown).enumerated() {
+        let annotatedBlocks = MarkdownParser.parseAnnotated(markdown)
+        for (index, annotated) in annotatedBlocks.enumerated() {
             let block = annotated.block
             // Writer Studio aligns paragraphs with divs (`::: {.center}`); chats have none.
             let alignment = structure == nil ? nil : WriterAlignment.from(classes: annotated.classes)
@@ -290,7 +295,10 @@ enum LaTeXWriter {
                 } else if let figures, !images.isEmpty, images.count == lines.count {
                     output.append(images.map { figure($0, file: figures[$0.source], folder: figureFolder, math: math) }.joined(separator: "\n\n"))
                 } else if structure != nil {
-                    output.append(paragraph(inline(text, math: math), alignment: alignment, largestSize: WriterSpans.largestSize(in: text)))
+                    // A book's paragraphs are indented, but not the first one and not after a scene break, as in the editor.
+                    let flush = format.isBook && (index == 0 || Self.endsSection(annotatedBlocks[index - 1].block))
+                    output.append(paragraph((flush ? "\\noindent " : "") + inline(text, math: math), alignment: alignment,
+                                            largestSize: WriterSpans.largestSize(in: text), format: format))
                 } else {
                     output.append(inline(text, math: math))
                 }
@@ -330,6 +338,15 @@ enum LaTeXWriter {
         return output.joined(separator: "\n\n")
     }
 
+    /// A rule (a scene break) or a table of contents: the paragraph after it starts at the margin in a book.
+    private static func endsSection(_ block: MarkdownBlock) -> Bool {
+        switch block {
+        case .rule: return true
+        case .paragraph(let text): return WriterTOCAttachment.isMarker(text) || WriterBibliographyAttachment.isMarker(text)
+        default: return false
+        }
+    }
+
     /// The switch that sets a Writer Studio paragraph as the editor shows it; nil for left, which is the text's own.
     private static func alignmentCommand(_ alignment: WriterAlignment?) -> String? {
         switch alignment {
@@ -345,11 +362,16 @@ enum LaTeXWriter {
         alignment == .center || alignment == .right ? alignmentCommand(alignment) : nil
     }
 
-    /// A paragraph of Writer Studio, aligned, and with room between its lines for the largest letters in it.
-    private static func paragraph(_ text: String, alignment: WriterAlignment?, largestSize: Double?) -> String {
+    /// A paragraph of Writer Studio, aligned, and with room between its lines for the largest letters in it. A
+    /// paperback is justified, so a paragraph set left there needs its switch.
+    private static func paragraph(_ text: String, alignment: WriterAlignment?, largestSize: Double?, format: WriterPageFormat) -> String {
         var switches: [String] = []
-        if let command = alignmentCommand(alignment) { switches.append(command) }
-        if let largestSize, largestSize > Double(WriterFont.printSize) {
+        if let command = alignmentCommand(alignment) {
+            switches.append(command)
+        } else if alignment == .left, format.isJustified {
+            switches.append("\\raggedright")
+        }
+        if let largestSize, largestSize > Double(format.printSize) {
             switches.append("\\setlength{\\baselineskip}{\(WriterSpanStyle.format(largestSize * 1.2))pt}")
         }
         guard !switches.isEmpty else { return text }
@@ -791,10 +813,13 @@ struct LaTeXEngine: Sendable {
     }
 
     /// Tries the document with native formulas first, then falls back to printing problematic formulas as code.
-    func makePDF(parts: [LaTeXWriter.Part], outline: LaTeXWriter.Outline? = nil, paper: PaperSize, typeface: WriterFont? = nil) async throws -> Data {
+    func makePDF(parts: [LaTeXWriter.Part], outline: LaTeXWriter.Outline? = nil, paper: PaperSize, typeface: WriterFont? = nil,
+                 format: WriterPageFormat = .standard) async throws -> Data {
         var lastError: Error = PDFExportError.compileFailed("")
         for mode in LaTeXWriter.MathMode.allCases {
-            let source = await MainActor.run { LaTeXWriter.document(parts: parts, outline: outline, paper: paper, math: mode, typeface: typeface) }
+            let source = await MainActor.run {
+                LaTeXWriter.document(parts: parts, outline: outline, paper: paper, math: mode, typeface: typeface, format: format)
+            }
             do {
                 return try await compile(source, images: parts.flatMap(\.images) + parts.flatMap { Array(($0.figures ?? [:]).values) })
             } catch {

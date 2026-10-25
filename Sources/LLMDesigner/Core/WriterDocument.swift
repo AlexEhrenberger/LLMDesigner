@@ -10,6 +10,8 @@ struct WriterDocument: Identifiable, Hashable, Sendable {
     var updatedAt = Date()
     var folderID: Folder.ID?
     var font: WriterFont = .serif
+    /// DIN A4, paperback or Normseite (Writer Studio; a presentation has slides).
+    var pageFormat: WriterPageFormat = .standard
     var markdown = ""
     /// How the contents panel lists the document; nil: by its headings if it has any, else dynamically.
     var tocMode: WriterTOCMode?
@@ -22,6 +24,9 @@ struct WriterDocument: Identifiable, Hashable, Sendable {
     }
 
     var isPresentation: Bool { deck != nil }
+
+    /// The font the text is set in: the document's, or Courier on a Normseite.
+    var textFont: WriterFont { pageFormat.font(font) }
 
     /// Every picture the document uses: in its text, and a presentation's free pictures and backgrounds.
     var pictureSources: [String] {
@@ -150,6 +155,7 @@ struct WriterDocumentStore {
             header.append("backgrounds: \(deck.backgroundsLine)")
         }
         if let mode = document.tocMode { header.append("toc: \(mode.rawValue)") }
+        if document.pageFormat != .standard { header.append("format: \(document.pageFormat.rawValue)") }
         // One line of JSON, which is also valid YAML.
         if let outline = document.outline, let data = try? JSONEncoder.outline.encode(outline), let json = String(data: data, encoding: .utf8) {
             header.append("outline: \(json)")
@@ -177,6 +183,7 @@ struct WriterDocumentStore {
                 case "font": document.font = WriterFont(rawValue: value) ?? .serif
                 case "folder": document.folderID = UUID(uuidString: value)
                 case "toc": document.tocMode = WriterTOCMode(rawValue: value)
+                case "format": document.pageFormat = WriterPageFormat(rawValue: value) ?? .standard
                 case "outline": document.outline = try? JSONDecoder.outline.decode(DocumentOutline.self, from: Data(value.utf8))
                 case "kind": isPresentation = value == "presentation"
                 case "backgrounds": backgrounds = PresentationDeck.backgrounds(from: value)

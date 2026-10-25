@@ -136,6 +136,12 @@ extension AppModel {
         modifyDocument(id) { $0.font = font }
     }
 
+    /// DIN A4 (the paper of the settings), paperback or Normseite: the editor, the export and the print follow.
+    func setPageFormat(_ id: WriterDocument.ID, _ format: WriterPageFormat) {
+        guard document(id)?.pageFormat != format else { return }
+        modifyDocument(id) { $0.pageFormat = format }
+    }
+
     func renameDocument(_ id: WriterDocument.ID, to title: String) {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -334,12 +340,13 @@ extension AppModel {
                             WriterImageStore.rewriteSources(in: exported) { figures[$0].map { folder + "/" + $0.lastPathComponent } }
                         } ?? exported
                     } else {
-                        text = LaTeXWriter.document(parts: [part], paper: paper, math: .native, figureFolder: folder, typeface: current.font)
+                        text = LaTeXWriter.document(parts: [part], paper: paper, math: .native, figureFolder: folder,
+                                                    typeface: current.pageFormat.font(current.font), format: current.pageFormat)
                     }
                     try text.write(to: url, atomically: true, encoding: .utf8)
                 case .pdf:
                     guard let engine else { return }
-                    let pdf = try await engine.makePDF(parts: [part], paper: paper, typeface: current.font)
+                    let pdf = try await engine.makePDF(parts: [part], paper: paper, typeface: current.pageFormat.font(current.font), format: current.pageFormat)
                     exportingIDs.remove(document.id)
                     guard let url = await askForDestination(fileName: current.displayTitle, type: .pdf) else { return }
                     try pdf.write(to: url, options: .atomic)

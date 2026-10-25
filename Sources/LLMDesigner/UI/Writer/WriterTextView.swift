@@ -87,6 +87,15 @@ final class WriterTextView: NSTextView {
     /// A dynamic table of contents was put into the text; the model should make one if there is none yet.
     var onDynamicTOCNeeded: (() -> Void)?
 
+    // MARK: Pages (see WriterTextView+Pages.swift)
+
+    /// Where the pages of a paperback or a Normseite end.
+    var pageBreaks: [PageBreak] = []
+    var pageUpdatePending = false
+    var reportedPageCount: PageCount?
+    /// The number of pages changed; nil for the standard sheet, which isn't divided into pages.
+    var onPageCount: ((PageCount?) -> Void)?
+
     /// Words still being recognised never become typing attributes, so typed text isn't grey or lost. Outside a
     /// table, text never takes a cell's attributes (e.g. at the end of a document that ends with a table).
     override var typingAttributes: [NSAttributedString.Key: Any] {
@@ -169,6 +178,7 @@ final class WriterTextView: NSTextView {
         layoutManager.addTextContainer(container)
         let view = WriterTextView(frame: .zero, textContainer: container)
         layoutManager.writerView = view
+        layoutManager.delegate = view
         view.restyler.view = view
         storage.delegate = view.restyler
         view.configure()
@@ -215,7 +225,9 @@ final class WriterTextView: NSTextView {
 
     var columnWidth: CGFloat {
         if slideLayout != nil { return SlideLayout.canvas.width - 2 * SlideLayout.margin.width }
-        return min(Self.maxColumnWidth, max(260, bounds.width - 120))
+        // A paperback's or a Normseite's line is as long as in print.
+        let width = WriterStyler.columnWidth(palette.format, family: family) ?? Self.maxColumnWidth
+        return min(width, max(260, bounds.width - 120))
     }
 
     private var pagePadding: CGFloat {
@@ -357,6 +369,7 @@ final class WriterTextView: NSTextView {
         palette.pageBorder.setStroke()
         path.lineWidth = 1
         path.stroke()
+        drawPageBreaks(in: rect, page: page, origin: origin)
         // Heading numbers and bookmark marks sit in the page's margins, which only this layer draws.
         if let layoutManager, let container = textContainer, let storage = textStorage, storage.length > 0, storage.editedMask.isEmpty {
             let inContainer = rect.offsetBy(dx: -origin.x, dy: -origin.y)
@@ -396,6 +409,7 @@ final class WriterTextView: NSTextView {
         self.family = family
         self.palette = palette
         guard let storage = textStorage else { return }
+        setFrameSize(frame.size)
         let text = WriterMarkdown.attributedString(from: markdown)
         trackedRanges = [:]
         untrackedKeys = []
@@ -427,6 +441,8 @@ final class WriterTextView: NSTextView {
 
     func restyleAll() {
         guard let storage = textStorage else { return }
+        // The page format or the font sets the column's width.
+        setFrameSize(frame.size)
         restyler.isLoading = true
         WriterStyler.restyleAll(storage, family: family, palette: palette)
         restyler.isLoading = false
@@ -439,6 +455,8 @@ final class WriterTextView: NSTextView {
         updateSlideCentering()
         needsDisplay = true
         updateAICursorIndicator()
+        // The toolbar's sizes are print sizes, which a new page format changes.
+        onStateChange?()
     }
 
     var markdown: String {

@@ -22,6 +22,8 @@ struct WriterPalette: Equatable {
     var alignment: NSTextAlignment = .natural
     /// A slide's text over its background: nothing of the page is drawn.
     var isSlide = false
+    /// How the document's page is set: DIN A4, paperback or Normseite (see WriterStyle+Pages.swift).
+    var format: WriterPageFormat = .standard
 
     static let dark = WriterPalette(
         isLight: false,
@@ -63,6 +65,13 @@ struct WriterPalette: Equatable {
 }
 
 extension WriterPalette {
+    /// The same colours on a page of this format.
+    func with(format: WriterPageFormat) -> WriterPalette {
+        var palette = self
+        palette.format = format
+        return palette
+    }
+
     /// The text of a slide over its background: light text on a dark background or dark text on a light one, with the
     /// background design's accent.
     static func slide(tone: SlideTone, accent: UInt32?, alignment: NSTextAlignment = .natural) -> WriterPalette {
@@ -155,9 +164,11 @@ enum WriterStyler {
         return NSFont(descriptor: descriptor, size: size) ?? base
     }
 
-    /// The font of a block before any inline marks.
-    static func blockFont(_ block: WriterBlock, family: WriterFont, bold: Bool = false, italic: Bool = false) -> NSFont {
+    /// The font of a block before any inline marks. The book formats have headings of their own sizes.
+    static func blockFont(_ block: WriterBlock, family: WriterFont, bold: Bool = false, italic: Bool = false,
+                          format: WriterPageFormat = .standard) -> NSFont {
         let body = bodySize(family)
+        if format.isBook, block.isHeading { return bookHeadingFont(block, family: family, italic: italic, format: format) }
         switch block {
         case .chapter: return font(family, size: body + 19, weight: .bold, italic: italic)
         case .heading1: return font(family, size: body + 14, weight: .bold, italic: italic)
@@ -232,6 +243,10 @@ enum WriterStyler {
         }
         // AppKit leaves no room below a table; the paragraph after it keeps its distance.
         if block != .table, previous == .table { style.paragraphSpacingBefore = max(style.paragraphSpacingBefore, 16) }
+        // A paperback or a Normseite: the print's line distance, indented paragraphs.
+        if palette.format.isBook, cell == nil {
+            applyBookLayout(to: style, block: block, previous: previous, next: next, family: family, format: palette.format)
+        }
         // A centred slide centres its text; lists, quotes, code and objects keep their own alignment.
         if palette.alignment != .natural, cell == nil, [.paragraph, .chapter, .heading1, .heading2, .heading3].contains(block) {
             style.alignment = palette.alignment
@@ -241,9 +256,11 @@ enum WriterStyler {
         return style
     }
 
-    /// How a paragraph without an alignment of its own is set: centred on a title slide, otherwise left.
+    /// How a paragraph without an alignment of its own is set: centred on a title slide, justified in a paperback,
+    /// otherwise left.
     static func defaultAlignment(_ block: WriterBlock, palette: WriterPalette) -> WriterAlignment {
-        palette.alignment == .center && [.paragraph, .chapter, .heading1, .heading2, .heading3].contains(block) ? .center : .left
+        if palette.format.isJustified, block == .paragraph { return .justify }
+        return palette.alignment == .center && [.paragraph, .chapter, .heading1, .heading2, .heading3].contains(block) ? .center : .left
     }
 
     /// The cell's box in AppKit's table: thin lines, a little room around the text, a tinted header row.
@@ -275,7 +292,7 @@ enum WriterStyler {
         let marks = WriterInline(semantic)
         var attributes: [NSAttributedString.Key: Any] = [:]
         if block == .code || block == .raw {
-            attributes[.font] = blockFont(block, family: family)
+            attributes[.font] = blockFont(block, family: family, format: palette.format)
             attributes[.foregroundColor] = block == .raw ? palette.tertiaryText : palette.text
             return attributes
         }
@@ -283,9 +300,9 @@ enum WriterStyler {
         let passage = WriterSpanStyle(semantic)
         let family = passage.font ?? family
         let color = passage.color.flatMap { WriterColors.display($0, onDark: !palette.isLight) }
-        let ownSize = passage.size.map { CGFloat($0) * family.screenScale(onSlide: palette.isSlide) }
+        let ownSize = passage.size.map { CGFloat($0) * family.screenScale(onSlide: palette.isSlide, format: palette.format) }
         if marks.contains(.code) {
-            let size = (ownSize ?? blockFont(block, family: family).pointSize) * 0.86
+            let size = (ownSize ?? blockFont(block, family: family, format: palette.format).pointSize) * 0.86
             attributes[.font] = font(family, size: size, weight: marks.contains(.bold) ? .semibold : .regular, monospaced: true)
             attributes[.foregroundColor] = color ?? palette.inlineCodeText
             attributes[.backgroundColor] = palette.inlineCodeBackground
@@ -293,14 +310,14 @@ enum WriterStyler {
         }
         // The first row of a table is its header.
         let isHeader = block == .table && semantic[.writerTableRow] as? Int == 0
-        let font = blockFont(block, family: family, bold: marks.contains(.bold) || isHeader, italic: marks.contains(.italic))
+        let font = blockFont(block, family: family, bold: marks.contains(.bold) || isHeader, italic: marks.contains(.italic), format: palette.format)
         attributes[.font] = font
         // Fonts without an italic cut (SF Pro Rounded) lean instead.
         if marks.contains(.italic) || block == .quote, !font.fontDescriptor.symbolicTraits.contains(.italic) {
             attributes[.obliqueness] = 0.18
         }
         if block.isHeading, marks.contains(.bold) {
-            attributes[.font] = blockFont(block, family: family, italic: marks.contains(.italic)).withWeight(.heavy)
+            attributes[.font] = blockFont(block, family: family, italic: marks.contains(.italic), format: palette.format).withWeight(.heavy)
         }
         if let ownSize, let current = attributes[.font] as? NSFont {
             attributes[.font] = current.withSize(ownSize)
@@ -416,8 +433,8 @@ enum WriterStyler {
         if let size = passage.size { return size }
         let family = passage.font ?? family
         let isHeader = block == .table && semantic[.writerTableRow] as? Int == 0
-        let screen = blockFont(block, family: family, bold: isHeader).pointSize
-        return (Double(screen / family.screenScale(onSlide: palette.isSlide)) * 2).rounded() / 2
+        let screen = blockFont(block, family: family, bold: isHeader, format: palette.format).pointSize
+        return (Double(screen / family.screenScale(onSlide: palette.isSlide, format: palette.format)) * 2).rounded() / 2
     }
 }
 

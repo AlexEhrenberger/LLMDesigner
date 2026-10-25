@@ -350,7 +350,7 @@ extension WriterTextView {
                 guard glyph < layoutManager.numberOfGlyphs else { continue }
                 let fragment = layoutManager.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
                 let baseline = layoutManager.location(forGlyphAt: glyph).y
-                let font = WriterStyler.blockFont(paragraph.block, family: family)
+                let font = WriterStyler.blockFont(paragraph.block, family: family, format: palette.format)
                 let attributes: [NSAttributedString.Key: Any] = [.font: WriterStyler.font(family, size: font.pointSize, weight: .regular), .foregroundColor: palette.tertiaryText]
                 let size = (number as NSString).size(withAttributes: attributes)
                 let point = NSPoint(x: origin.x - 14 - size.width, y: origin.y + fragment.minY + baseline - font.ascender)

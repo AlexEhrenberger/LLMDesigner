@@ -21,7 +21,7 @@ struct FontMenu: View {
             scope = controller.state.hasSelection ? .selection : .document
             showsPopover.toggle()
         } label: {
-            MenuLabel(symbol: "textformat", title: (controller.state.passageFont ?? document.font).shortLabel, hovering: hovering || showsPopover)
+            MenuLabel(symbol: "textformat", title: (controller.state.passageFont ?? document.textFont).shortLabel, hovering: hovering || showsPopover)
         }
         .buttonStyle(.plain)
         .focusable(false)
@@ -80,7 +80,9 @@ private struct FontPicker: View {
             .frame(height: 360)
 
             Text(scope == .document
-                 ? "Die Schrift für alles, was keine eigene hat."
+                 ? (document.pageFormat == .manuscript
+                    ? "Die Normseite ist in Courier gesetzt. Die Schrift hier gilt wieder in den anderen Seitenformaten."
+                    : "Die Schrift für alles, was keine eigene hat.")
                  : (state.hasSelection ? "Nur die markierte Stelle." : "Der Text, der ab dem Cursor getippt wird."))
                 .font(.system(size: 10.5))
                 .foregroundStyle(Theme.textTertiary)

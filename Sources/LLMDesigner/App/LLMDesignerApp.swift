@@ -146,6 +146,16 @@ struct AppCommands: Commands {
                 }
             }
             .disabled(!app.canFormatText)
+            Divider()
+            Picker("Seitenformat", selection: Binding(
+                get: { app.selectedDocument?.pageFormat ?? .standard },
+                set: { format in app.selectedDocument.map { app.setPageFormat($0.id, format) } }
+            )) {
+                ForEach(WriterPageFormat.allCases) { format in
+                    Text(format == .standard ? app.pdfPaperSize.label : format.label).tag(format)
+                }
+            }
+            .disabled(app.selectedDocument == nil || app.selectedDocument?.isPresentation == true)
         }
         CommandMenu("Chat") {
             Button("Generierung stoppen") { app.stop() }

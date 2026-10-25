@@ -15,6 +15,8 @@ final class WriterEditorController {
     var recentBookmarkID: String?
     /// Presenter Studio: the slide's text is longer than the slide.
     var slideOverflows = false
+    /// The pages of a paperback or a Normseite; nil for the standard sheet.
+    var pageCount: WriterTextView.PageCount?
     /// ⌘F: the find bar over the text.
     let find = DocumentFind()
     @ObservationIgnored weak var textView: WriterTextView?
@@ -234,6 +236,7 @@ struct WriterEditor: NSViewRepresentable {
         }
         textView.onReadAloud = { [weak controller] in controller?.readAloud() }
         textView.onSlideOverflow = { [weak controller] overflows in controller?.slideOverflows = overflows }
+        textView.onPageCount = { [weak controller] count in controller?.pageCount = count }
         textView.onDictate = { [weak controller] in controller?.toggleDictation() }
         textView.onStopReading = { [weak app] in app?.stopReadingDocument() }
         textView.onNotice = { [weak app] in app?.showNotice($0) }
@@ -324,8 +327,8 @@ struct WriterEditor: NSViewRepresentable {
             textView.slideLayout = slide.layout
             if restyles, textView.palette == palette { textView.restyleAll() }
         }
-        if textView.palette != palette || textView.family != document.font {
-            textView.family = document.font
+        if textView.palette != palette || textView.family != document.textFont {
+            textView.family = document.textFont
             textView.palette = palette
             scrollView.backgroundColor = palette.windowBackground
             textView.restyleAll()
@@ -366,7 +369,7 @@ struct WriterEditor: NSViewRepresentable {
             textView.citations?.loadIfNeeded()
             textView.citationStyleCache = nil
             textView.lastCitedKeys = []
-            textView.load(markdown: slide?.markdown ?? document.markdown, family: document.font, palette: palette)
+            textView.load(markdown: slide?.markdown ?? document.markdown, family: document.textFont, palette: palette)
             controller?.state = textView.state
             controller?.textLoaded(slideID: slide?.id)
             updateGenerationTimer()
@@ -393,7 +396,7 @@ struct WriterEditor: NSViewRepresentable {
             knownMarkdown = document.markdown
             isDirty = false
             textView.dynamicOutline = document.outline
-            textView.load(markdown: document.markdown, family: document.font, palette: palette)
+            textView.load(markdown: document.markdown, family: document.textFont, palette: palette)
             let length = textView.textStorage?.length ?? 0
             textView.setSelectedRange(NSRange(location: min(selection.location, length), length: 0))
             textView.scroll(visible)
