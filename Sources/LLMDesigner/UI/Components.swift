@@ -24,6 +24,33 @@ struct IconButton: View {
     }
 }
 
+/// An `IconButton` that opens a small menu instead of acting directly.
+struct IconMenu<Items: View>: View {
+    let systemName: String
+    let help: String
+    var size: CGFloat = 15
+    var frameSize: CGFloat = 32
+    @ViewBuilder let items: () -> Items
+    @State private var hovering = false
+
+    var body: some View {
+        Menu(content: items) {
+            Image(systemName: systemName)
+                .font(.system(size: size, weight: .regular))
+                .foregroundStyle(hovering ? Theme.textPrimary : Theme.textSecondary)
+                .frame(width: frameSize, height: frameSize)
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(hovering ? Theme.hover : .clear))
+                .contentShape(Rectangle())
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .onHover { hovering = $0 }
+        .help(help)
+    }
+}
+
 struct SidebarToggleButton: View {
     @Environment(AppModel.self) private var app
 

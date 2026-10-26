@@ -18,7 +18,12 @@ struct SidebarView: View {
                 }
                 switch app.sidebarMode {
                 case .chats:
-                    IconButton(systemName: StudioApplication.writer.symbol, help: "Neues Dokument in Writer Studio (⌃⌘N)", size: 13.5, frameSize: Theme.titleBarControlSize) { app.newDocument() }
+                    IconMenu(systemName: StudioApplication.writer.symbol, help: "Neues Dokument oder neue Präsentation", size: 13.5, frameSize: Theme.titleBarControlSize) {
+                        Button("Neues Dokument", systemImage: StudioApplication.writer.symbol) { app.newDocument() }
+                        Button("Neue Präsentation", systemImage: StudioApplication.presenter.symbol) { app.newPresentation() }
+                        Divider()
+                        Button("Präsentation aus Dokument …", systemImage: "doc.text.below.ecg") { app.showDeckFromDocument() }
+                    }
                     IconButton(systemName: "square.and.pencil", help: "Neuer Chat (⌘N)", frameSize: Theme.titleBarControlSize) { app.newChat() }
                 case .skills:
                     IconButton(systemName: "plus", help: "Neuer Skill (⌥⌘N)", frameSize: Theme.titleBarControlSize) { app.createSkill() }

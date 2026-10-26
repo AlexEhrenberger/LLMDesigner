@@ -368,8 +368,10 @@ private struct Chip: View {
         .foregroundStyle(accent ? Theme.accent : Theme.textSecondary)
         .padding(.horizontal, 9)
         .frame(height: 24)
-        .background(Capsule().fill(accent ? Theme.accent.opacity(0.14) : Color.black.opacity(0.35)))
-        .overlay(Capsule().strokeBorder(accent ? Theme.accent.opacity(0.35) : Theme.border))
+        // Opaque, so the chip reads the same over light and dark pages.
+        .background(Capsule().fill(accent ? Theme.accent.opacity(0.14) : .clear))
+        .background(Capsule().fill(Theme.elevated))
+        .overlay(Capsule().strokeBorder(accent ? Theme.accent.opacity(0.35) : Theme.strongBorder))
     }
 }
 
@@ -406,8 +408,9 @@ private struct QuickLabel: View {
         .foregroundStyle(!isEnabled ? Theme.textTertiary : hovering ? Theme.textPrimary : Theme.textSecondary)
         .padding(.horizontal, 9)
         .frame(height: 24)
-        .background(Capsule().fill(Color.black.opacity(hovering ? 0.5 : 0.35)))
-        .overlay(Capsule().strokeBorder(Theme.border))
+        .background(Capsule().fill(hovering && isEnabled ? Theme.hover : .clear))
+        .background(Capsule().fill(Theme.elevated))
+        .overlay(Capsule().strokeBorder(Theme.strongBorder))
         .contentShape(Capsule())
         .onHover { hovering = $0 }
     }
