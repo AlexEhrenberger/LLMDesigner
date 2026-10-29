@@ -12,6 +12,10 @@ struct WriterDocument: Identifiable, Hashable, Sendable {
     var font: WriterFont = .serif
     /// DIN A4, paperback or Normseite (Writer Studio; a presentation has slides).
     var pageFormat: WriterPageFormat = .standard
+    /// The paper, margins and text size of the user's own format (`pageFormat == .custom`).
+    var pageSetup: WriterPageSetup?
+    /// The lines at the top and bottom of the printed pages; nil: the page number in the middle of the foot.
+    var runningHeads: WriterRunningHeads?
     var markdown = ""
     /// How the contents panel lists the document; nil: by its headings if it has any, else dynamically.
     var tocMode: WriterTOCMode?
@@ -27,6 +31,14 @@ struct WriterDocument: Identifiable, Hashable, Sendable {
 
     /// The font the text is set in: the document's, or Courier on a Normseite.
     var textFont: WriterFont { pageFormat.font(font) }
+
+    /// The user's own format, when the document is set in one.
+    var customSetup: WriterPageSetup? { pageFormat == .custom ? pageSetup ?? WriterPageSetup() : nil }
+
+    /// Everything the print needs to know about the pages besides the format.
+    var pageDesign: WriterPageDesign {
+        WriterPageDesign(setup: customSetup, runningHeads: runningHeads?.isEmpty == false ? runningHeads : nil, title: displayTitle)
+    }
 
     /// Every picture the document uses: in its text, and a presentation's free pictures and backgrounds.
     var pictureSources: [String] {
@@ -156,11 +168,20 @@ struct WriterDocumentStore {
         }
         if let mode = document.tocMode { header.append("toc: \(mode.rawValue)") }
         if document.pageFormat != .standard { header.append("format: \(document.pageFormat.rawValue)") }
+        if let setup = document.pageSetup, let json = jsonLine(setup) { header.append("page: \(json)") }
+        if let heads = document.runningHeads, !heads.isEmpty, let json = jsonLine(heads) { header.append("running: \(json)") }
         // One line of JSON, which is also valid YAML.
         if let outline = document.outline, let data = try? JSONEncoder.outline.encode(outline), let json = String(data: data, encoding: .utf8) {
             header.append("outline: \(json)")
         }
         return "---\n" + header.joined(separator: "\n") + "\n---\n\n" + (document.deck?.serialized ?? document.markdown)
+    }
+
+    /// One line of JSON (valid YAML too) for the front matter.
+    private static func jsonLine<T: Encodable>(_ value: T) -> String? {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        return (try? encoder.encode(value)).flatMap { String(data: $0, encoding: .utf8) }
     }
 
     static func decode(_ text: String, fallbackID: UUID?) -> WriterDocument? {
@@ -184,6 +205,8 @@ struct WriterDocumentStore {
                 case "folder": document.folderID = UUID(uuidString: value)
                 case "toc": document.tocMode = WriterTOCMode(rawValue: value)
                 case "format": document.pageFormat = WriterPageFormat(rawValue: value) ?? .standard
+                case "page": document.pageSetup = try? JSONDecoder().decode(WriterPageSetup.self, from: Data(value.utf8))
+                case "running": document.runningHeads = try? JSONDecoder().decode(WriterRunningHeads.self, from: Data(value.utf8))
                 case "outline": document.outline = try? JSONDecoder.outline.decode(DocumentOutline.self, from: Data(value.utf8))
                 case "kind": isPresentation = value == "presentation"
                 case "backgrounds": backgrounds = PresentationDeck.backgrounds(from: value)
@@ -208,6 +231,14 @@ struct WriterDocumentStore {
         if document.title.isEmpty { document.title = WriterDocument.makeTitle(from: document.markdown) }
         return document
     }
+}
+
+/// What the print needs about a document's pages besides its format: the user's own paper and margins, the running
+/// heads and the title they may show.
+struct WriterPageDesign: Sendable {
+    var setup: WriterPageSetup?
+    var runningHeads: WriterRunningHeads?
+    var title = ""
 }
 
 private extension JSONEncoder {

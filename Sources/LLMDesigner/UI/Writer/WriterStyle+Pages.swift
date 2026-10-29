@@ -15,10 +15,13 @@ extension WriterStyler {
         ("0" as NSString).size(withAttributes: [.font: font(family, size: bodySize(family))]).width
     }
 
-    /// The text column on screen; nil: the standard sheet, as wide as the window allows.
-    static func columnWidth(_ format: WriterPageFormat, family: WriterFont) -> CGFloat? {
+    /// The text column on screen; nil: the standard sheet, as wide as the window allows. The user's own format is as
+    /// wide as its text block in print.
+    static func columnWidth(_ format: WriterPageFormat, family: WriterFont, setup: WriterPageSetup? = nil) -> CGFloat? {
         switch format {
         case .standard: nil
+        case .custom:
+            (setup ?? WriterPageSetup()).textWidth * family.screenScale(onSlide: false, format: format, printSize: CGFloat((setup ?? WriterPageSetup()).fontSize))
         case .paperback: (WriterPageFormat.paperbackTextWidth * family.screenScale(onSlide: false, format: format)).rounded()
         case .manuscript: ceil(CGFloat(WriterPageFormat.manuscriptCharactersPerLine) * characterWidth(family)) + 1
         }

@@ -142,6 +142,40 @@ extension AppModel {
         modifyDocument(id) { $0.pageFormat = format }
     }
 
+    /// The document is set in the user's own format: paper, margins, text size and line spacing.
+    func setPageSetup(_ id: WriterDocument.ID, _ setup: WriterPageSetup) {
+        let setup = setup.normalized()
+        guard let current = document(id), current.pageFormat != .custom || current.pageSetup != setup else { return }
+        modifyDocument(id) {
+            $0.pageFormat = .custom
+            $0.pageSetup = setup
+        }
+    }
+
+    /// The lines at the top and the bottom of the printed pages; empty ones take them away.
+    func setRunningHeads(_ id: WriterDocument.ID, _ heads: WriterRunningHeads?) {
+        let heads = heads?.isEmpty == true ? nil : heads
+        guard document(id)?.runningHeads != heads else { return }
+        modifyDocument(id) { $0.runningHeads = heads }
+    }
+
+    // MARK: Page templates
+
+    /// Saves a format of the user's own in the library, so other documents can use it; one of the same name is replaced.
+    func savePageTemplate(_ setup: WriterPageSetup) {
+        var setup = setup.normalized()
+        if let index = writerPageTemplates.firstIndex(where: { $0.id == setup.id || $0.name == setup.name }) {
+            setup.id = writerPageTemplates[index].id
+            writerPageTemplates[index] = setup
+        } else {
+            writerPageTemplates.append(setup)
+        }
+    }
+
+    func deletePageTemplate(_ id: WriterPageSetup.ID) {
+        writerPageTemplates.removeAll { $0.id == id }
+    }
+
     func renameDocument(_ id: WriterDocument.ID, to title: String) {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -341,12 +375,13 @@ extension AppModel {
                         } ?? exported
                     } else {
                         text = LaTeXWriter.document(parts: [part], paper: paper, math: .native, figureFolder: folder,
-                                                    typeface: current.pageFormat.font(current.font), format: current.pageFormat)
+                                                    typeface: current.pageFormat.font(current.font), format: current.pageFormat, design: current.pageDesign)
                     }
                     try text.write(to: url, atomically: true, encoding: .utf8)
                 case .pdf:
                     guard let engine else { return }
-                    let pdf = try await engine.makePDF(parts: [part], paper: paper, typeface: current.pageFormat.font(current.font), format: current.pageFormat)
+                    let pdf = try await engine.makePDF(parts: [part], paper: paper, typeface: current.pageFormat.font(current.font), format: current.pageFormat,
+                                                       design: current.pageDesign)
                     exportingIDs.remove(document.id)
                     guard let url = await askForDestination(fileName: current.displayTitle, type: .pdf) else { return }
                     try pdf.write(to: url, options: .atomic)

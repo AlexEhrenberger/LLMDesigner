@@ -135,6 +135,9 @@ extension NSAttributedString.Key {
     static let writerFontSize = NSAttributedString.Key("LLMDesigner.writer.fontSize")
     /// `WriterAlignment.rawValue` of the paragraph, when it isn't the default.
     static let writerAlignment = NSAttributedString.Key("LLMDesigner.writer.alignment")
+    /// Raised or lowered text (`true`), Markdown `<sup>…</sup>` and `<sub>…</sub>`.
+    static let writerSuperscript = NSAttributedString.Key("LLMDesigner.writer.superscript")
+    static let writerSubscript = NSAttributedString.Key("LLMDesigner.writer.subscript")
 }
 
 /// A bookmark in a document: a marked passage with a name. In Markdown it is an HTML span around the passage,
@@ -206,16 +209,35 @@ final class WriterTable: NSObject {
     let alignments: [MarkdownBlock.Alignment]
     /// Each column's share of the table's text width (without the cells' padding), adding up to 1; nil: equal columns.
     let widths: [CGFloat]?
+    /// Merged cells by their first place. The places they cover have no paragraph (see `WriterTableMerge`).
+    let spans: [WriterCellPosition: WriterCellSpan]
+    /// Lines, their weight and the cells' colours.
+    let style: WriterTableStyle
+    /// The places merged cells cover.
+    let covered: Set<WriterCellPosition>
+    /// The rows when the table was made (for its last line); 0 when unknown.
+    let rowCount: Int
     /// AppKit's table, which lays out the cells.
     let textTable: NSTextTable
 
     /// The narrowest a column gets when its border is dragged.
     static let minimumWidth: CGFloat = 0.06
 
-    init(columns: Int, alignments: [MarkdownBlock.Alignment], widths: [CGFloat]? = nil) {
+    init(columns: Int, alignments: [MarkdownBlock.Alignment], widths: [CGFloat]? = nil,
+         spans: [WriterCellPosition: WriterCellSpan] = [:], style: WriterTableStyle = WriterTableStyle(), rows: Int = 0) {
         self.columns = max(1, columns)
         self.alignments = (0..<self.columns).map { $0 < alignments.count ? alignments[$0] : .leading }
         self.widths = Self.normalized(widths, columns: self.columns)
+        // Spans stay inside the columns; a single cell is no span.
+        let columnCount = self.columns
+        self.spans = spans.reduce(into: [:]) { result, entry in
+            guard entry.key.column < columnCount else { return }
+            let span = WriterCellSpan(rows: max(1, entry.value.rows), columns: max(1, min(entry.value.columns, columnCount - entry.key.column)))
+            if !span.isSingle { result[entry.key] = span }
+        }
+        self.style = style
+        rowCount = rows
+        covered = WriterTableMerge.covered(by: self.spans)
         let table = NSTextTable()
         table.numberOfColumns = self.columns
         // Widths of their own are kept even when a cell's text would want more room.
@@ -230,6 +252,21 @@ final class WriterTable: NSObject {
 
     func alignment(of column: Int) -> MarkdownBlock.Alignment {
         column < alignments.count ? alignments[column] : .leading
+    }
+
+    /// How far the cell at this place reaches (one row and column for an ordinary cell).
+    func span(row: Int, column: Int) -> WriterCellSpan {
+        spans[WriterCellPosition(row: row, column: column)] ?? WriterCellSpan(rows: 1, columns: 1)
+    }
+
+    func isCovered(row: Int, column: Int) -> Bool {
+        covered.contains(WriterCellPosition(row: row, column: column))
+    }
+
+    /// The same table with other merged cells or another look.
+    func with(spans: [WriterCellPosition: WriterCellSpan]? = nil, style: WriterTableStyle? = nil, widths: [CGFloat]?? = nil) -> WriterTable {
+        WriterTable(columns: columns, alignments: alignments, widths: widths ?? self.widths, spans: spans ?? self.spans, style: style ?? self.style,
+                    rows: rowCount)
     }
 
     /// The share of a column, also for equal columns.
@@ -321,6 +358,11 @@ struct WriterInline: OptionSet, Hashable {
     static let underline = WriterInline(rawValue: 1 << 2)
     static let strikethrough = WriterInline(rawValue: 1 << 3)
     static let code = WriterInline(rawValue: 1 << 4)
+    static let superscript = WriterInline(rawValue: 1 << 5)
+    static let `subscript` = WriterInline(rawValue: 1 << 6)
+
+    /// The marks that are stored as keys of their own (and taken along when text is typed).
+    static let keys: [NSAttributedString.Key] = [.writerBold, .writerItalic, .writerCode, .underlineStyle, .strikethroughStyle, .writerSuperscript, .writerSubscript]
 
     init(rawValue: Int) { self.rawValue = rawValue }
 
@@ -331,6 +373,8 @@ struct WriterInline: OptionSet, Hashable {
         if (attributes[.underlineStyle] as? Int ?? 0) != 0 { marks.insert(.underline) }
         if (attributes[.strikethroughStyle] as? Int ?? 0) != 0 { marks.insert(.strikethrough) }
         if attributes[.writerCode] as? Bool == true { marks.insert(.code) }
+        if attributes[.writerSuperscript] as? Bool == true { marks.insert(.superscript) }
+        if attributes[.writerSubscript] as? Bool == true { marks.insert(.subscript) }
         self = marks
     }
 
@@ -342,13 +386,24 @@ struct WriterInline: OptionSet, Hashable {
         case .underline: (.underlineStyle, NSUnderlineStyle.single.rawValue)
         case .strikethrough: (.strikethroughStyle, NSUnderlineStyle.single.rawValue)
         case .code: (.writerCode, true)
+        case .superscript: (.writerSuperscript, true)
+        case .subscript: (.writerSubscript, true)
+        default: nil
+        }
+    }
+
+    /// Raised and lowered text exclude each other: setting one takes the other away.
+    var opposite: WriterInline? {
+        switch self {
+        case .superscript: .subscript
+        case .subscript: .superscript
         default: nil
         }
     }
 }
 
 /// A horizontal line on its own paragraph (Markdown `---`). The editor draws it; see `WriterRuleCell`.
-final class WriterRuleAttachment: NSTextAttachment {
+class WriterRuleAttachment: NSTextAttachment {
     override init(data contentData: Data?, ofType uti: String?) {
         super.init(data: contentData, ofType: uti)
         attachmentCell = WriterRuleCell()
@@ -360,12 +415,26 @@ final class WriterRuleAttachment: NSTextAttachment {
     }
 }
 
+/// A page break on its own paragraph (Markdown `\newpage`). It is a line like `WriterRuleAttachment` in the editor,
+/// drawn as a dashed line with its name (`WriterPageBreakCell`); the pages count from it, and print begins a new page.
+final class WriterPageBreakAttachment: WriterRuleAttachment {
+    override init(data contentData: Data?, ofType uti: String?) {
+        super.init(data: contentData, ofType: uti)
+        attachmentCell = WriterPageBreakCell()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        attachmentCell = WriterPageBreakCell()
+    }
+}
+
 /// Converts between the Markdown a document is stored as and the text the editor shows. The text carries only
 /// the meaning (block, list level, inline marks); `WriterStyler` adds fonts and colours from it.
 enum WriterMarkdown {
     static let lineSeparator: Character = "\u{2028}"
     /// The attributes that say what a paragraph is; text inserted into a paragraph takes these along.
-    static let paragraphKeys: Set<NSAttributedString.Key> = [.writerBlock, .writerListLevel, .writerAlignment, .writerTable, .writerTableRow, .writerTableColumn]
+    static let paragraphKeys: Set<NSAttributedString.Key> = Set([.writerBlock, .writerListLevel, .writerTable, .writerTableRow, .writerTableColumn] + WriterParagraphFormat.keys)
     static let tableKeys: [NSAttributedString.Key] = [.writerTable, .writerTableRow, .writerTableColumn]
     /// What a passage carries besides the inline marks: its colour, font and size.
     static let passageKeys: [NSAttributedString.Key] = [.writerColor, .writerFont, .writerFontSize]
@@ -375,8 +444,8 @@ enum WriterMarkdown {
     static func attributedString(from markdown: String) -> NSMutableAttributedString {
         let result = NSMutableAttributedString()
         var previous: [NSAttributedString.Key: Any]?
-        /// The alignment of the div the current Markdown block stands in.
-        var alignment: WriterAlignment?
+        /// The paragraph format of the div the current Markdown block stands in.
+        var format = WriterParagraphFormat()
 
         /// Appends a paragraph. Its newline comes with the next paragraph but carries this paragraph's
         /// attributes, so empty paragraphs keep their block too.
@@ -384,7 +453,7 @@ enum WriterMarkdown {
             if let previous { result.append(NSAttributedString(string: "\n", attributes: previous)) }
             var attributes: [NSAttributedString.Key: Any] = cell?.attributes ?? [.writerBlock: block.rawValue, .writerListLevel: level]
             if let language, !language.isEmpty { attributes[.writerCodeLanguage] = language }
-            if let alignment, block.takesAlignment, cell == nil { attributes[.writerAlignment] = alignment.rawValue }
+            if cell == nil { attributes.merge(format.applying(to: block).attributes) { $1 } }
             let start = result.length
             result.append(paragraph)
             result.addAttributes(attributes, range: NSRange(location: start, length: result.length - start))
@@ -395,7 +464,7 @@ enum WriterMarkdown {
         var previousWasCode = false
         for annotated in MarkdownParser.parseAnnotated(markdown) {
             let block = annotated.block
-            alignment = WriterAlignment.from(classes: annotated.classes)
+            format = WriterParagraphFormat(classes: annotated.classes, attributes: annotated.attributes)
             endsWithTable = false
             let followsCode = previousWasCode
             previousWasCode = false
@@ -448,11 +517,17 @@ enum WriterMarkdown {
             case .rule:
                 let attachment = WriterRuleAttachment()
                 add(NSAttributedString(attachment: attachment), block: .rule)
+            case .pageBreak:
+                add(NSAttributedString(attachment: WriterPageBreakAttachment()), block: .rule)
             case .table(let header, let rows, let alignments, let widths):
                 let columns = max(header.count, rows.map(\.count).max() ?? 0, 1)
-                let table = WriterTable(columns: columns, alignments: alignments, widths: widths?.map { CGFloat($0) })
-                for (index, cells) in ([header] + rows).enumerated() {
-                    for column in 0..<columns {
+                let all = [header] + rows
+                // Merged cells and the look come with the cells' marks and the div around the table.
+                let style = annotated.classes.contains(WriterTableStyle.className) ? WriterTableStyle(attributes: annotated.attributes) : WriterTableStyle()
+                let table = WriterTable(columns: columns, alignments: alignments, widths: widths?.map { CGFloat($0) },
+                                        spans: WriterTableMerge.spans(in: all, columns: columns), style: style, rows: all.count)
+                for (index, cells) in all.enumerated() {
+                    for column in 0..<columns where !table.isCovered(row: index, column: column) {
                         let text = column < cells.count ? cells[column] : ""
                         add(inline(cellText(text)), block: .table, cell: WriterTableCell(table: table, row: index, column: column))
                     }
@@ -553,6 +628,22 @@ enum WriterMarkdown {
         func canClose(at position: Int) -> Bool {
             position > 0 && !characters[position - 1].isWhitespace
         }
+        /// `<sup>` and `<sub>` open only when they are closed later, like `<u>`.
+        func toggleTag(_ name: String, _ mark: WriterInline) -> Bool {
+            if !marks.contains(mark), matches("<\(name)>", at: index), closing("</\(name)>", after: index + name.count + 2) != nil {
+                flush()
+                marks.insert(mark)
+                index += name.count + 2
+                return true
+            }
+            if marks.contains(mark), matches("</\(name)>", at: index) {
+                flush()
+                marks.remove(mark)
+                index += name.count + 3
+                return true
+            }
+            return false
+        }
         func toggle(_ mark: WriterInline, token: String) -> Bool {
             if marks.contains(mark) {
                 guard canClose(at: index) else { return false }
@@ -650,6 +741,7 @@ enum WriterMarkdown {
                 index += 4
                 continue
             }
+            if toggleTag("sup", .superscript) || toggleTag("sub", .subscript) { continue }
             if character == "*", toggle(.italic, token: "*") { continue }
             if character == "_" {
                 // Underscores inside words (snake_case) are no emphasis.
@@ -717,7 +809,7 @@ enum WriterMarkdown {
 
     private static func attributes(_ marks: WriterInline, link: String?, bookmark: WriterBookmark?, style: WriterSpanStyle?) -> [NSAttributedString.Key: Any] {
         var attributes: [NSAttributedString.Key: Any] = style?.attributes ?? [:]
-        for mark in [WriterInline.bold, .italic, .underline, .strikethrough, .code] where marks.contains(mark) {
+        for mark in [WriterInline.bold, .italic, .underline, .strikethrough, .code, .superscript, .subscript] where marks.contains(mark) {
             if let attribute = mark.attribute { attributes[attribute.key] = attribute.value }
         }
         if let link { attributes[.link] = link }
@@ -737,8 +829,11 @@ enum WriterMarkdown {
         /// Set for a table cell. A paragraph is a cell when its newline belongs to a table; text typed or pasted
         /// in front of a cell can't make another paragraph one.
         let cell: WriterTableCell?
-        /// Its own alignment (from its first character), for blocks that take one.
-        let alignment: WriterAlignment?
+        /// Its own format (from its first character): what of it the block takes.
+        let format: WriterParagraphFormat
+
+        /// Its own alignment, for blocks that take one.
+        var alignment: WriterAlignment? { format.alignment }
     }
 
     static func paragraphs(of text: NSAttributedString, in range: NSRange? = nil) -> [Paragraph] {
@@ -764,7 +859,7 @@ enum WriterMarkdown {
                 level: attributes[.writerListLevel] as? Int ?? 0,
                 language: attributes[.writerCodeLanguage] as? String,
                 cell: cell,
-                alignment: block.takesAlignment ? (attributes[.writerAlignment] as? String).flatMap(WriterAlignment.init(rawValue:)) : nil
+                format: cell == nil ? WriterParagraphFormat(attributes).applying(to: block) : WriterParagraphFormat()
             ))
             location = NSMaxRange(paragraph)
         } while location < end && location < string.length
@@ -772,10 +867,11 @@ enum WriterMarkdown {
     }
 
     static func markdown(from text: NSAttributedString) -> String {
-        var blocks: [(text: String, alignment: WriterAlignment?)] = []
+        // Each block with the opening line of the div around it (its format, or a table's look).
+        var blocks: [(text: String, div: String?)] = []
         var pending: [String] = []
         var pendingKind: WriterBlock?
-        var pendingAlignment: WriterAlignment?
+        var pendingFormat = WriterParagraphFormat()
         var listCounters: [Int] = []
         var currentLanguage: String?
         var currentTable: WriterTable?
@@ -785,13 +881,13 @@ enum WriterMarkdown {
             defer {
                 pending = []
                 pendingKind = nil
-                pendingAlignment = nil
+                pendingFormat = WriterParagraphFormat()
                 listCounters = []
                 currentTable = nil
                 tableCells = [:]
             }
             if pendingKind == .table, let table = currentTable {
-                blocks.append((tableMarkdown(table, cells: tableCells), nil))
+                blocks.append((tableMarkdown(table, cells: tableCells), table.style.divOpening))
                 return
             }
             guard let kind = pendingKind, !pending.isEmpty else { return }
@@ -800,7 +896,7 @@ enum WriterMarkdown {
                 let language = currentLanguage ?? ""
                 blocks.append(("```\(language)\n" + pending.joined(separator: "\n") + "\n```", nil))
             default:
-                blocks.append((pending.joined(separator: "\n"), pendingAlignment))
+                blocks.append((pending.joined(separator: "\n"), pendingFormat.divOpening))
             }
         }
 
@@ -809,7 +905,7 @@ enum WriterMarkdown {
             let group: WriterBlock = paragraph.block.isList ? .bullet : paragraph.block
             let grouped: Set<WriterBlock> = [.bullet, .quote, .code, .raw, .table]
             if pendingKind != group || !grouped.contains(group) || (group == .table && paragraph.cell?.table !== currentTable)
-                || paragraph.alignment != pendingAlignment { flush() }
+                || paragraph.format != pendingFormat { flush() }
 
             switch paragraph.block {
             case .table:
@@ -838,7 +934,8 @@ enum WriterMarkdown {
             case .raw:
                 pending.append(plainString(content))
             case .rule:
-                pending.append("---")
+                let isPageBreak = text.attribute(.attachment, at: paragraph.range.location, effectiveRange: nil) is WriterPageBreakAttachment
+                pending.append(isPageBreak ? "\\newpage" : "---")
             case .bullet, .numbered:
                 let line = inlineMarkdown(content)
                 guard !line.isEmpty else { continue }
@@ -867,7 +964,7 @@ enum WriterMarkdown {
                 if !line.trimmingCharacters(in: .whitespaces).isEmpty { pending.append(line) }
             }
             pendingKind = group
-            pendingAlignment = paragraph.alignment
+            pendingFormat = paragraph.format
             // A picture that ended up inside text (after joining paragraphs) is kept as a paragraph of its own.
             if !paragraph.block.isEmbed, paragraph.block != .table {
                 let inlineImages = images(in: content)
@@ -880,18 +977,18 @@ enum WriterMarkdown {
         flush()
         // Drop quote lines that were only empty and trailing "> " noise.
         let kept = blocks.filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && $0.text != ">" }
-        // Aligned paragraphs in a row share one div.
+        // Paragraphs in a row that are set alike share one div.
         var output: [String] = []
         var index = 0
         while index < kept.count {
-            let alignment = kept[index].alignment
+            let div = kept[index].div
             var run: [String] = []
-            while index < kept.count, kept[index].alignment == alignment {
+            while index < kept.count, kept[index].div == div {
                 run.append(kept[index].text)
                 index += 1
             }
-            if let alignment {
-                output.append("::: {.\(alignment.rawValue)}\n" + run.joined(separator: "\n\n") + "\n:::")
+            if let div {
+                output.append(div + "\n" + run.joined(separator: "\n\n") + "\n:::")
             } else {
                 output += run
             }
@@ -916,10 +1013,15 @@ enum WriterMarkdown {
     }
 
     private static func tableMarkdown(_ table: WriterTable, cells: [Int: [Int: String]]) -> String {
-        let rows = (cells.keys.max() ?? 0) + 1
+        let rows = max((cells.keys.max() ?? 0) + 1, table.spans.map { $0.key.row + $0.value.rows }.max() ?? 0)
         var lines: [String] = []
         for row in 0..<rows {
-            let values = (0..<table.columns).map { cells[row]?[$0] ?? "" }
+            let values = (0..<table.columns).map { column -> String in
+                if let marker = WriterTableMerge.marker(for: WriterCellPosition(row: row, column: column), in: table.spans) { return marker }
+                let value = cells[row]?[column] ?? ""
+                // A cell that only says "^^" would merge with the one above.
+                return value.trimmingCharacters(in: .whitespaces) == WriterTableMerge.upMarker ? "\\^\\^" : value
+            }
             lines.append("| " + values.joined(separator: " | ") + " |")
             if row == 0 {
                 let dashes = table.widths.map(WriterTable.dashCounts) ?? Array(repeating: 3, count: table.columns)
@@ -947,7 +1049,7 @@ enum WriterMarkdown {
         var openBookmark: WriterBookmark?
         var openStyle: WriterSpanStyle?
         var pendingSpace = ""
-        let order: [WriterInline] = [.bold, .italic, .underline, .strikethrough]
+        let order: [WriterInline] = [.bold, .italic, .underline, .strikethrough, .superscript, .subscript]
 
         func closeMarks() {
             for mark in open.reversed() { output += closingToken(mark) }
@@ -1040,12 +1142,19 @@ enum WriterMarkdown {
         case .italic: "*"
         case .underline: "<u>"
         case .strikethrough: "~~"
+        case .superscript: "<sup>"
+        case .subscript: "<sub>"
         default: ""
         }
     }
 
     private static func closingToken(_ mark: WriterInline) -> String {
-        mark == .underline ? "</u>" : openingToken(mark)
+        switch mark {
+        case .underline: "</u>"
+        case .superscript: "</sup>"
+        case .subscript: "</sub>"
+        default: openingToken(mark)
+        }
     }
 
     /// Backslashes before characters that would otherwise start Markdown.

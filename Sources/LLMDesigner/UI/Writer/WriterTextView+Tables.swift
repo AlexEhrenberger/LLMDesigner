@@ -7,6 +7,15 @@ enum WriterTableAction: Hashable {
     case align(MarkdownBlock.Alignment)
     /// Every column as wide as the others again (their widths were dragged).
     case equalizeColumns
+    /// One cell of the selected ones (their texts one after the other), or of the cell and the one beside or below it.
+    case mergeCells, mergeRight, mergeDown
+    /// The merged cell at the caret becomes single cells again.
+    case splitCell
+    /// The background of the selected cells; nil takes it away.
+    case fill(String?)
+    /// The table's lines in print, and their weight (nil: thin).
+    case lines(WriterTableLines)
+    case lineWidth(Double?)
 }
 
 /// Tables in the editor. Every cell is a paragraph whose attributes name its `WriterTable`, row and column
@@ -42,7 +51,8 @@ extension WriterTextView {
             guard let cell = paragraph.cell, cell.table === table else { continue }
             cells[cell.row, default: [:]][cell.column] = paragraph.contentRange
         }
-        let rows = (cells.keys.max() ?? 0) + 1
+        // Merged cells may reach below the last row that has a paragraph of its own.
+        let rows = max((cells.keys.max() ?? 0) + 1, table.spans.map { $0.key.row + $0.value.rows }.max() ?? 0)
         let grid = (0..<rows).map { row in
             (0..<table.columns).map { cells[row]?[$0] ?? NSRange(location: NSNotFound, length: 0) }
         }
@@ -60,7 +70,7 @@ extension WriterTextView {
 
     /// Puts an empty table below the current paragraph and the caret into its first cell.
     func insertTable(rows: Int, columns: Int) {
-        let table = WriterTable(columns: columns, alignments: [], widths: nil)
+        let table = WriterTable(columns: columns, alignments: [], widths: nil, rows: max(1, rows))
         let text = NSMutableAttributedString()
         for row in 0..<max(1, rows) {
             for column in 0..<table.columns {
@@ -79,20 +89,27 @@ extension WriterTextView {
     func moveToAdjacentCell(forward: Bool) {
         guard let cell = tableCellAtCaret, let model = tableModel(at: selectedRange().location) else { return }
         let columns = model.table.columns
-        let index = cell.row * columns + cell.column + (forward ? 1 : -1)
-        if index < 0 { return }
-        if index >= model.rows * columns {
-            performTableAction(.insertRowBelow)
-            return
-        }
+        var index = cell.row * columns + cell.column
+        // Places that a merged cell covers are passed over.
+        repeat {
+            index += forward ? 1 : -1
+            if index < 0 { return }
+            if index >= model.rows * columns {
+                performTableAction(.insertRowBelow)
+                return
+            }
+        } while model.cells[index / columns][index % columns].location == NSNotFound
         selectCell(row: index / columns, column: index % columns, of: model, selectingText: true)
     }
 
     /// Return: the cell below; in the last row the caret leaves the table.
     func moveToCellBelow() {
         guard let storage = textStorage, let cell = tableCellAtCaret, let model = tableModel(at: selectedRange().location) else { return }
-        if cell.row + 1 < model.rows {
-            selectCell(row: cell.row + 1, column: cell.column, of: model, selectingText: false)
+        let below = cell.row + model.table.span(row: cell.row, column: cell.column).rows
+        if below < model.rows {
+            // Below lies a cell of its own or the merged cell that covers the place.
+            let target = WriterTableMerge.cell(at: WriterCellPosition(row: below, column: cell.column), in: model.table.spans).start
+            selectCell(row: target.row, column: target.column, of: model, selectingText: false)
             return
         }
         let end = NSMaxRange(model.range)
@@ -124,29 +141,43 @@ extension WriterTextView {
         var alignments = model.table.alignments
         // The columns' shares; a new column gets an average one, the rest make room.
         var widths = model.table.widths
+        var spans = model.table.spans
+        var style = model.table.style
         var caret = (row: cell.row, column: cell.column)
+        let span = model.table.span(row: cell.row, column: cell.column)
         let empty = NSAttributedString()
 
         switch action {
         case .insertRowAbove, .insertRowBelow:
-            let row = action == .insertRowAbove ? cell.row : cell.row + 1
+            let row = action == .insertRowAbove ? cell.row : cell.row + span.rows
             contents.insert(Array(repeating: empty, count: model.table.columns), at: row)
-            caret = (row, action == .insertRowBelow && cell.column == model.table.columns - 1 && cell.row == model.rows - 1 ? 0 : cell.column)
+            (spans, style.fills) = WriterTableMerge.inserting(at: row, isRow: true, spans: spans, fills: style.fills)
+            caret = (row, action == .insertRowBelow && cell.column == model.table.columns - 1 && row == model.rows ? 0 : cell.column)
         case .insertColumnLeft, .insertColumnRight:
-            let column = action == .insertColumnLeft ? cell.column : cell.column + 1
+            let column = action == .insertColumnLeft ? cell.column : cell.column + span.columns
             for row in contents.indices { contents[row].insert(empty, at: column) }
             alignments.insert(.leading, at: column)
             widths?.insert(1 / CGFloat(model.table.columns), at: column)
+            (spans, style.fills) = WriterTableMerge.inserting(at: column, isRow: false, spans: spans, fills: style.fills)
             caret = (cell.row, column)
         case .deleteRow:
             guard model.rows > 1 else { return deleteTable(model) }
+            // A merged cell that begins in this row and goes on keeps its text in the row that moves up.
+            for (start, merged) in spans where start.row == cell.row && merged.rows > 1 && start.row + 1 < contents.count {
+                contents[start.row + 1][start.column] = contents[start.row][start.column]
+            }
             contents.remove(at: cell.row)
+            (spans, style.fills) = WriterTableMerge.removing(at: cell.row, isRow: true, spans: spans, fills: style.fills)
             caret = (min(cell.row, contents.count - 1), cell.column)
         case .deleteColumn:
             guard model.table.columns > 1 else { return deleteTable(model) }
+            for (start, merged) in spans where start.column == cell.column && merged.columns > 1 && start.column + 1 < model.table.columns {
+                contents[start.row][start.column + 1] = contents[start.row][start.column]
+            }
             for row in contents.indices { contents[row].remove(at: cell.column) }
             alignments.remove(at: cell.column)
             widths?.remove(at: cell.column)
+            (spans, style.fills) = WriterTableMerge.removing(at: cell.column, isRow: false, spans: spans, fills: style.fills)
             caret = (cell.row, min(cell.column, alignments.count - 1))
         case .deleteTable:
             return deleteTable(model)
@@ -156,19 +187,102 @@ extension WriterTextView {
         case .equalizeColumns:
             guard widths != nil else { return }
             return setColumnWidths(nil, of: model)
+        case .mergeCells, .mergeRight, .mergeDown:
+            let first = WriterCellPosition(row: cell.row, column: cell.column)
+            var last = WriterCellPosition(row: cell.row + span.rows - 1, column: cell.column + span.columns - 1)
+            switch action {
+            case .mergeRight:
+                guard last.column + 1 < model.table.columns else { return }
+                last.column += 1
+            case .mergeDown:
+                guard last.row + 1 < model.rows else { return }
+                last.row += 1
+            default:
+                let selected = selectedCellPositions(in: model)
+                guard selected.count > 1, let top = selected.min(), let bottom = selected.max() else { return }
+                return merge(model, from: WriterCellPosition(row: top.row, column: selected.map(\.column).min() ?? top.column),
+                             to: WriterCellPosition(row: bottom.row, column: selected.map(\.column).max() ?? bottom.column),
+                             contents: contents, alignments: alignments, widths: widths, style: style)
+            }
+            return merge(model, from: first, to: last, contents: contents, alignments: alignments, widths: widths, style: style)
+        case .splitCell:
+            guard !span.isSingle else { return }
+            spans[WriterCellPosition(row: cell.row, column: cell.column)] = nil
+        case .fill(let color):
+            let places = selectedCellPositions(in: model)
+            let targets = places.isEmpty ? [WriterCellPosition(row: cell.row, column: cell.column)] : places
+            for place in targets { style.fills[place] = color }
+            return setTableStyle(style, of: model)
+        case .lines(let lines):
+            guard style.lines != lines else { return }
+            style.lines = lines
+            return setTableStyle(style, of: model)
+        case .lineWidth(let width):
+            guard style.lineWidth != width else { return }
+            style.lineWidth = width
+            return setTableStyle(style, of: model)
         }
-        rebuild(model, contents: contents, alignments: alignments, widths: widths, caret: caret)
+        rebuild(model, contents: contents, alignments: alignments, widths: widths, spans: spans, style: style, caret: caret)
     }
 
-    /// Replaces the table with a new one of these cells, in one undoable step, and puts the caret at the end
-    /// of the text of the cell `caret`.
+    /// The places of the cells the selection touches (merged cells by their first place); empty without a selection.
+    func selectedCellPositions(in model: TableModel) -> [WriterCellPosition] {
+        let range = selectedRange()
+        guard range.length > 0, let storage = textStorage else { return [] }
+        var places: [WriterCellPosition] = []
+        for paragraph in WriterMarkdown.paragraphs(of: storage, in: NSIntersectionRange(range, model.range)) {
+            guard let cell = paragraph.cell, cell.table === model.table else { continue }
+            places.append(WriterCellPosition(row: cell.row, column: cell.column))
+        }
+        return places
+    }
+
+    /// Merges the cells from `first` to `last` (grown so no merged cell sticks out) into one: its text is theirs one
+    /// after the other, its colour the first one's.
+    private func merge(_ model: TableModel, from first: WriterCellPosition, to last: WriterCellPosition, contents: [[NSAttributedString]],
+                       alignments: [MarkdownBlock.Alignment], widths: [CGFloat]?, style: WriterTableStyle) {
+        let area = WriterTableMerge.enclosingRectangle(first, last, spans: model.table.spans)
+        guard area.bottom > area.top || area.right > area.left else { return }
+        var contents = contents
+        var style = style
+        var spans = model.table.spans.filter { start, _ in
+            !((area.top...area.bottom).contains(start.row) && (area.left...area.right).contains(start.column))
+        }
+        let anchor = WriterCellPosition(row: area.top, column: area.left)
+        spans[anchor] = WriterCellSpan(rows: area.bottom - area.top + 1, columns: area.right - area.left + 1)
+        let joined = NSMutableAttributedString()
+        var fill: String?
+        for row in area.top...area.bottom {
+            for column in area.left...area.right {
+                let place = WriterCellPosition(row: row, column: column)
+                fill = fill ?? style.fills[place]
+                if place != anchor { style.fills[place] = nil }
+                let text = contents[row][column]
+                guard text.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else { continue }
+                if joined.length > 0 { joined.append(NSAttributedString(string: " ", attributes: text.attributes(at: 0, effectiveRange: nil))) }
+                joined.append(text)
+                contents[row][column] = NSAttributedString()
+            }
+        }
+        contents[anchor.row][anchor.column] = joined
+        style.fills[anchor] = fill
+        rebuild(model, contents: contents, alignments: alignments, widths: widths, spans: spans, style: style, caret: (anchor.row, anchor.column))
+    }
+
+    /// Gives the table another look in one undoable step; the text and the caret stay.
+    func setTableStyle(_ style: WriterTableStyle, of model: TableModel) {
+        replaceTable(model, with: model.table.with(style: style))
+    }
+
+    /// Replaces the cells of a table with these, in one undoable step, and puts the caret at the end of the text of
+    /// the cell `caret`. Places that merged cells cover get no paragraph.
     private func rebuild(_ model: TableModel, contents: [[NSAttributedString]], alignments: [MarkdownBlock.Alignment], widths: [CGFloat]?,
-                         caret: (row: Int, column: Int)) {
-        let table = WriterTable(columns: alignments.count, alignments: alignments, widths: widths)
+                         spans: [WriterCellPosition: WriterCellSpan], style: WriterTableStyle, caret: (row: Int, column: Int)) {
+        let table = WriterTable(columns: alignments.count, alignments: alignments, widths: widths, spans: spans, style: style, rows: contents.count)
         let text = NSMutableAttributedString()
         var caretLocation = model.range.location
         for (row, cells) in contents.enumerated() {
-            for (column, content) in cells.enumerated() {
+            for (column, content) in cells.enumerated() where !table.isCovered(row: row, column: column) {
                 let start = text.length
                 text.append(content)
                 text.append(NSAttributedString(string: "\n"))
@@ -192,8 +306,13 @@ extension WriterTextView {
     /// The table at the caret for the toolbar.
     var tableState: State.TableState? {
         guard let cell = tableCellAtCaret, let model = tableModel(at: selectedRange().location) else { return nil }
+        let span = model.table.span(row: cell.row, column: cell.column)
+        let style = model.table.style
         return State.TableState(row: cell.row, column: cell.column, rows: model.rows, columns: model.table.columns,
-                                alignment: model.table.alignment(of: cell.column), hasOwnWidths: model.table.widths != nil)
+                                alignment: model.table.alignment(of: cell.column), hasOwnWidths: model.table.widths != nil,
+                                selectedCells: selectedCellPositions(in: model).count, isMerged: !span.isSingle,
+                                canMergeRight: cell.column + span.columns < model.table.columns, canMergeDown: cell.row + span.rows < model.rows,
+                                fill: style.fills[WriterCellPosition(row: cell.row, column: cell.column)], lines: style.lines, lineWidth: style.lineWidth)
     }
 
     /// An edit of the table's structure (or of text around it) that is already safe: undoable, one step, and
@@ -330,10 +449,11 @@ extension WriterTextView {
         guard glyph < layoutManager.numberOfGlyphs else { return nil }
         let character = layoutManager.characterIndexForGlyph(at: glyph)
         guard character < storage.length, let model = tableModel(at: character), model.table.columns > 1,
-              let first = cellBounds(model, row: 0), let last = cellBounds(model, row: model.rows - 1) else { return nil }
-        let top = first.map(\.bounds.minY).min() ?? 0
-        let bottom = last.map(\.bounds.maxY).max() ?? 0
-        guard inContainer.y >= top - 2, inContainer.y <= bottom + 2 else { return nil }
+              // The columns' edges come from a row of single cells; merged ones reach over them.
+              let first = (0..<model.rows).lazy.compactMap({ self.cellBounds(model, row: $0) }).first else { return nil }
+        let glyphs = layoutManager.glyphRange(forCharacterRange: model.range, actualCharacterRange: nil)
+        let whole = layoutManager.boundingRect(forGlyphRange: glyphs, in: container)
+        guard inContainer.y >= whole.minY - 2, inContainer.y <= whole.maxY + 2 else { return nil }
         let edges = first.map { $0.bounds.minX + origin.x } + [(first.last?.bounds.maxX ?? 0) + origin.x]
         let textWidth = first.map(\.content.width).reduce(0, +)
         for column in 0..<(model.table.columns - 1) where abs(point.x - edges[column + 1]) <= 4 {
@@ -348,7 +468,7 @@ extension WriterTextView {
         var result: [(bounds: NSRect, content: NSRect)] = []
         for column in 0..<model.table.columns {
             let content = model.cells[row][column]
-            guard content.location != NSNotFound, content.location < storage.length,
+            guard content.location != NSNotFound, content.location < storage.length, model.table.span(row: row, column: column).columns == 1,
                   let style = storage.attribute(.paragraphStyle, at: content.location, effectiveRange: nil) as? NSParagraphStyle,
                   let block = style.textBlocks.last as? NSTextTableBlock else { return nil }
             let glyphs = layoutManager.glyphRange(forCharacterRange: NSRange(location: content.location, length: min(content.length + 1, storage.length - content.location)),
@@ -371,7 +491,7 @@ extension WriterTextView {
         var moved = false
 
         func show(_ widths: [CGFloat]?, table: WriterTable? = nil) {
-            let shown = table ?? WriterTable(columns: model.table.columns, alignments: model.table.alignments, widths: widths)
+            let shown = table ?? model.table.with(widths: .some(widths))
             storage.beginEditing()
             storage.addAttribute(.writerTable, value: shown, range: model.range)
             storage.endEditing()
@@ -396,8 +516,12 @@ extension WriterTextView {
 
     /// Gives the table these column shares (nil: equal columns) in one undoable step; the text and the caret stay.
     func setColumnWidths(_ widths: [CGFloat]?, of model: TableModel) {
+        replaceTable(model, with: model.table.with(widths: .some(widths)))
+    }
+
+    /// Puts another `WriterTable` (same cells, other widths or look) on every cell in one undoable step.
+    private func replaceTable(_ model: TableModel, with table: WriterTable) {
         guard let storage = textStorage else { return }
-        let table = WriterTable(columns: model.table.columns, alignments: model.table.alignments, widths: widths)
         let selection = selectedRange()
         guard shouldChangeText(in: model.range, replacementString: nil) else { return }
         storage.beginEditing()
@@ -432,6 +556,38 @@ extension WriterTextView {
         item("Spalte rechtsbündig", "text.alignright", .align(.trailing), on: state.alignment == .trailing)
         item("Spalten gleich breit", "rectangle.split.3x1", .equalizeColumns, enabled: state.hasOwnWidths)
         menu.addItem(.separator())
+        if state.selectedCells > 1 {
+            item("Zellen verbinden", "rectangle.compress.vertical", .mergeCells)
+        } else {
+            item("Mit Zelle rechts verbinden", "arrow.right.to.line.compact", .mergeRight, enabled: state.canMergeRight)
+            item("Mit Zelle darunter verbinden", "arrow.down.to.line.compact", .mergeDown, enabled: state.canMergeDown)
+        }
+        item("Verbindung aufheben", "rectangle.split.2x1", .splitCell, enabled: state.isMerged)
+        let lines = NSMenu()
+        for option in WriterTableLines.allCases {
+            let entry = ClosureMenuItem(title: option.label) { [weak self] in self?.performTableAction(.lines(option)) }
+            entry.state = state.lines == option ? .on : .off
+            lines.addItem(entry)
+        }
+        let linesItem = NSMenuItem(title: "Linien im Druck", action: nil, keyEquivalent: "")
+        linesItem.image = NSImage(systemSymbolName: "squareshape.split.3x3", accessibilityDescription: nil)
+        linesItem.submenu = lines
+        menu.addItem(linesItem)
+        let fills = NSMenu()
+        let none = ClosureMenuItem(title: "Keine") { [weak self] in self?.performTableAction(.fill(nil)) }
+        none.state = state.fill == nil ? .on : .off
+        fills.addItem(none)
+        for entry in WriterColors.cellPalette {
+            let item = ClosureMenuItem(title: entry.name) { [weak self] in self?.performTableAction(.fill(entry.printHex)) }
+            item.image = Self.swatchImage(NSColor(hex: entry.print))
+            item.state = state.fill == entry.printHex ? .on : .off
+            fills.addItem(item)
+        }
+        let fillItem = NSMenuItem(title: "Zellfarbe", action: nil, keyEquivalent: "")
+        fillItem.image = NSImage(systemSymbolName: "paintbrush", accessibilityDescription: nil)
+        fillItem.submenu = fills
+        menu.addItem(fillItem)
+        menu.addItem(.separator())
         item("Zeile löschen", "minus.square", .deleteRow)
         item("Spalte löschen", "minus.rectangle.portrait", .deleteColumn)
         item("Tabelle löschen", "trash", .deleteTable)
@@ -439,6 +595,21 @@ extension WriterTextView {
         entry.image = NSImage(systemSymbolName: "tablecells", accessibilityDescription: nil)
         entry.submenu = menu
         return entry
+    }
+}
+
+extension WriterTextView {
+    /// A small round swatch for a menu entry.
+    static func swatchImage(_ color: NSColor) -> NSImage {
+        NSImage(size: NSSize(width: 14, height: 14), flipped: false) { rect in
+            let path = NSBezierPath(roundedRect: rect.insetBy(dx: 1, dy: 1), xRadius: 3, yRadius: 3)
+            color.setFill()
+            path.fill()
+            NSColor.black.withAlphaComponent(0.25).setStroke()
+            path.lineWidth = 1
+            path.stroke()
+            return true
+        }
     }
 }
 

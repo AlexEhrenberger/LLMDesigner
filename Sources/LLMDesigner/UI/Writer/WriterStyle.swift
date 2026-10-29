@@ -18,12 +18,26 @@ struct WriterPalette: Equatable {
     let rule: NSColor
     let tableBorder: NSColor
     let tableHeader: NSColor
+    /// A table's printed lines (`WriterTableLines`), stronger than the helper lines between other cells.
+    var tableLine: NSColor { text.withAlphaComponent(isLight ? 0.55 : 0.5) }
     /// Slides: title slides centre their text; documents keep it natural.
     var alignment: NSTextAlignment = .natural
     /// A slide's text over its background: nothing of the page is drawn.
     var isSlide = false
     /// How the document's page is set: DIN A4, paperback or Normseite (see WriterStyle+Pages.swift).
     var format: WriterPageFormat = .standard
+    /// The user's own paper and text size, for `format == .custom`.
+    var pageSetup: WriterPageSetup?
+
+    /// The text size in print: the format's, or the user's own.
+    var printSize: CGFloat {
+        format == .custom ? CGFloat(pageSetup?.fontSize ?? Double(WriterFont.printSize)) : format.printSize
+    }
+
+    /// Screen points per point of print for this family on this page.
+    func screenScale(_ family: WriterFont) -> CGFloat {
+        family.screenScale(onSlide: isSlide, format: format, printSize: printSize)
+    }
 
     static let dark = WriterPalette(
         isLight: false,
@@ -66,9 +80,10 @@ struct WriterPalette: Equatable {
 
 extension WriterPalette {
     /// The same colours on a page of this format.
-    func with(format: WriterPageFormat) -> WriterPalette {
+    func with(format: WriterPageFormat, setup: WriterPageSetup? = nil) -> WriterPalette {
         var palette = self
         palette.format = format
+        palette.pageSetup = format == .custom ? setup ?? WriterPageSetup() : nil
         return palette
     }
 
@@ -182,7 +197,8 @@ enum WriterStyler {
     }
 
     static func paragraphStyle(_ block: WriterBlock, level: Int, family: WriterFont, previous: WriterBlock?, next: WriterBlock?,
-                               cell: WriterTableCell? = nil, alignment: WriterAlignment? = nil, palette: WriterPalette = .dark) -> NSParagraphStyle {
+                               cell: WriterTableCell? = nil, format: WriterParagraphFormat = WriterParagraphFormat(),
+                               palette: WriterPalette = .dark) -> NSParagraphStyle {
         let style = NSMutableParagraphStyle()
         style.lineHeightMultiple = 1.32
         style.paragraphSpacing = 10
@@ -251,8 +267,14 @@ enum WriterStyler {
         if palette.alignment != .natural, cell == nil, [.paragraph, .chapter, .heading1, .heading2, .heading3].contains(block) {
             style.alignment = palette.alignment
         }
-        // The paragraph's own alignment wins over both.
-        if let alignment, cell == nil, block.takesAlignment { style.alignment = alignment.textAlignment }
+        // The paragraph's own alignment wins over both; its indents and line spacing come on top of the block's.
+        let own = cell == nil ? format.applying(to: block) : WriterParagraphFormat()
+        if let alignment = own.alignment { style.alignment = alignment.textAlignment }
+        own.apply(to: style, scale: palette.screenScale(family))
+        // The text of the user's own format is set with its line spacing.
+        if let setup = palette.pageSetup, cell == nil, abs(setup.lineSpacing - 1) > 0.001, block != .code, block != .raw, !block.isEmbed, block != .rule {
+            style.lineHeightMultiple *= CGFloat(setup.lineSpacing)
+        }
         return style
     }
 
@@ -263,21 +285,39 @@ enum WriterStyler {
         return palette.alignment == .center && [.paragraph, .chapter, .heading1, .heading2, .heading3].contains(block) ? .center : .left
     }
 
-    /// The cell's box in AppKit's table: thin lines, a little room around the text, a tinted header row.
+    /// The cell's box in AppKit's table: the table's lines strong and the others faint, a little room around the text,
+    /// the cell's colour or a tinted header row. A merged cell reaches over its rows and columns.
     private static func tableBlock(_ cell: WriterTableCell, palette: WriterPalette) -> NSTextTableBlock {
-        let block = NSTextTableBlock(table: cell.table.textTable, startingRow: cell.row, rowSpan: 1, startingColumn: cell.column, columnSpan: 1)
-        block.setWidth(1, type: .absoluteValueType, for: .border)
-        block.setBorderColor(palette.tableBorder)
+        let table = cell.table
+        let span = table.span(row: cell.row, column: cell.column)
+        let block = NSTextTableBlock(table: table.textTable, startingRow: cell.row, rowSpan: span.rows, startingColumn: cell.column, columnSpan: span.columns)
+        let style = table.style
+        let edges: [(WriterCellEdge, NSRectEdge)] = [(.top, .minY), (.bottom, .maxY), (.left, .minX), (.right, .maxX)]
+        // The rows the table has: AppKit doesn't say, the cells' places do (`rowCount` is set when the table is read).
+        let rows = max(table.rowCount, cell.row + span.rows)
+        for (edge, rectEdge) in edges {
+            let printed = style.lines.hasLine(edge, row: cell.row, rowEnd: cell.row + span.rows, column: cell.column,
+                                              columnEnd: cell.column + span.columns, rows: rows, columns: table.columns)
+            let heavy = style.lines.isHeavy(edge, row: cell.row, rowEnd: cell.row + span.rows, rows: rows)
+            let width: CGFloat = printed ? (style.printWidth(heavy: heavy) >= 0.79 ? 2 : 1) * (style.lineWidth.map { $0 >= 1.5 ? 1.5 : 1 } ?? 1) : 1
+            block.setWidth(width, type: .absoluteValueType, for: .border, edge: rectEdge)
+            block.setBorderColor(printed ? palette.tableLine : palette.tableBorder.withAlphaComponent(0.35), for: rectEdge)
+        }
         block.setWidth(9, type: .absoluteValueType, for: .padding, edge: .minX)
         block.setWidth(9, type: .absoluteValueType, for: .padding, edge: .maxX)
         block.setWidth(5, type: .absoluteValueType, for: .padding, edge: .minY)
         block.setWidth(6, type: .absoluteValueType, for: .padding, edge: .maxY)
         // A share of the text width, like the shares LaTeX gets (`X` columns without their padding).
         if cell.table.widths != nil {
-            block.setContentWidth(cell.table.width(of: cell.column) * 100, type: .percentageValueType)
+            let share = (cell.column..<min(cell.column + span.columns, table.columns)).map { table.width(of: $0) }.reduce(0, +)
+            block.setContentWidth(share * 100, type: .percentageValueType)
         }
         block.verticalAlignment = .topAlignment
-        if cell.row == 0 { block.backgroundColor = palette.tableHeader }
+        if let fill = style.fills[WriterCellPosition(row: cell.row, column: cell.column)] {
+            block.backgroundColor = WriterColors.cellFill(fill, onDark: !palette.isLight)
+        } else if cell.row == 0 {
+            block.backgroundColor = palette.tableHeader
+        }
         return block
     }
 
@@ -300,7 +340,7 @@ enum WriterStyler {
         let passage = WriterSpanStyle(semantic)
         let family = passage.font ?? family
         let color = passage.color.flatMap { WriterColors.display($0, onDark: !palette.isLight) }
-        let ownSize = passage.size.map { CGFloat($0) * family.screenScale(onSlide: palette.isSlide, format: palette.format) }
+        let ownSize = passage.size.map { CGFloat($0) * palette.screenScale(family) }
         if marks.contains(.code) {
             let size = (ownSize ?? blockFont(block, family: family, format: palette.format).pointSize) * 0.86
             attributes[.font] = font(family, size: size, weight: marks.contains(.bold) ? .semibold : .regular, monospaced: true)
@@ -322,11 +362,17 @@ enum WriterStyler {
         if let ownSize, let current = attributes[.font] as? NSFont {
             attributes[.font] = current.withSize(ownSize)
         }
+        // Raised and lowered text: smaller, off the baseline.
+        if marks.contains(.superscript) || marks.contains(.subscript), let current = attributes[.font] as? NSFont {
+            let size = current.pointSize
+            attributes[.font] = current.withSize((size * 0.68).rounded())
+            attributes[.baselineOffset] = marks.contains(.superscript) ? (size * 0.36).rounded() : -(size * 0.16).rounded()
+        }
         attributes[.foregroundColor] = color ?? (block == .quote ? palette.secondaryText : palette.text)
         return attributes
     }
 
-    private static let displayKeys: [NSAttributedString.Key] = [.font, .foregroundColor, .backgroundColor, .paragraphStyle, .obliqueness]
+    private static let displayKeys: [NSAttributedString.Key] = [.font, .foregroundColor, .backgroundColor, .paragraphStyle, .obliqueness, .baselineOffset]
 
     /// Restyles whole paragraphs around `range`: every paragraph gets one block (taken from its first character),
     /// then fonts, colours and spacing follow from the meaning attributes.
@@ -359,12 +405,12 @@ enum WriterStyler {
             var semantic: [NSAttributedString.Key: Any] = paragraph.cell?.attributes
                 ?? [.writerBlock: block.rawValue, .writerListLevel: block.isList ? paragraph.level : 0]
             if block == .code, let language = paragraph.language { semantic[.writerCodeLanguage] = language }
-            // The whole paragraph is aligned like its first character.
-            let alignment = block.takesAlignment && paragraph.cell == nil ? paragraph.alignment : nil
-            if let alignment { semantic[.writerAlignment] = alignment.rawValue }
+            // The whole paragraph is set like its first character: alignment, line spacing, indents.
+            let format = paragraph.cell == nil ? paragraph.format.applying(to: block) : WriterParagraphFormat()
+            semantic.merge(format.attributes) { $1 }
             storage.addAttributes(semantic, range: paragraph.range)
             if block != .code { storage.removeAttribute(.writerCodeLanguage, range: paragraph.range) }
-            if alignment == nil { storage.removeAttribute(.writerAlignment, range: paragraph.range) }
+            for key in WriterParagraphFormat.keys where semantic[key] == nil { storage.removeAttribute(key, range: paragraph.range) }
             // Code has no sizes of its own.
             if block == .code || block == .raw { storage.removeAttribute(.writerFontSize, range: paragraph.range) }
             if paragraph.cell == nil {
@@ -374,7 +420,7 @@ enum WriterStyler {
             let previous = index > 0 ? paragraphs[index - 1].block : previousBlock(in: storage, before: paragraph.range.location)
             let next = index + 1 < paragraphs.count ? paragraphs[index + 1].block : nextBlock(in: storage, after: NSMaxRange(paragraph.range))
             let style = paragraphStyle(block, level: paragraph.level, family: family, previous: previous, next: next, cell: paragraph.cell,
-                                       alignment: alignment, palette: palette)
+                                       format: format, palette: palette)
 
             for key in displayKeys { storage.removeAttribute(key, range: paragraph.range) }
             storage.addAttribute(.paragraphStyle, value: style, range: paragraph.range)
@@ -409,21 +455,23 @@ enum WriterStyler {
     /// Typing attributes for a paragraph with this block and these marks.
     static func typingAttributes(block: WriterBlock, level: Int, semantic: [NSAttributedString.Key: Any], family: WriterFont, palette: WriterPalette) -> [NSAttributedString.Key: Any] {
         var attributes = semantic.filter {
-            [.writerBold, .writerItalic, .writerCode, .underlineStyle, .strikethroughStyle, .link, .writerColor, .writerFont, .writerFontSize, .writerAlignment].contains($0.key)
+            (WriterInline.keys + [.link] + WriterMarkdown.passageKeys + WriterParagraphFormat.keys).contains($0.key)
         }
         // Code has no colours, fonts or sizes of its own.
         if block == .code || block == .raw {
             for key in WriterMarkdown.passageKeys { attributes.removeValue(forKey: key) }
         }
-        if !block.takesAlignment { attributes.removeValue(forKey: .writerAlignment) }
+        let paragraphFormat = WriterParagraphFormat(attributes).applying(to: block)
+        for key in WriterParagraphFormat.keys { attributes.removeValue(forKey: key) }
+        attributes.merge(paragraphFormat.attributes) { $1 }
         let cell = block == .table ? WriterTableCell(semantic) : nil
         let block: WriterBlock = block == .table && cell == nil ? .paragraph : block
         attributes[.writerBlock] = block.rawValue
         attributes[.writerListLevel] = block.isList ? level : 0
         if let cell { attributes.merge(cell.attributes) { $1 } }
         attributes.merge(displayAttributes(for: attributes, block: block, family: family, palette: palette)) { $1 }
-        let alignment = (attributes[.writerAlignment] as? String).flatMap(WriterAlignment.init(rawValue:))
-        attributes[.paragraphStyle] = paragraphStyle(block, level: level, family: family, previous: nil, next: nil, cell: cell, alignment: alignment, palette: palette)
+        attributes[.paragraphStyle] = paragraphStyle(block, level: level, family: family, previous: nil, next: nil, cell: cell,
+                                                     format: cell == nil ? paragraphFormat : WriterParagraphFormat(), palette: palette)
         return attributes
     }
 
@@ -434,7 +482,7 @@ enum WriterStyler {
         let family = passage.font ?? family
         let isHeader = block == .table && semantic[.writerTableRow] as? Int == 0
         let screen = blockFont(block, family: family, bold: isHeader, format: palette.format).pointSize
-        return (Double(screen / family.screenScale(onSlide: palette.isSlide, format: palette.format)) * 2).rounded() / 2
+        return (Double(screen / palette.screenScale(family)) * 2).rounded() / 2
     }
 }
 

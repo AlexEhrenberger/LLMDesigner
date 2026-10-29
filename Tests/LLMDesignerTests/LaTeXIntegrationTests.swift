@@ -110,3 +110,75 @@ struct LaTeXIntegrationTests {
         }
     }
 }
+
+@Suite("LaTeX-Satz: Seiten, Tabellen, Absätze")
+struct LaTeXFormattingIntegrationTests {
+    @Test func pagesTablesAndParagraphsCompile() async throws {
+        guard let engine = LaTeXEngine.locate() else { return }
+        let markdown = """
+        # Erstes Kapitel
+
+        Ein Absatz mit x<sup>2</sup>, H<sub>2</sub>O und ~~durchgestrichen~~.
+
+        ::: {.justify line-spacing=1.5 indent=1cm right-indent=0.5cm first-line=-0.75cm}
+        Ein hängender Absatz mit anderthalbfachem Zeilenabstand, lang genug für mehrere Zeilen, damit man den Einzug und die Einrückung links und rechts sieht. Noch ein Satz.
+        :::
+
+        ::: {line-spacing=2}
+        - Doppelt
+        - Gesetzt
+        :::
+
+        \\newpage
+
+        # Zweites Kapitel
+
+        ::: {.table lines=grid line-width=1 fill=0.0:FFF2CC,1.0:E2EFDA,2.1:DDEBF7}
+        | Name | Werte | << |
+        | --- | --- | --- |
+        | a | 1 | 2 |
+        | ^^ | 3 | 4 |
+        | b | 5 | 6 |
+        :::
+
+        ::: {.table lines=horizontal}
+        | A | B | C |
+        | :-: | --- | --: |
+        | über zwei | << | x |
+        | y | z | ^^ |
+        :::
+
+        ::: {.table lines=frame}
+        | A | B |
+        | --- | --- |
+        | 1 | 2 |
+        :::
+
+        ::: {.table lines=none}
+        | A | B |
+        | --- | --- |
+        | 1 | 2 |
+        :::
+
+        | Buch | Satz | << |
+        | ---- | -------------- | ------------------------------------------------------------------------------------ |
+        | ^^ | eins | zwei |
+        | drei | vier | fünf |
+
+        """
+        var part = LaTeXWriter.Part(text: markdown)
+        part.figures = [:]
+        let setup = WriterPageSetup(name: "A5", paperWidth: 148, paperHeight: 210, top: 20, bottom: 22, left: 18, right: 16, fontSize: 10.5, lineSpacing: 1.15)
+        let heads = WriterRunningHeads(header: .init(left: "{Titel}", center: "", right: "{Kapitel}"),
+                                       footer: .init(left: "{Datum}", center: "Seite {Seite} von {Seiten}", right: ""), skipsFirstPage: true, hasRules: true)
+        for (format, design) in [(WriterPageFormat.custom, WriterPageDesign(setup: setup, runningHeads: heads, title: "Bericht & Co")),
+                                 (.standard, WriterPageDesign(runningHeads: heads, title: "Bericht")), (.paperback, WriterPageDesign()),
+                                 (.manuscript, WriterPageDesign(runningHeads: heads, title: "Roman"))] {
+            let pdf = try await engine.makePDF(parts: [part], paper: .a4, typeface: .serif, format: format, design: design)
+            #expect(pdf.count > 5_000)
+            if let directory = ProcessInfo.processInfo.environment["LLMD_PDF_OUT"] {
+                try pdf.write(to: URL(fileURLWithPath: directory).appendingPathComponent("formatting-\(format.rawValue).pdf"))
+            }
+        }
+    }
+}

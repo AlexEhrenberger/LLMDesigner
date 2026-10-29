@@ -47,6 +47,13 @@ final class WriterEditorController {
     func setBlock(_ block: WriterBlock, toggle: Bool = true) { perform { $0.setBlock(block, toggle: toggle) } }
     func changeListLevel(by step: Int) { perform { $0.changeListLevel(by: step) } }
     func insertRule() { perform { $0.insertRule() } }
+    func insertPageBreak() { perform { $0.insertPageBreak() } }
+    func setLineSpacing(_ value: Double?) { perform { $0.setLineSpacing(value) } }
+    func setIndents(left: Double? = nil, right: Double? = nil, firstLine: Double? = nil) {
+        perform { $0.setIndents(left: left, right: right, firstLine: firstLine) }
+    }
+    func changeIndent(by step: Int) { perform { $0.changeIndent(by: step) } }
+    func clearParagraphFormat() { perform { $0.clearParagraphFormat() } }
     func editLink() { perform { $0.editLink() } }
     func insertTable(rows: Int, columns: Int) { perform { $0.insertTable(rows: rows, columns: columns) } }
     func tableAction(_ action: WriterTableAction) { perform { $0.performTableAction(action) } }
@@ -237,6 +244,7 @@ struct WriterEditor: NSViewRepresentable {
         textView.onReadAloud = { [weak controller] in controller?.readAloud() }
         textView.onSlideOverflow = { [weak controller] overflows in controller?.slideOverflows = overflows }
         textView.onPageCount = { [weak controller] count in controller?.pageCount = count }
+        textView.onEditRunningHeads = { [weak app] in app?.writerPageSheet = .runningHeads }
         textView.onDictate = { [weak controller] in controller?.toggleDictation() }
         textView.onStopReading = { [weak app] in app?.stopReadingDocument() }
         textView.onNotice = { [weak app] in app?.showNotice($0) }
@@ -322,6 +330,10 @@ struct WriterEditor: NSViewRepresentable {
             return
         }
         textView.dynamicOutline = document.outline
+        if slide == nil {
+            textView.runningHeads = document.runningHeads
+            textView.documentTitle = document.displayTitle
+        }
         if let slide, textView.slideLayout != slide.layout {
             let restyles = !slide.layout.sameText(as: textView.slideLayout)
             textView.slideLayout = slide.layout
@@ -365,6 +377,8 @@ struct WriterEditor: NSViewRepresentable {
             knownMarkdown = slide?.markdown ?? document.markdown
             isDirty = false
             textView.dynamicOutline = document.outline
+            textView.runningHeads = slide == nil ? document.runningHeads : nil
+            textView.documentTitle = document.displayTitle
             // Citations are drawn in the style of this document's sources.
             textView.citations?.loadIfNeeded()
             textView.citationStyleCache = nil

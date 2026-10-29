@@ -127,6 +127,29 @@ enum WriterColors {
         return NSColor(hex: value)
     }
 
+    /// Light backgrounds for table cells, as they are printed.
+    static let cellPalette: [Entry] = [
+        Entry(name: "Gelb", print: 0xFFF2CC, dark: 0x4D4320),
+        Entry(name: "Orange", print: 0xFCE4D6, dark: 0x4F3222),
+        Entry(name: "Rot", print: 0xF8D7DA, dark: 0x4F2629),
+        Entry(name: "Rosa", print: 0xF6DDEB, dark: 0x4A2539),
+        Entry(name: "Violett", print: 0xE4DFEC, dark: 0x382E4D),
+        Entry(name: "Blau", print: 0xDDEBF7, dark: 0x213A52),
+        Entry(name: "Türkis", print: 0xD9F2F0, dark: 0x1D4542),
+        Entry(name: "Grün", print: 0xE2EFDA, dark: 0x2A4224),
+        Entry(name: "Grau", print: 0xEDEDED, dark: 0x3A3A40),
+    ]
+
+    /// A cell's background as it is shown: on dark paper a palette colour becomes its dark tint, any other colour is
+    /// dimmed, so the light text stays readable.
+    static func cellFill(_ hex: String, onDark: Bool) -> NSColor? {
+        guard let value = UInt32(hex, radix: 16), hex.count == 6 else { return nil }
+        guard onDark else { return NSColor(hex: value) }
+        if let entry = cellPalette.first(where: { $0.print == value }) { return NSColor(hex: entry.dark) }
+        guard let color = NSColor(hex: value).usingColorSpace(.sRGB) else { return nil }
+        return NSColor(hue: color.hueComponent, saturation: min(1, color.saturationComponent * 1.6 + 0.15), brightness: 0.3, alpha: 1)
+    }
+
     /// The colour in the toolbar and the picker (the UI is always dark).
     static func swatch(_ hex: String) -> NSColor {
         display(hex, onDark: true) ?? .white

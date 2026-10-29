@@ -95,6 +95,15 @@ final class WriterTextView: NSTextView {
     var reportedPageCount: PageCount?
     /// The number of pages changed; nil for the standard sheet, which isn't divided into pages.
     var onPageCount: ((PageCount?) -> Void)?
+    /// The document's head and foot lines, shown above the first page's text and below the last page's; a click on
+    /// them asks to edit them.
+    var runningHeads: WriterRunningHeads? {
+        didSet { if runningHeads != oldValue { needsDisplay = true } }
+    }
+    var documentTitle = "" {
+        didSet { if documentTitle != oldValue, runningHeads != nil { needsDisplay = true } }
+    }
+    var onEditRunningHeads: (() -> Void)?
 
     /// Words still being recognised never become typing attributes, so typed text isn't grey or lost. Outside a
     /// table, text never takes a cell's attributes (e.g. at the end of a document that ends with a table).
@@ -226,7 +235,7 @@ final class WriterTextView: NSTextView {
     var columnWidth: CGFloat {
         if slideLayout != nil { return SlideLayout.canvas.width - 2 * SlideLayout.margin.width }
         // A paperback's or a Normseite's line is as long as in print.
-        let width = WriterStyler.columnWidth(palette.format, family: family) ?? Self.maxColumnWidth
+        let width = WriterStyler.columnWidth(palette.format, family: family, setup: palette.pageSetup) ?? Self.maxColumnWidth
         return min(width, max(260, bounds.width - 120))
     }
 
@@ -370,6 +379,7 @@ final class WriterTextView: NSTextView {
         path.lineWidth = 1
         path.stroke()
         drawPageBreaks(in: rect, page: page, origin: origin)
+        drawRunningHeads(in: rect, page: page, origin: origin)
         // Heading numbers and bookmark marks sit in the page's margins, which only this layer draws.
         if let layoutManager, let container = textContainer, let storage = textStorage, storage.length > 0, storage.editedMask.isEmpty {
             let inContainer = rect.offsetBy(dx: -origin.x, dy: -origin.y)
@@ -476,6 +486,10 @@ final class WriterTextView: NSTextView {
         var hasOwnFontSize = false
         /// How the paragraph is aligned (the column, in a table); nil where nothing can be aligned.
         var alignment: WriterAlignment?
+        /// Line spacing and indents of the paragraph; nil where the block has none (code, pictures, tables).
+        var paragraphFormat: WriterParagraphFormat?
+        /// The block takes indents (text and quotes), not only line spacing.
+        var takesIndent = false
         var hasLink = false
         var hasSelection = false
         /// The start of the selected text, for the assistant bar.
@@ -509,6 +523,15 @@ final class WriterTextView: NSTextView {
             var alignment: MarkdownBlock.Alignment
             /// The columns' widths were dragged.
             var hasOwnWidths = false
+            /// How many cells the selection touches, whether the caret's cell is merged and can grow to the right or down.
+            var selectedCells = 0
+            var isMerged = false
+            var canMergeRight = false
+            var canMergeDown = false
+            /// The caret cell's colour, the table's lines and their weight.
+            var fill: String?
+            var lines: WriterTableLines = .standard
+            var lineWidth: Double?
         }
     }
 
@@ -536,6 +559,10 @@ final class WriterTextView: NSTextView {
         state.fontSize = size.size
         state.hasOwnFontSize = size.isOwn
         state.alignment = alignmentAtCaret
+        if let format = paragraphFormatAtCaret {
+            state.paragraphFormat = format.format
+            state.takesIndent = format.takesIndent
+        }
         if hasTextSelection {
             let text = (storage.string as NSString).substring(with: range)
                 .replacingOccurrences(of: "\n", with: " ").replacingOccurrences(of: "\u{FFFC}", with: "")
@@ -622,6 +649,7 @@ final class WriterTextView: NSTextView {
                 attributes.removeValue(forKey: attribute.key)
             } else {
                 attributes[attribute.key] = attribute.value
+                if let opposite = mark.opposite?.attribute { attributes.removeValue(forKey: opposite.key) }
             }
             let block = (attributes[.writerBlock] as? String).flatMap(WriterBlock.init(rawValue:)) ?? .paragraph
             typingAttributes = WriterStyler.typingAttributes(block: block, level: attributes[.writerListLevel] as? Int ?? 0, semantic: attributes, family: family, palette: palette)
@@ -638,6 +666,7 @@ final class WriterTextView: NSTextView {
             storage.removeAttribute(attribute.key, range: range)
         } else {
             storage.addAttribute(attribute.key, value: attribute.value, range: range)
+            if let opposite = mark.opposite?.attribute { storage.removeAttribute(opposite.key, range: range) }
         }
         storage.endEditing()
         didChangeText()
@@ -666,11 +695,14 @@ final class WriterTextView: NSTextView {
             for paragraph in paragraphs where paragraph.range.length > 0 {
                 storage.addAttributes([.writerBlock: target.rawValue, .writerListLevel: target.isList ? paragraph.level : 0], range: paragraph.range)
                 if target == .code || target == .raw {
-                    for key in [NSAttributedString.Key.writerBold, .writerItalic, .writerCode, .underlineStyle, .strikethroughStyle, .link] + WriterMarkdown.passageKeys {
+                    for key in WriterInline.keys + [.link] + WriterMarkdown.passageKeys {
                         storage.removeAttribute(key, range: paragraph.range)
                     }
                 }
-                if !target.takesAlignment { storage.removeAttribute(.writerAlignment, range: paragraph.range) }
+                // What of the paragraph's format the new block doesn't take goes.
+                let kept = WriterParagraphFormat(storage.attributes(at: paragraph.range.location, effectiveRange: nil)).applying(to: target)
+                for key in WriterParagraphFormat.keys { storage.removeAttribute(key, range: paragraph.range) }
+                storage.addAttributes(kept.attributes, range: paragraph.range)
             }
             storage.endEditing()
             didChangeText()
@@ -832,7 +864,7 @@ final class WriterTextView: NSTextView {
             if shouldChangeText(in: paragraph, replacementString: nil) {
                 storage.beginEditing()
                 storage.addAttributes([.writerBlock: block.rawValue, .writerListLevel: 0], range: paragraph)
-                for key in [NSAttributedString.Key.writerBold, .writerItalic, .writerCode, .underlineStyle, .strikethroughStyle, .link, .writerAlignment] + WriterMarkdown.passageKeys {
+                for key in WriterInline.keys + [.link] + WriterMarkdown.passageKeys + WriterParagraphFormat.keys {
                     storage.removeAttribute(key, range: paragraph)
                 }
                 storage.endEditing()
@@ -858,6 +890,12 @@ final class WriterTextView: NSTextView {
     override func mouseDown(with event: NSEvent) {
         if event.clickCount == 1, !event.modifierFlags.contains(.command), let border = columnBorder(at: convert(event.locationInWindow, from: nil)) {
             return dragColumnBorder(border, from: event)
+        }
+        // A click on the head or foot line opens their editor.
+        let point = convert(event.locationInWindow, from: nil)
+        let heads = runningHeadFrames()
+        if let onEditRunningHeads, [heads.header, heads.footer].contains(where: { $0?.insetBy(dx: 0, dy: -4).contains(point) == true }) {
+            return onEditRunningHeads()
         }
         super.mouseDown(with: event)
     }
@@ -887,6 +925,15 @@ final class WriterTextView: NSTextView {
             // ⌘+ (⌘= on English keyboards) and ⌘−: the text one size larger or smaller.
             case "+", "=": changeFontSize(by: 1); return true
             case "-": changeFontSize(by: -1); return true
+            default: break
+            }
+            // ⌘↩: a page break.
+            if event.keyCode == 36 || event.keyCode == 76, slideLayout == nil { insertPageBreak(); return true }
+        case [.command, .control]:
+            // ⌃⌘+ raises the text, ⌃⌘− lowers it.
+            switch key {
+            case "+", "=": toggle(.superscript); return true
+            case "-": toggle(.subscript); return true
             default: break
             }
         case [.command, .shift] where key == "+" || key == "=":

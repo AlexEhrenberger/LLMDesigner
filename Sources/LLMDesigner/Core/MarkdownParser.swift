@@ -21,12 +21,16 @@ enum MarkdownBlock: Hashable {
     case table(header: [String], rows: [[String]], alignments: [Alignment], widths: [Double]?)
     case math(latex: String, complete: Bool)
     case rule
+    /// A line of its own that is only `\newpage` (also `\pagebreak`, `\clearpage`): the text goes on on a new page.
+    case pageBreak
 }
 
-/// A block and the classes of the Pandoc divs it stands in (`::: {.center}` … `:::`), outermost first.
+/// A block and the classes of the Pandoc divs it stands in (`::: {.center}` … `:::`), outermost first, and their
+/// attributes (`::: {.table lines=grid}`); an inner div's value wins.
 struct AnnotatedMarkdownBlock: Hashable {
     let block: MarkdownBlock
     let classes: [String]
+    var attributes: [String: String] = [:]
 }
 
 /// Small block-level Markdown parser tuned for streamed LLM output (unclosed code fences are fine).
@@ -41,11 +45,12 @@ enum MarkdownParser {
         let lines = text.components(separatedBy: "\n")
         var blocks: [AnnotatedMarkdownBlock] = []
         var paragraph: [String] = []
-        var divs: [[String]] = []
+        var divs: [(classes: [String], attributes: [String: String])] = []
         var index = 0
 
         func append(_ block: MarkdownBlock) {
-            blocks.append(AnnotatedMarkdownBlock(block: block, classes: divs.flatMap { $0 }))
+            let attributes = divs.reduce(into: [String: String]()) { result, div in result.merge(div.attributes) { $1 } }
+            blocks.append(AnnotatedMarkdownBlock(block: block, classes: divs.flatMap(\.classes), attributes: attributes))
         }
 
         func flushParagraph() {
@@ -85,7 +90,7 @@ enum MarkdownParser {
             // A div's fences: `::: {.center}` opens one, `:::` closes the innermost (and is text when none is open).
             if let classes = divOpening(trimmed) {
                 flushParagraph()
-                divs.append(classes)
+                divs.append((classes, divAttributes(trimmed)))
                 index += 1
                 continue
             }
@@ -150,6 +155,13 @@ enum MarkdownParser {
             if isRule(trimmed) {
                 flushParagraph()
                 append(.rule)
+                index += 1
+                continue
+            }
+
+            if pageBreakCommands.contains(trimmed) {
+                flushParagraph()
+                append(.pageBreak)
                 index += 1
                 continue
             }
@@ -299,17 +311,62 @@ enum MarkdownParser {
         return dashes.map { Double($0) / 100 }
     }
 
+    /// The lines that break the page: LaTeX's commands, which Pandoc passes on to LaTeX.
+    static let pageBreakCommands: Set<String> = ["\\newpage", "\\pagebreak", "\\clearpage"]
+
     /// The classes of a line that opens a div: `::: {.center}`, `::: {.note #id}` or `::: note`.
     static func divOpening(_ line: String) -> [String]? {
-        guard line.hasPrefix(":::") else { return nil }
-        // Pandoc allows colons after the attributes, too.
-        let core = line.drop(while: { $0 == ":" }).trimmingCharacters(in: CharacterSet(charactersIn: ": "))
-        guard !core.isEmpty else { return nil }
+        guard let core = divCore(line) else { return nil }
         if core.hasPrefix("{"), core.hasSuffix("}") {
-            return core.dropFirst().dropLast().split(separator: " ").filter { $0.hasPrefix(".") }.map { String($0.dropFirst()) }
+            return attributeTokens(String(core.dropFirst().dropLast())).filter { $0.hasPrefix(".") }.map { String($0.dropFirst()) }
         }
         guard core.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }) else { return nil }
         return [core]
+    }
+
+    /// The `key=value` attributes of a line that opens a div (`::: {.center line-spacing=1.5}`), keys in lower case,
+    /// values without their quotes.
+    static func divAttributes(_ line: String) -> [String: String] {
+        guard let core = divCore(line), core.hasPrefix("{"), core.hasSuffix("}") else { return [:] }
+        var attributes: [String: String] = [:]
+        for token in attributeTokens(String(core.dropFirst().dropLast())) {
+            guard let equals = token.firstIndex(of: "="), equals != token.startIndex else { continue }
+            var value = String(token[token.index(after: equals)...])
+            if value.count >= 2, let first = value.first, first == "\"" || first == "'", value.last == first {
+                value = String(value.dropFirst().dropLast())
+            }
+            attributes[token[..<equals].lowercased()] = value
+        }
+        return attributes
+    }
+
+    /// What stands after the colons of a div's opening line.
+    private static func divCore(_ line: String) -> String? {
+        guard line.hasPrefix(":::") else { return nil }
+        // Pandoc allows colons after the attributes, too.
+        let core = line.drop(while: { $0 == ":" }).trimmingCharacters(in: CharacterSet(charactersIn: ": "))
+        return core.isEmpty ? nil : core
+    }
+
+    /// The tokens of an attribute list, split at spaces outside quotes.
+    private static func attributeTokens(_ text: String) -> [String] {
+        var tokens: [String] = []
+        var current = ""
+        var quote: Character?
+        for character in text {
+            if let open = quote {
+                current.append(character)
+                if character == open { quote = nil }
+            } else if character == " " {
+                if !current.isEmpty { tokens.append(current) }
+                current = ""
+            } else {
+                if character == "\"" || character == "'" { quote = character }
+                current.append(character)
+            }
+        }
+        if !current.isEmpty { tokens.append(current) }
+        return tokens
     }
 
     static func isDivClosing(_ line: String) -> Bool {

@@ -83,8 +83,9 @@ enum LaTeXWriter {
     /// `figureFolder`: where the figure files are, relative to the document (nil: next to it).
     /// `typeface`: the font of a Writer Studio document (nil: LaTeX's own). Fonts that passages carry are set up too.
     /// `format`: a Writer Studio document's page format; a paperback or a Normseite brings its own paper.
+    /// `design`: a Writer Studio document's own paper and margins (for the user's own format) and its running heads.
     static func document(parts: [Part], outline: Outline? = nil, paper: PaperSize, math: MathMode, figureFolder: String? = nil,
-                         typeface: WriterFont? = nil, format: WriterPageFormat = .standard) -> String {
+                         typeface: WriterFont? = nil, format: WriterPageFormat = .standard, design: WriterPageDesign = WriterPageDesign()) -> String {
         var body: [String] = []
         // Writer Studio documents with chapters are set as a report, where \chapter exists.
         let hasChapters = parts.contains { $0.figures != nil && WriterHeadings.hasChapters($0.text) }
@@ -97,7 +98,9 @@ enum LaTeXWriter {
             for image in part.images {
                 section += "\\begin{center}\\includegraphics[width=0.7\\linewidth,height=0.35\\textheight,keepaspectratio]{\(image.lastPathComponent)}\\end{center}\n"
             }
-            let structure = part.figures == nil ? nil : Structure(numbered: WriterHeadings.isFormal(part.text), chapters: hasChapters)
+            let structure = part.figures == nil ? nil : Structure(numbered: WriterHeadings.isFormal(part.text), chapters: hasChapters,
+                                                                  marksChapters: design.runningHeads?.usesChapter == true,
+                                                                  lineSpacing: format.lineSpread(setup: design.setup))
             section += part.isPlainText
                 ? plainText(part.text)
                 : blocks(part.text, math: math, anchors: part.blockAnchors, figures: part.figures, figureFolder: figureFolder, structure: structure,
@@ -111,7 +114,7 @@ enum LaTeXWriter {
         let isWriterDocument = parts.contains { $0.figures != nil }
         let start = isWriterDocument && format.isRaggedRight
             ? "\\raggedright\n" + (format.isBook ? "\\setlength{\\parindent}{\(format.paragraphIndent)}\n" : "") : ""
-        return preamble(paper, documentClass: hasChapters ? "report" : "article", typeface: typeface, spanFonts: spanFonts, format: format)
+        return preamble(paper, documentClass: hasChapters ? "report" : "article", typeface: typeface, spanFonts: spanFonts, format: format, design: design)
             + "\\begin{document}\n" + start + contents
             + body.joined(separator: "\n\n\\bigskip\n\n") + "\n\\end{document}\n"
     }
@@ -146,6 +149,10 @@ enum LaTeXWriter {
     struct Structure {
         var numbered: Bool
         var chapters: Bool
+        /// The running heads show the chapter: the top headings set the mark (`\llmdmark`).
+        var marksChapters = false
+        /// The document's own line spread, which a paragraph's line spacing multiplies.
+        var lineSpacing: Double = 1
     }
 
     /// Table of contents on its own page(s): linked entries with page numbers via `\pageref`.
@@ -213,18 +220,31 @@ enum LaTeXWriter {
     static func fontMacro(_ font: WriterFont) -> String { "llmdfont" + font.rawValue }
 
     private static func preamble(_ paper: PaperSize, documentClass: String = "article", typeface: WriterFont? = nil,
-                                 spanFonts: [WriterFont] = [], format: WriterPageFormat = .standard) -> String {
-        #"""
-        \documentclass[\#(Int(format.printSize))pt]{\#(documentClass)}
-        \usepackage[\#(format.geometry(paper: paper))]{geometry}
+                                 spanFonts: [WriterFont] = [], format: WriterPageFormat = .standard,
+                                 design: WriterPageDesign = WriterPageDesign()) -> String {
+        // The classes know 10, 11 and 12 pt; another size of the user's own format is set at the start of the text.
+        let size = format == .custom ? CGFloat(design.setup?.fontSize ?? 11) : format.printSize
+        let classSize = min(12, max(10, Int(size.rounded())))
+        var pageSetup = ""
+        if format == .custom, let setup = design.setup {
+            if abs(Double(classSize) - setup.fontSize) > 0.01 {
+                pageSetup += "\\AtBeginDocument{\\fontsize{\(WriterSpanStyle.format(setup.fontSize))pt}{\(WriterSpanStyle.format(setup.fontSize * 1.2))pt}\\selectfont}\n"
+            }
+            if abs(setup.lineSpacing - 1) > 0.001 { pageSetup += "\\linespread{\(WriterParagraphFormat.number(setup.lineSpacing))}\n" }
+        }
+        if let heads = design.runningHeads { pageSetup += heads.latexSetup(title: design.title) }
+        return #"""
+        \documentclass[\#(classSize)pt]{\#(documentClass)}
+        \usepackage[\#(format.geometry(paper: paper, setup: design.setup))]{geometry}
         \usepackage{amsmath}
         \usepackage{fontspec}
         \#(fontSetup(typeface: typeface, spanFonts: spanFonts))
         \usepackage{unicode-math}
         \setmathfont{latinmodern-math.otf}
         \usepackage[ngerman,shorthands=off]{babel}
-        \usepackage{xcolor}
+        \usepackage[table]{xcolor}
         \usepackage{graphicx}
+        \usepackage{multirow}
         \usepackage{fvextra}
         \usepackage{booktabs,xltabular}
         \newcolumntype{L}{>{\raggedright\arraybackslash}X}
@@ -258,7 +278,9 @@ enum LaTeXWriter {
         \providecommand{\degree}{^\circ}
         \providecommand{\abs}[1]{\left|#1\right|}
         \providecommand{\norm}[1]{\left\|#1\right\|}
+        \newcommand{\llmdmark}[1]{\markboth{#1}{#1}}
         \#(format.latexSetup)
+        \#(pageSetup)
         """#
     }
 
@@ -271,8 +293,9 @@ enum LaTeXWriter {
         let annotatedBlocks = MarkdownParser.parseAnnotated(markdown)
         for (index, annotated) in annotatedBlocks.enumerated() {
             let block = annotated.block
-            // Writer Studio aligns paragraphs with divs (`::: {.center}`); chats have none.
-            let alignment = structure == nil ? nil : WriterAlignment.from(classes: annotated.classes)
+            // Writer Studio aligns and indents paragraphs with divs (`::: {.center indent=1cm}`); chats have none.
+            let paragraphFormat = structure == nil ? WriterParagraphFormat() : WriterParagraphFormat(classes: annotated.classes, attributes: annotated.attributes)
+            let alignment = paragraphFormat.alignment
             let start = output.count
             defer {
                 // The label sits directly in front of the block it points to.
@@ -297,8 +320,12 @@ enum LaTeXWriter {
                 } else if structure != nil {
                     // A book's paragraphs are indented, but not the first one and not after a scene break, as in the editor.
                     let flush = format.isBook && (index == 0 || Self.endsSection(annotatedBlocks[index - 1].block))
-                    output.append(paragraph((flush ? "\\noindent " : "") + inline(text, math: math), alignment: alignment,
-                                            largestSize: WriterSpans.largestSize(in: text), format: format))
+                    let set = paragraphFormat.applying(to: .paragraph)
+                    // A first-line indent of its own replaces the book's.
+                    let noIndent = flush && set.firstLine == nil
+                    output.append(paragraph((noIndent ? "\\noindent " : "") + inline(text, math: math), alignment: alignment,
+                                            largestSize: WriterSpans.largestSize(in: text), format: format,
+                                            switches: set.latexSwitches(baseLineSpacing: structure?.lineSpacing ?? 1)))
                 } else {
                     output.append(inline(text, math: math))
                 }
@@ -316,6 +343,10 @@ enum LaTeXWriter {
                     } else {
                         output.append("\\\(command)\(structure.numbered ? "" : "*"){\(set)}")
                     }
+                    // The running heads' {Kapitel}: the chapters, or the first-level headings without them.
+                    if structure.marksChapters, command == "chapter" || (!structure.chapters && command == "section") {
+                        output[output.count - 1] += "\\llmdmark{\(inline(WriterSpans.strippingStyles(title), math: math))}"
+                    }
                     break
                 }
                 let command = ["section", "subsection", "subsubsection"][min(max(level, 1), 3) - 1]
@@ -323,16 +354,25 @@ enum LaTeXWriter {
             case .code(let language, let code):
                 output.append(verbatim(code, language: language))
             case .list(let items):
-                output.append(list(items, math: math))
+                let spacing = paragraphFormat.applying(to: .bullet).lineSpacing
+                let set = list(items, math: math)
+                output.append(spacing.map { "{\\linespread{\(WriterParagraphFormat.number($0 * (structure?.lineSpacing ?? 1)))}\\selectfont\n" + set + "\\par}" } ?? set)
             case .quote(let text):
-                let switchCommand = alignmentCommand(alignment).map { $0 + "\n" } ?? ""
+                let switches = (alignmentCommand(alignment).map { [$0] } ?? [])
+                    + paragraphFormat.applying(to: .quote).latexSwitches(baseLineSpacing: structure?.lineSpacing ?? 1)
+                let switchCommand = switches.isEmpty ? "" : switches.joined() + "\n"
                 output.append("\\begin{quote}\n\(switchCommand)\(inline(text, math: math))\n\\end{quote}")
             case .table(let header, let rows, let alignments, let widths):
-                output.append(table(header: header, rows: rows, alignments: alignments, widths: widths, math: math))
+                // Writer Studio's tables may have merged cells, lines of their own and coloured cells.
+                let style = structure == nil ? nil
+                    : annotated.classes.contains(WriterTableStyle.className) ? WriterTableStyle(attributes: annotated.attributes) : WriterTableStyle()
+                output.append(table(header: header, rows: rows, alignments: alignments, widths: widths, math: math, style: style))
             case .math(let latex, _):
                 output.append(displayMath(latex, math: math))
             case .rule:
                 output.append("\\noindent\\rule{\\linewidth}{0.4pt}")
+            case .pageBreak:
+                output.append(structure == nil ? "\\noindent\\rule{\\linewidth}{0.4pt}" : "\\clearpage")
             }
         }
         return output.joined(separator: "\n\n")
@@ -341,7 +381,7 @@ enum LaTeXWriter {
     /// A rule (a scene break) or a table of contents: the paragraph after it starts at the margin in a book.
     private static func endsSection(_ block: MarkdownBlock) -> Bool {
         switch block {
-        case .rule: return true
+        case .rule, .pageBreak: return true
         case .paragraph(let text): return WriterTOCAttachment.isMarker(text) || WriterBibliographyAttachment.isMarker(text)
         default: return false
         }
@@ -364,13 +404,17 @@ enum LaTeXWriter {
 
     /// A paragraph of Writer Studio, aligned, and with room between its lines for the largest letters in it. A
     /// paperback is justified, so a paragraph set left there needs its switch.
-    private static func paragraph(_ text: String, alignment: WriterAlignment?, largestSize: Double?, format: WriterPageFormat) -> String {
+    /// `switches`: the paragraph's own line spacing and indents (`WriterParagraphFormat.latexSwitches`).
+    private static func paragraph(_ text: String, alignment: WriterAlignment?, largestSize: Double?, format: WriterPageFormat,
+                                  switches own: [String] = []) -> String {
         var switches: [String] = []
         if let command = alignmentCommand(alignment) {
             switches.append(command)
         } else if alignment == .left, format.isJustified {
             switches.append("\\raggedright")
         }
+        // The line spacing's \\selectfont comes before the room for large letters, which it would undo.
+        switches += own
         if let largestSize, largestSize > Double(format.printSize) {
             switches.append("\\setlength{\\baselineskip}{\(WriterSpanStyle.format(largestSize * 1.2))pt}")
         }
@@ -499,36 +543,137 @@ enum LaTeXWriter {
         return output + "\\end{figure}"
     }
 
+    /// A table. `style` is set for Writer Studio, whose tables may merge cells (`<<` and `^^`), have other lines than
+    /// the book's three and coloured cells; nil for chats.
     private static func table(header: [String], rows: [[String]], alignments: [MarkdownBlock.Alignment], widths: [Double]?,
-                              math: MathMode) -> String {
+                              math: MathMode, style: WriterTableStyle? = nil) -> String {
         let columns = max(header.count, 1)
         let widths = widths?.count == columns ? widths : nil
+        let all = [header] + rows
+        let spans = style == nil ? [:] : WriterTableMerge.spans(in: all, columns: columns)
+        let style = style ?? WriterTableStyle()
+        func justification(_ column: Int) -> String {
+            switch column < alignments.count ? alignments[column] : .leading {
+            case .leading: "\\raggedright"
+            case .center: "\\centering"
+            case .trailing: "\\raggedleft"
+            }
+        }
         let spec = (0..<columns).map { column -> String in
             let alignment = column < alignments.count ? alignments[column] : .leading
             // Columns of their own width: tabularx shares the width by the factors of `\hsize`, which add up to the
             // number of columns.
             if let widths {
                 let factor = String(format: "%.3f", widths[column] * Double(columns))
-                let justification = switch alignment {
-                case .leading: "\\raggedright"
-                case .center: "\\centering"
-                case .trailing: "\\raggedleft"
-                }
-                return ">{\\hsize=\(factor)\\hsize\\linewidth=\\hsize\(justification)\\arraybackslash}X"
+                return ">{\\hsize=\(factor)\\hsize\\linewidth=\\hsize\(justification(column))\\arraybackslash}X"
             }
             switch alignment {
             case .leading: return "L"
             case .center: return "C"
             case .trailing: return "R"
             }
-        }.joined()
-        var output = "\\begin{xltabular}{\\linewidth}{@{}\(spec)@{}}\n\\toprule\n"
-        output += header.map { "\\textbf{\(inline($0, math: math))}" }.joined(separator: " & ") + " \\\\\n\\midrule\n\\endhead\n"
-        for row in rows {
-            let cells = (0..<columns).map { $0 < row.count ? inline(row[$0], math: math) : "" }
-            output += cells.joined(separator: " & ") + " \\\\\n"
         }
-        return output + "\\bottomrule\n\\end{xltabular}"
+        guard !spans.isEmpty || !style.isStandard else {
+            var output = "\\begin{xltabular}{\\linewidth}{@{}\(spec.joined())@{}}\n\\toprule\n"
+            output += header.map { "\\textbf{\(inline($0, math: math))}" }.joined(separator: " & ") + " \\\\\n\\midrule\n\\endhead\n"
+            for row in rows {
+                let cells = (0..<columns).map { $0 < row.count ? inline(row[$0], math: math) : "" }
+                output += cells.joined(separator: " & ") + " \\\\\n"
+            }
+            return output + "\\bottomrule\n\\end{xltabular}"
+        }
+
+        let lines = style.lines
+        let vertical = lines == .grid
+        let frame = lines == .grid || lines == .frame
+        func text(_ row: Int, _ column: Int) -> String {
+            column < all[row].count ? all[row][column] : ""
+        }
+        func fill(_ start: WriterCellPosition) -> String {
+            style.fills[start].map { "\\cellcolor[HTML]{\($0)}" } ?? ""
+        }
+        /// The column spec of a merged cell from `column` over `count` columns, with the rules at its sides.
+        func multicolumnSpec(_ column: Int, _ count: Int) -> String {
+            let share = (column..<(column + count)).map { widths?[$0] ?? (1 / Double(columns)) }.reduce(0, +) * Double(columns)
+            let room = count > 1 ? "+\(2 * (count - 1))\\tabcolsep" + (vertical ? "+\(count - 1)\\arrayrulewidth" : "") : ""
+            let left = column == 0 ? (frame ? "|" : "@{}") : ""
+            let right = column + count == columns ? (frame ? "|" : "@{}") : (vertical ? "|" : "")
+            return left + ">{\\hsize=\\dimexpr\(String(format: "%.3f", share))\\hsize\(room)\\relax\\linewidth=\\hsize\(justification(column))\\arraybackslash}X" + right
+        }
+
+        let edge = frame ? "|" : "@{}"
+        var output = "\\begingroup\n"
+        if let width = style.lineWidth {
+            output += "\\setlength{\\arrayrulewidth}{\(WriterParagraphFormat.number(width))pt}\\setlength{\\heavyrulewidth}{\(WriterParagraphFormat.number(width))pt}\\setlength{\\lightrulewidth}{\(WriterParagraphFormat.number(width))pt}\n"
+        } else {
+            output += "\\setlength{\\arrayrulewidth}{0.5pt}\n"
+        }
+        output += "\\begin{xltabular}{\\linewidth}{\(edge)\(spec.joined(separator: vertical ? "|" : ""))\(edge)}\n"
+
+        /// The line under a row: across, or around merged cells that go on into the next row.
+        func lineBelow(_ row: Int) -> String {
+            guard row + 1 < all.count else { return "" }
+            var open: [ClosedRange<Int>] = []
+            for column in 0..<columns {
+                let (start, span) = WriterTableMerge.cell(at: WriterCellPosition(row: row, column: column), in: spans)
+                guard start.row + span.rows - 1 <= row else { continue }
+                if let last = open.last, last.upperBound == column - 1 {
+                    open[open.count - 1] = last.lowerBound...column
+                } else {
+                    open.append(column...column)
+                }
+            }
+            if open.isEmpty { return "" }
+            if open.count == 1, open[0] == 0...(columns - 1) { return lines == .standard ? "\\midrule\n" : "\\hline\n" }
+            let command = lines == .standard ? "\\cmidrule" : "\\cline"
+            return open.map { "\(command){\($0.lowerBound + 1)-\($0.upperBound + 1)}" }.joined() + "\n"
+        }
+
+        switch lines {
+        case .standard: output += "\\toprule\n"
+        case .grid, .horizontal, .frame: output += "\\hline\n"
+        case .none: break
+        }
+        for row in all.indices {
+            var cells: [String] = []
+            var column = 0
+            while column < columns {
+                let place = WriterCellPosition(row: row, column: column)
+                let (start, span) = WriterTableMerge.cell(at: place, in: spans)
+                var content = inline(text(start.row, start.column), math: math)
+                if start.row == 0 { content = "\\textbf{\(content)}" }
+                // A cell over several rows is written in its last row, raised to their middle, so the colours of the
+                // rows below don't cover it; its other rows only carry its colour.
+                if span.rows > 1 {
+                    content = row == start.row + span.rows - 1 ? "\\multirow{-\(span.rows)}{=}{\(justification(start.column)) \(content)}" : ""
+                } else if start != place {
+                    content = ""
+                }
+                content = fill(start) + content
+                if span.columns > 1 {
+                    cells.append("\\multicolumn{\(span.columns)}{\(multicolumnSpec(start.column, span.columns))}{\(content)}")
+                } else {
+                    cells.append(content)
+                }
+                column = start.column + span.columns
+            }
+            output += cells.joined(separator: " & ") + " \\\\\n"
+            switch lines {
+            case .grid, .horizontal:
+                output += lineBelow(row)
+            case .standard, .frame:
+                if row == 0, all.count > 1 { output += lines == .standard ? lineBelow(row) : "\\hline\n" }
+            case .none:
+                break
+            }
+            if row == 0, all.count > 1, spans.allSatisfy({ $0.key.row > 0 || $0.value.rows == 1 }) { output += "\\endhead\n" }
+        }
+        switch lines {
+        case .standard: output += "\\bottomrule\n"
+        case .grid, .horizontal, .frame: output += "\\hline\n"
+        case .none: break
+        }
+        return output + "\\end{xltabular}\n\\endgroup"
     }
 
     // MARK: - Math
@@ -592,6 +737,8 @@ enum LaTeXWriter {
         let (spanned, styles) = convertSpans(source)
         let source = spanned
             .replacingOccurrences(of: "<u>", with: Self.underlineOpen).replacingOccurrences(of: "</u>", with: Self.underlineClose)
+            .replacingOccurrences(of: "<sup>", with: Self.superOpen).replacingOccurrences(of: "</sup>", with: Self.superClose)
+            .replacingOccurrences(of: "<sub>", with: Self.subOpen).replacingOccurrences(of: "</sub>", with: Self.subClose)
             .replacingOccurrences(of: #"<br\s*/?>"#, with: Self.lineBreak, options: [.regularExpression, .caseInsensitive])
         for segment in MathTokenizer.segments(source.trimmingCharacters(in: .whitespacesAndNewlines)) {
             switch segment {
@@ -613,6 +760,8 @@ enum LaTeXWriter {
         // What is open across runs: the passages' styles and underline.
         var styleStack: [WriterSpanStyle] = []
         var underlined = 0
+        var raised = 0
+        var lowered = 0
         for run in attributed.runs {
             let text = String(attributed.characters[run.range])
             let intent = run.inlinePresentationIntent ?? []
@@ -629,6 +778,7 @@ enum LaTeXWriter {
                 }
                 if let font { result = "{\\\(fontMacro(font)){}\(result)}" }
                 if let color { result = "\\textcolor[HTML]{\(color)}{\(result)}" }
+                if raised > 0 { result = "\\textsuperscript{\(result)}" } else if lowered > 0 { result = "\\textsubscript{\(result)}" }
                 if underlined > 0 { result = "\\uline{\(result)}" }
                 return result
             }
@@ -637,7 +787,7 @@ enum LaTeXWriter {
                 var result = ""
                 var rest = Substring(text)
                 while !rest.isEmpty {
-                    guard let marker = rest.range(of: #"LLMDSPANO\d+X|LLMDSPANCX|LLMDULINEOPENX|LLMDULINECLOSEX"#, options: .regularExpression) else {
+                    guard let marker = rest.range(of: #"LLMDSPANO\d+X|LLMDSPANCX|LLMDULINEOPENX|LLMDULINECLOSEX|LLMDSU[PB](?:OPEN|CLOSE)X"#, options: .regularExpression) else {
                         result += wrap(set(String(rest)))
                         break
                     }
@@ -651,6 +801,14 @@ enum LaTeXWriter {
                         underlined += 1
                     } else if token == Self.underlineClose {
                         underlined = max(0, underlined - 1)
+                    } else if token == Self.superOpen {
+                        raised += 1
+                    } else if token == Self.superClose {
+                        raised = max(0, raised - 1)
+                    } else if token == Self.subOpen {
+                        lowered += 1
+                    } else if token == Self.subClose {
+                        lowered = max(0, lowered - 1)
                     }
                     rest = rest[marker.upperBound...]
                 }
@@ -716,6 +874,10 @@ enum LaTeXWriter {
     private static let underlineOpen = "LLMDULINEOPENX"
     private static let underlineClose = "LLMDULINECLOSEX"
     private static let lineBreak = "LLMDLINEBREAKX"
+    private static let superOpen = "LLMDSUPOPENX"
+    private static let superClose = "LLMDSUPCLOSEX"
+    private static let subOpen = "LLMDSUBOPENX"
+    private static let subClose = "LLMDSUBCLOSEX"
 
     /// Characters the Latin Modern text font lacks, mapped to their math equivalents.
     private static let symbolReplacements: [Character: String] = [
@@ -814,11 +976,11 @@ struct LaTeXEngine: Sendable {
 
     /// Tries the document with native formulas first, then falls back to printing problematic formulas as code.
     func makePDF(parts: [LaTeXWriter.Part], outline: LaTeXWriter.Outline? = nil, paper: PaperSize, typeface: WriterFont? = nil,
-                 format: WriterPageFormat = .standard) async throws -> Data {
+                 format: WriterPageFormat = .standard, design: WriterPageDesign = WriterPageDesign()) async throws -> Data {
         var lastError: Error = PDFExportError.compileFailed("")
         for mode in LaTeXWriter.MathMode.allCases {
             let source = await MainActor.run {
-                LaTeXWriter.document(parts: parts, outline: outline, paper: paper, math: mode, typeface: typeface, format: format)
+                LaTeXWriter.document(parts: parts, outline: outline, paper: paper, math: mode, typeface: typeface, format: format, design: design)
             }
             do {
                 return try await compile(source, images: parts.flatMap(\.images) + parts.flatMap { Array(($0.figures ?? [:]).values) })

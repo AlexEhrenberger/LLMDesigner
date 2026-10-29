@@ -455,3 +455,146 @@ struct AlignmentButtons: View {
         return "\(alignment.label) – die markierten Absätze, sonst der Absatz mit dem Cursor"
     }
 }
+
+// MARK: Paragraph
+
+/// Line spacing and indents of the selected paragraphs (the one with the caret).
+struct ParagraphFormatButton: View {
+    let controller: WriterEditorController
+    let state: WriterTextView.State
+    @State private var showsPopover = false
+
+    var body: some View {
+        let format = state.paragraphFormat
+        let isSet = format.map { $0.lineSpacing != nil || $0.indent != nil || $0.rightIndent != nil || $0.firstLine != nil } ?? false
+        ToolbarButton(symbol: "text.line.first.and.arrowtriangle.forward",
+                      help: "Absatz: Zeilenabstand, Einrückung und Einzug der ersten Zeile", isActive: isSet || showsPopover) {
+            showsPopover.toggle()
+        }
+        .disabled(format == nil)
+        .popover(isPresented: $showsPopover, arrowEdge: .bottom) {
+            ParagraphFormatPopover(controller: controller)
+        }
+    }
+}
+
+private struct ParagraphFormatPopover: View {
+    let controller: WriterEditorController
+
+    /// How the first line starts.
+    private enum FirstLine: String, CaseIterable, Identifiable {
+        case none = "Ohne", indent = "Erste Zeile", hanging = "Hängend"
+        var id: String { rawValue }
+    }
+
+    var body: some View {
+        let state = controller.state
+        let format = state.paragraphFormat ?? WriterParagraphFormat()
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 6) {
+                title("Zeilenabstand")
+                HStack(spacing: 4) {
+                    ForEach(WriterParagraphFormat.lineSpacingSteps.prefix(4), id: \.value) { step in
+                        let isCurrent = abs((format.lineSpacing ?? 1) - step.value) < 0.001
+                        Button(step.label) { controller.setLineSpacing(step.value) }
+                            .buttonStyle(ChipStyle(isActive: isCurrent))
+                    }
+                }
+                StepperRow(label: "Genau", value: format.lineSpacing ?? 1, step: 0.05, range: WriterParagraphFormat.lineSpacingRange,
+                           text: { WriterParagraphFormat.number($0).replacingOccurrences(of: ".", with: ",") + " ×" }) {
+                    controller.setLineSpacing($0)
+                }
+            }
+            if state.takesIndent {
+                Divider()
+                VStack(alignment: .leading, spacing: 6) {
+                    title("Einrückung")
+                    StepperRow(label: "Links", value: format.indent ?? 0, step: 0.25, range: WriterParagraphFormat.indentRange,
+                               text: WriterParagraphFormat.label(cm:)) { controller.setIndents(left: $0) }
+                    StepperRow(label: "Rechts", value: format.rightIndent ?? 0, step: 0.25, range: WriterParagraphFormat.indentRange,
+                               text: WriterParagraphFormat.label(cm:)) { controller.setIndents(right: $0) }
+                }
+                Divider()
+                VStack(alignment: .leading, spacing: 6) {
+                    title("Einzug")
+                    let first = format.firstLine ?? 0
+                    let kind: FirstLine = first > 0 ? .indent : first < 0 ? .hanging : .none
+                    Picker("", selection: Binding(get: { kind }, set: { new in
+                        let amount = abs(first) > 0 ? abs(first) : 1.25
+                        switch new {
+                        case .none: controller.setIndents(firstLine: 0)
+                        case .indent: controller.setIndents(firstLine: amount)
+                        case .hanging: controller.setIndents(firstLine: -amount)
+                        }
+                    })) {
+                        ForEach(FirstLine.allCases) { Text($0.rawValue).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    if kind != .none {
+                        StepperRow(label: "Um", value: abs(first), step: 0.25, range: 0.25...6, text: WriterParagraphFormat.label(cm:)) { amount in
+                            controller.setIndents(firstLine: kind == .hanging ? -amount : amount)
+                        }
+                    }
+                }
+            }
+            HStack {
+                Text(state.takesIndent ? "Gilt für die markierten Absätze; im Druck ebenso." : "Listen und Überschriften: nur der Zeilenabstand.")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(Theme.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer()
+                Button("Zurücksetzen") { controller.clearParagraphFormat() }
+                    .controlSize(.small)
+            }
+        }
+        .padding(14)
+        .frame(width: 300)
+    }
+
+    private func title(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(Theme.textTertiary)
+            .textCase(.uppercase)
+    }
+}
+
+/// A value with its label, its value as text and arrows that step it.
+private struct StepperRow: View {
+    let label: String
+    let value: Double
+    let step: Double
+    let range: ClosedRange<Double>
+    let text: (Double) -> String
+    let change: (Double) -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(label)
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.textSecondary)
+                .frame(width: 50, alignment: .leading)
+            Spacer()
+            Text(text(value))
+                .font(.system(size: 12).monospacedDigit())
+                .foregroundStyle(Theme.textPrimary)
+            Stepper("", value: Binding(get: { value }, set: { change(min(max($0, range.lowerBound), range.upperBound)) }), in: range, step: step)
+                .labelsHidden()
+        }
+    }
+}
+
+/// A small rounded button that shows whether it is the current choice.
+private struct ChipStyle: ButtonStyle {
+    let isActive: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 11.5, weight: isActive ? .semibold : .regular))
+            .foregroundStyle(isActive ? Theme.textPrimary : Theme.textSecondary)
+            .padding(.horizontal, 8)
+            .frame(height: 24)
+            .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(isActive ? Theme.accent.opacity(0.28) : Color.white.opacity(configuration.isPressed ? 0.12 : 0.06)))
+    }
+}

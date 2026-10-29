@@ -122,8 +122,9 @@ enum WriterFont: String, CaseIterable, Identifiable, Sendable {
 
     /// Screen points per point of print: the editor shows the text larger than it is printed (`bodySize` for 11 pt,
     /// or the size of the page format). A slide's canvas is printed as it is.
-    func screenScale(onSlide: Bool, format: WriterPageFormat = .standard) -> CGFloat {
-        onSlide ? 1 : bodySize / format.printSize
+    /// `printSize`: the text size of the user's own format (`WriterPageSetup`), which the format alone doesn't know.
+    func screenScale(onSlide: Bool, format: WriterPageFormat = .standard, printSize: CGFloat? = nil) -> CGFloat {
+        onSlide ? 1 : bodySize / (printSize ?? format.printSize)
     }
 
     /// Text size. Fonts with a small x-height are set a little larger, so every face reads about the same.

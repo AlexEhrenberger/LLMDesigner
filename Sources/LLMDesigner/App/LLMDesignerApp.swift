@@ -141,19 +141,47 @@ struct AppCommands: Commands {
                     .keyboardShortcut("-")
                 Button("Standardgröße") { app.formatText { $0.setFontSize(nil) } }
                 Divider()
+                Button("Durchgestrichen") { app.formatText { $0.toggle(.strikethrough) } }
+                    .keyboardShortcut("x", modifiers: [.command, .shift])
+                Button("Hochgestellt") { app.formatText { $0.toggle(.superscript) } }
+                    .keyboardShortcut("+", modifiers: [.command, .control])
+                Button("Tiefgestellt") { app.formatText { $0.toggle(.subscript) } }
+                    .keyboardShortcut("-", modifiers: [.command, .control])
+                Divider()
                 ForEach(WriterAlignment.allCases, id: \.self) { alignment in
                     Button(alignment.label) { app.formatText { $0.setAlignment(alignment) } }
                 }
+                Menu("Zeilenabstand") {
+                    ForEach(WriterParagraphFormat.lineSpacingSteps, id: \.value) { step in
+                        Button(step.label) { app.formatText { $0.setLineSpacing(step.value) } }
+                    }
+                }
+                Button("Einzug vergrößern") { app.formatText { $0.changeIndent(by: 1) } }
+                    .keyboardShortcut("]")
+                Button("Einzug verkleinern") { app.formatText { $0.changeIndent(by: -1) } }
+                    .keyboardShortcut("[")
+                Button("Absatzformat zurücksetzen") { app.formatText { $0.clearParagraphFormat() } }
+                Divider()
+                Button("Seitenumbruch") { app.formatText { $0.insertPageBreak() } }
+                    .keyboardShortcut(.return, modifiers: .command)
             }
             .disabled(!app.canFormatText)
             Divider()
-            Picker("Seitenformat", selection: Binding(
-                get: { app.selectedDocument?.pageFormat ?? .standard },
-                set: { format in app.selectedDocument.map { app.setPageFormat($0.id, format) } }
-            )) {
-                ForEach(WriterPageFormat.allCases) { format in
-                    Text(format == .standard ? app.pdfPaperSize.label : format.label).tag(format)
+            Group {
+                Picker("Seitenformat", selection: Binding(
+                    get: { app.selectedDocument?.pageFormat ?? .standard },
+                    set: { format in
+                        guard let document = app.selectedDocument else { return }
+                        if format == .custom { app.setPageSetup(document.id, document.pageSetup ?? WriterPageSetup()) } else { app.setPageFormat(document.id, format) }
+                    }
+                )) {
+                    ForEach(WriterPageFormat.allCases) { format in
+                        Text(format == .standard ? app.pdfPaperSize.label : format == .custom ? (app.selectedDocument?.pageSetup?.name ?? format.label) : format.label)
+                            .tag(format)
+                    }
                 }
+                Button("Seite einrichten …") { app.writerPageSheet = .pageSetup }
+                Button("Kopf- und Fußzeile …") { app.writerPageSheet = .runningHeads }
             }
             .disabled(app.selectedDocument == nil || app.selectedDocument?.isPresentation == true)
         }

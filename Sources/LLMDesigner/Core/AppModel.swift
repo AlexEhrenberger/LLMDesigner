@@ -100,6 +100,7 @@ final class AppModel {
         static let memoryDefault = "memoryDefault"
         static let contextDefault = "contextDefault"
         static let writerLightPaper = "writerLightPaper"
+        static let writerPageTemplates = "writerPageTemplates"
         static let writerReadsAnswers = "writerReadsAnswers"
         static let presenterNotesVisible = "presenterNotesVisible"
 
@@ -403,6 +404,15 @@ final class AppModel {
     var writerLightPaper: Bool {
         didSet { settings.set(writerLightPaper, forKey: Keys.writerLightPaper) }
     }
+    /// The sheet for the open document's pages (its own format, or its head and foot lines).
+    var writerPageSheet: WriterPageSheet?
+    /// Page formats of the user's own, kept in the library so any document can be set in them.
+    var writerPageTemplates: [WriterPageSetup] = [] {
+        didSet {
+            let json = (try? JSONEncoder().encode(writerPageTemplates)).flatMap { String(data: $0, encoding: .utf8) }
+            settings.set(json, forKey: Keys.writerPageTemplates)
+        }
+    }
     @ObservationIgnored let documentStore = WriterDocumentStore()
     @ObservationIgnored var documentSaveTasks: [WriterDocument.ID: Task<Void, Never>] = [:]
     /// Set by the open editor: hands over edits it hasn't reported yet.
@@ -507,6 +517,8 @@ final class AppModel {
         newChatContextLength = (defaults.object(forKey: Keys.contextDefault) as? Int).flatMap { ContextChoice.lengths.contains($0) ? $0 : nil }
             ?? ContextChoice.defaultLength
         writerLightPaper = defaults.bool(forKey: Keys.writerLightPaper)
+        writerPageTemplates = defaults.string(forKey: Keys.writerPageTemplates)
+            .flatMap { try? JSONDecoder().decode([WriterPageSetup].self, from: Data($0.utf8)) } ?? []
         writerReadsAnswers = defaults.bool(forKey: Keys.writerReadsAnswers)
         presenterNotesVisible = defaults.object(forKey: Keys.presenterNotesVisible) as? Bool ?? true
         chats = store.loadAll()

@@ -64,6 +64,12 @@ struct WriterScreen: View {
                     controller.cancelFormula()
                 }
             }
+            .sheet(item: Binding(get: { app.writerPageSheet }, set: { app.writerPageSheet = $0 })) { sheet in
+                switch sheet {
+                case .pageSetup: PageSetupSheet(document: document, paper: app.pdfPaperSize).environment(app)
+                case .runningHeads: RunningHeadsSheet(document: document).environment(app)
+                }
+            }
             .sheet(item: Binding(get: { controller.imageRequest }, set: { if $0 == nil, controller.imageRequest != nil { controller.cancelImageGeneration() } })) { request in
                 ImageGeneratorSheet(request: request) { info, caption, generate in
                     controller.applyGeneratedImage(info: info, caption: caption, generate: generate, isExisting: request.isExisting)
@@ -99,7 +105,7 @@ struct WriterScreen: View {
                         WriterEditor(
                             app: app,
                             document: document,
-                            palette: (app.writerLightPaper ? WriterPalette.light : .dark).with(format: document.pageFormat),
+                            palette: (app.writerLightPaper ? WriterPalette.light : .dark).with(format: document.pageFormat, setup: document.pageSetup),
                             controller: controller,
                             assistant: assistant,
                             isReadingAloud: app.speakingDocumentID != nil,
@@ -137,7 +143,8 @@ struct WriterScreen: View {
                         }
                         if showsGlow {
                             UnfoldingFrame(progress: unfold, lightPaper: app.writerLightPaper,
-                                           columnWidth: WriterStyler.columnWidth(document.pageFormat, family: document.textFont) ?? WriterTextView.maxColumnWidth)
+                                           columnWidth: WriterStyler.columnWidth(document.pageFormat, family: document.textFont, setup: document.pageSetup)
+                                               ?? WriterTextView.maxColumnWidth)
                                 .allowsHitTesting(false)
                         }
                     }
@@ -402,7 +409,7 @@ private struct WriterTopBar: View {
 
     /// The words, and the pages of a paperback or a Normseite.
     private var counts: String {
-        guard let pages = pageCount?.pages, document.pageFormat.isBook else { return wordCount }
+        guard let pages = pageCount?.pages, document.pageFormat.showsPages else { return wordCount }
         let label = document.pageFormat == .manuscript
             ? (pages == 1 ? "1 Normseite" : "\(pages) Normseiten")
             : (pages == 1 ? "1 Seite" : "\(pages) Seiten")
@@ -435,7 +442,8 @@ private struct WriterTopBar: View {
     }
 }
 
-/// DIN A4, paperback or Normseite: how the document is set on the screen and in print.
+/// DIN A4, paperback, Normseite or a format of the user's own: how the document is set on the screen and in print.
+/// The menu also opens the page setup and the head and foot lines.
 private struct PageFormatMenu: View {
     @Environment(AppModel.self) private var app
     let document: WriterDocument
@@ -446,7 +454,7 @@ private struct PageFormatMenu: View {
         let current = document.pageFormat
         Menu {
             Section("Seitenformat") {
-                ForEach(WriterPageFormat.allCases) { format in
+                ForEach(WriterPageFormat.builtIn) { format in
                     Button {
                         withAnimation(.easeInOut(duration: 0.2)) { app.setPageFormat(document.id, format) }
                     } label: {
@@ -457,6 +465,29 @@ private struct PageFormatMenu: View {
                         }
                     }
                 }
+                if let own = document.pageSetup, !app.writerPageTemplates.contains(where: { $0.id == own.id }) {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) { app.setPageSetup(document.id, own) }
+                    } label: {
+                        Label(own.name + "  ·  " + own.summary, systemImage: current == .custom ? "checkmark" : WriterPageFormat.custom.symbol)
+                    }
+                }
+            }
+            if !app.writerPageTemplates.isEmpty {
+                Section("Eigene Formate") {
+                    ForEach(app.writerPageTemplates) { template in
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.2)) { app.setPageSetup(document.id, template) }
+                        } label: {
+                            Label(template.name + "  ·  " + template.summary,
+                                  systemImage: current == .custom && document.pageSetup?.id == template.id ? "checkmark" : "doc.badge.gearshape")
+                        }
+                    }
+                }
+            }
+            Section {
+                Button("Seite einrichten …", systemImage: "slider.horizontal.3") { app.writerPageSheet = .pageSetup }
+                Button("Kopf- und Fußzeile …", systemImage: "rectangle.topthird.inset.filled") { app.writerPageSheet = .runningHeads }
             }
         } label: {
             HStack(spacing: 5) {
@@ -479,12 +510,20 @@ private struct PageFormatMenu: View {
         .menuIndicator(.hidden)
         .fixedSize()
         .onHover { hovering = $0 }
-        .help("Seitenformat: \(title(of: current)) (\(current.detail)). Der Export und der Druck folgen.")
+        .help("Seitenformat: \(title(of: current)) (\(detail(of: current))). Hier auch Seite einrichten und Kopf- und Fußzeile.")
     }
 
-    /// The standard sheet is named by its paper.
+    /// The standard sheet is named by its paper, the user's own format by its name.
     private func title(of format: WriterPageFormat) -> String {
-        format == .standard ? app.pdfPaperSize.label : format.label
+        switch format {
+        case .standard: app.pdfPaperSize.label
+        case .custom: document.pageSetup?.name ?? format.label
+        default: format.label
+        }
+    }
+
+    private func detail(of format: WriterPageFormat) -> String {
+        format == .custom ? (document.customSetup?.summary ?? format.detail) : format.detail
     }
 }
 
@@ -587,11 +626,16 @@ private struct WriterToolbar: View {
                 group(5) { markButton("italic", .italic, "Kursiv (⌘I)", state) }
                 group(6) { markButton("underline", .underline, "Unterstrichen (⌘U)", state) }
                 group(7) { markButton("strikethrough", .strikethrough, "Durchgestrichen (⇧⌘X)", state) }
+                group(7) { markButton("textformat.superscript", .superscript, "Hochgestellt (⌃⌘+)", state) }
+                group(7) { markButton("textformat.subscript", .subscript, "Tiefgestellt (⌃⌘−)", state) }
                 group(8) { markButton("chevron.left.forwardslash.chevron.right", .code, "Code im Text (⌘E)", state) }
                 group(9) { ColorMenu(controller: controller).disabled(!isText) }
             }
             divider(9)
-            group(10) { AlignmentButtons(controller: controller) }
+            HStack(spacing: 2) {
+                group(10) { AlignmentButtons(controller: controller) }
+                group(10) { ParagraphFormatButton(controller: controller, state: state) }
+            }
             divider(11)
             HStack(spacing: 2) {
                 group(12) {
@@ -603,12 +647,16 @@ private struct WriterToolbar: View {
                         .disabled(isStructure(state))
                 }
                 group(14) {
-                    ToolbarButton(symbol: "decrease.indent", help: "Weniger einrücken (⇧⇥)", isActive: false) { controller.changeListLevel(by: -1) }
-                        .disabled(!state.block.isList)
+                    ToolbarButton(symbol: "decrease.indent", help: state.block.isList ? "Weniger einrücken (⇧⇥)" : "Einzug verkleinern (⌘[)", isActive: false) {
+                        controller.changeIndent(by: -1)
+                    }
+                    .disabled(!state.block.isList && (state.paragraphFormat?.indent ?? 0) <= 0)
                 }
                 group(15) {
-                    ToolbarButton(symbol: "increase.indent", help: "Weiter einrücken (⇥)", isActive: false) { controller.changeListLevel(by: 1) }
-                        .disabled(!state.block.isList)
+                    ToolbarButton(symbol: "increase.indent", help: state.block.isList ? "Weiter einrücken (⇥)" : "Einzug vergrößern (⌘]) – um 1,25 cm", isActive: false) {
+                        controller.changeIndent(by: 1)
+                    }
+                    .disabled(!state.block.isList && !state.takesIndent)
                 }
                 group(16) {
                     ToolbarButton(symbol: "text.quote", help: "Zitat (⇧⌘9)", isActive: state.block == .quote) { controller.setBlock(.quote) }
@@ -629,6 +677,12 @@ private struct WriterToolbar: View {
                 }
                 group(20) {
                     ToolbarButton(symbol: "minus", help: "Trennlinie / Abschnittsmarke", isActive: false) { controller.insertRule() }
+                }
+                group(20) {
+                    ToolbarButton(symbol: "arrow.down.doc", help: "Seitenumbruch (⌘↩) – der Text geht auf einer neuen Seite weiter", isActive: false) {
+                        controller.insertPageBreak()
+                    }
+                    .disabled(state.table != nil)
                 }
                 group(20) {
                     ToolbarButton(symbol: "character.textbox", help: "Sonderzeichen und Symbole (⌃⌘Leertaste) – Pfeile, Griechisch, Mathesymbole, Emoji", isActive: false) {
@@ -904,11 +958,60 @@ private struct WriterTablePopover: View {
                 }
                 Divider()
                 VStack(spacing: 2) {
+                    if table.selectedCells > 1 {
+                        action("Markierte Zellen verbinden", "rectangle.compress.vertical", .mergeCells)
+                    } else {
+                        action("Mit Zelle rechts verbinden", "arrow.right.to.line.compact", .mergeRight).disabled(!table.canMergeRight)
+                        action("Mit Zelle darunter verbinden", "arrow.down.to.line.compact", .mergeDown).disabled(!table.canMergeDown)
+                    }
+                    if table.isMerged {
+                        action("Verbindung aufheben", "rectangle.split.2x1", .splitCell)
+                    }
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(table.selectedCells > 1 ? "Farbe der markierten Zellen" : "Zellfarbe")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Theme.textTertiary)
+                    HStack(spacing: 5) {
+                        CellSwatch(color: nil, isCurrent: table.fill == nil) { controller.tableAction(.fill(nil)) }
+                            .help("Keine Farbe")
+                        ForEach(WriterColors.cellPalette) { entry in
+                            CellSwatch(color: entry.printHex, isCurrent: table.fill == entry.printHex) { controller.tableAction(.fill(entry.printHex)) }
+                                .help(entry.name)
+                        }
+                    }
+                }
+                .padding(.horizontal, 8)
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text("Linien im Druck")
+                            .font(.system(size: 12))
+                            .foregroundStyle(Theme.textTertiary)
+                        Spacer()
+                        Picker("", selection: Binding(get: { table.lineWidth }, set: { controller.tableAction(.lineWidth($0)) })) {
+                            ForEach(WriterTableStyle.lineWidths, id: \.label) { option in Text(option.label).tag(option.value) }
+                        }
+                        .labelsHidden()
+                        .controlSize(.small)
+                        .fixedSize()
+                        .disabled(table.lines == .none)
+                    }
+                    HStack(spacing: 3) {
+                        ForEach(WriterTableLines.allCases) { lines in
+                            ToolbarButton(symbol: lines.symbol, help: "\(lines.label) – \(lines.detail)", isActive: table.lines == lines) {
+                                controller.tableAction(.lines(lines))
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, 8)
+                Divider()
+                VStack(spacing: 2) {
                     action("Zeile löschen", "minus.square", .deleteRow)
                     action("Spalte löschen", "minus.rectangle.portrait", .deleteColumn)
                     action("Tabelle löschen", "trash", .deleteTable, destructive: true)
                 }
-                Text("⇥ nächste Zelle · ↩ Zelle darunter · ⇧↩ neue Zeile in der Zelle · die Linie zwischen zwei Spalten ziehen ändert ihre Breite")
+                Text("⇥ nächste Zelle · ↩ Zelle darunter · ⇧↩ neue Zeile in der Zelle · die Linie zwischen zwei Spalten ziehen ändert ihre Breite · über mehrere Zellen markieren, dann verbinden")
                     .font(.system(size: 10.5))
                     .foregroundStyle(Theme.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -920,7 +1023,7 @@ private struct WriterTablePopover: View {
             }
         }
         .padding(12)
-        .frame(width: 250)
+        .frame(width: 290)
     }
 
     private func action(_ title: String, _ symbol: String, _ action: WriterTableAction, destructive: Bool = false) -> some View {
@@ -932,6 +1035,28 @@ private struct WriterTablePopover: View {
 
     private func alignment(_ symbol: String, _ value: MarkdownBlock.Alignment, _ current: MarkdownBlock.Alignment, help: String) -> some View {
         ToolbarButton(symbol: symbol, help: help, isActive: value == current) { controller.tableAction(.align(value)) }
+    }
+}
+
+/// A cell colour to choose; nil is none.
+private struct CellSwatch: View {
+    let color: String?
+    let isCurrent: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .fill(color.flatMap { WriterColors.cellFill($0, onDark: false) }.map { Color(nsColor: $0) } ?? Color.clear)
+                .overlay {
+                    if color == nil {
+                        Image(systemName: "slash.circle").font(.system(size: 11)).foregroundStyle(Theme.textTertiary)
+                    }
+                }
+                .overlay(RoundedRectangle(cornerRadius: 4, style: .continuous).strokeBorder(isCurrent ? Theme.accent : Theme.border, lineWidth: isCurrent ? 2 : 1))
+                .frame(width: 18, height: 18)
+        }
+        .buttonStyle(.plain)
     }
 }
 

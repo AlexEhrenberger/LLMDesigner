@@ -13,14 +13,20 @@ enum WriterPageFormat: String, CaseIterable, Identifiable, Sendable {
     case standard
     case paperback = "taschenbuch"
     case manuscript = "normseite"
+    /// The user's own paper, margins, text size and line spacing (`WriterPageSetup`, kept by the document).
+    case custom = "eigen"
 
     var id: String { rawValue }
+
+    /// The formats the menus list by themselves; the user's own ones come with their names.
+    static let builtIn: [WriterPageFormat] = [.standard, .paperback, .manuscript]
 
     var label: String {
         switch self {
         case .standard: "Standard"
         case .paperback: "Taschenbuch"
         case .manuscript: "Normseite"
+        case .custom: "Eigenes Format"
         }
     }
 
@@ -30,6 +36,7 @@ enum WriterPageFormat: String, CaseIterable, Identifiable, Sendable {
         case .standard: "Papier wie in den Einstellungen"
         case .paperback: "12,5 × 19 cm, 10 pt, Blocksatz, 34 Zeilen"
         case .manuscript: "DIN A4, 30 Zeilen à 60 Anschläge, Courier 12 pt"
+        case .custom: "Papier, Ränder und Schrift nach Wahl"
         }
     }
 
@@ -38,16 +45,20 @@ enum WriterPageFormat: String, CaseIterable, Identifiable, Sendable {
         case .standard: "doc"
         case .paperback: "book.closed"
         case .manuscript: "doc.text"
+        case .custom: "doc.badge.gearshape"
         }
     }
 
     /// Indented paragraphs, chapters on new pages, pages shown in the editor.
-    var isBook: Bool { self != .standard }
+    var isBook: Bool { self == .paperback || self == .manuscript }
+
+    /// The editor shows where the pages end: the book formats and the user's own.
+    var showsPages: Bool { self != .standard }
 
     /// The text size in print, in points.
     var printSize: CGFloat {
         switch self {
-        case .standard: WriterFont.printSize
+        case .standard, .custom: WriterFont.printSize
         case .paperback: 10
         case .manuscript: 12
         }
@@ -57,7 +68,7 @@ enum WriterPageFormat: String, CaseIterable, Identifiable, Sendable {
     /// lines of Courier New 12 pt as word processors set them. nil: LaTeX's own.
     var lineDistance: CGFloat? {
         switch self {
-        case .standard: nil
+        case .standard, .custom: nil
         case .paperback: 12.6
         case .manuscript: 20.4
         }
@@ -71,7 +82,7 @@ enum WriterPageFormat: String, CaseIterable, Identifiable, Sendable {
     /// Lines of text on a full page.
     var linesPerPage: Int {
         switch self {
-        case .standard: 0
+        case .standard, .custom: 0
         case .paperback: 34
         case .manuscript: 30
         }
@@ -96,10 +107,12 @@ enum WriterPageFormat: String, CaseIterable, Identifiable, Sendable {
     // MARK: LaTeX
 
     /// The `geometry` options: the paper, and for the book formats a text block of exactly `linesPerPage` lines.
-    func geometry(paper: PaperSize) -> String {
+    func geometry(paper: PaperSize, setup: WriterPageSetup? = nil) -> String {
         switch self {
         case .standard:
             return paper.geometry
+        case .custom:
+            return (setup ?? WriterPageSetup()).geometry
         case .paperback:
             return "paperwidth=125mm,paperheight=190mm,left=15mm,textwidth=95mm,top=16mm,textheight=\(textHeight)pt,footskip=24pt"
         case .manuscript:
@@ -144,17 +157,28 @@ enum WriterPageFormat: String, CaseIterable, Identifiable, Sendable {
                 #"\fancyfoot{}\fancyhead[R]{\thepage}"#,
                 #"\fancypagestyle{plain}{\fancyhf{}\fancyhead[R]{\thepage}}"#,
             ]
-        case .standard:
+        case .standard, .custom:
             break
         }
         lines.append("\\makeatother")
         return lines.joined(separator: "\n") + "\n"
     }
 
+    /// The factor of `\\linespread` the text is set with: a book's from its line distance, the user's own format's
+    /// line spacing, 1 for the standard sheet.
+    func lineSpread(setup: WriterPageSetup?) -> Double {
+        switch self {
+        case .standard: 1
+        case .custom: setup?.lineSpacing ?? 1
+        case .paperback: 12.6 / 12
+        case .manuscript: 20.4 / 14.5
+        }
+    }
+
     /// LaTeX's first-line indent of a paragraph.
     var paragraphIndent: String {
         switch self {
-        case .standard: "0pt"
+        case .standard, .custom: "0pt"
         case .paperback: "1em"
         case .manuscript: "\(Self.format(CGFloat(Self.manuscriptIndentCharacters) * 0.6 * printSize))pt"
         }

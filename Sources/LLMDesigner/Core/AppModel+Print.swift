@@ -24,10 +24,13 @@ extension AppModel {
             let input = await prepareExport(of: document)
             do {
                 let format = input.document.pageFormat
-                let pdf = try await engine.makePDF(parts: [input.part], paper: paper, typeface: format.font(input.document.font), format: format)
+                let pdf = try await engine.makePDF(parts: [input.part], paper: paper, typeface: format.font(input.document.font), format: format,
+                                                   design: input.document.pageDesign)
                 exportingIDs.remove(id)
-                // A paperback's small pages are printed at their size in the middle of the printer's paper.
-                showPrintPanel(for: pdf, title: input.document.displayTitle, paper: paper.pointSize, fitsUp: false)
+                // A paperback's small pages are printed at their size in the middle of the printer's paper; a page of the
+                // user's own size goes onto paper of that size.
+                let sheet = input.document.customSetup.map { NSSize(width: $0.paperSize.width, height: $0.paperSize.height) } ?? paper.pointSize
+                showPrintPanel(for: pdf, title: input.document.displayTitle, paper: sheet, fitsUp: false)
             } catch {
                 exportingIDs.remove(id)
                 exportError = error.localizedDescription
