@@ -351,7 +351,7 @@ final class StoryLibrary {
         saveTasks[id] = nil
         guard let world = world(id) else { return }
         let store = store
-        let work = {
+        let work: @Sendable () -> Void = {
             do {
                 try store.save(world)
             } catch {
