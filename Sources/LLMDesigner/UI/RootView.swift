@@ -55,6 +55,9 @@ struct RootView: View {
                     if app.citationStudioOpen {
                         CitationStudioScreen()
                             .transition(.opacity)
+                    } else if app.storiesStudioOpen {
+                        StoriesStudioScreen()
+                            .transition(.opacity)
                     } else if app.selectedPresentation != nil {
                         PresenterScreen()
                             .transition(.asymmetric(insertion: .opacity, removal: .opacity))
@@ -75,6 +78,7 @@ struct RootView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .animation(.easeInOut(duration: 0.4), value: app.selectedDocumentID == nil)
             .animation(.easeInOut(duration: 0.25), value: app.citationStudioOpen)
+            .animation(.easeInOut(duration: 0.25), value: app.storiesStudioOpen)
             if showsChatOutline, app.isPanelDocked, let chat = app.selectedChat {
                 OutlinePanel(chat: chat)
                     .frame(width: Theme.outlineWidth)
@@ -100,7 +104,7 @@ struct RootView: View {
     }
 
     private var showsChatOutline: Bool {
-        app.sidebarMode == .chats && app.selectedDocumentID == nil && !app.citationStudioOpen && app.isOutlinePanelShown && app.selectedChat != nil
+        app.sidebarMode == .chats && app.selectedDocumentID == nil && !app.citationStudioOpen && !app.storiesStudioOpen && app.isOutlinePanelShown && app.selectedChat != nil
     }
 
     /// What decides whether the sidebars fit: the width and the screen, whose content needs more or less room.
@@ -109,12 +113,12 @@ struct RootView: View {
     }
 
     private var openedKey: String {
-        "\(app.selectedChatID?.uuidString ?? "")|\(app.selectedDocumentID?.uuidString ?? "")|\(app.sidebarMode)|\(app.citationStudioOpen)"
+        "\(app.selectedChatID?.uuidString ?? "")|\(app.selectedDocumentID?.uuidString ?? "")|\(app.sidebarMode)|\(app.citationStudioOpen)|\(app.storiesStudioOpen)"
     }
 
     /// The room the content needs before a sidebar may stand beside it: the studios have a sheet and a toolbar to show.
     private var contentMinimum: CGFloat {
-        app.sidebarMode == .chats && (app.selectedDocumentID != nil || app.citationStudioOpen) ? 880 : 620
+        app.sidebarMode == .chats && (app.selectedDocumentID != nil || app.citationStudioOpen || app.storiesStudioOpen) ? (app.storiesStudioOpen ? 980 : 880) : 620
     }
 
     /// The sidebar folds away when the content would get too narrow beside it; the panel on the right before it.

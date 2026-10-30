@@ -24,6 +24,7 @@ extension AppModel {
     /// The application in the main area; nil while the chat is shown.
     var activeApplication: StudioApplication? {
         if citationStudioOpen { return .citation }
+        if storiesStudioOpen { return .stories }
         guard let document = selectedDocument else { return nil }
         return document.isPresentation ? .presenter : .writer
     }
@@ -55,6 +56,7 @@ extension AppModel {
         case .writer: newDocument()
         case .citation: openCitationStudio()
         case .presenter: newPresentation()
+        case .stories: openStoriesStudio()
         case .notes: break
         }
     }
@@ -101,6 +103,7 @@ extension AppModel {
     /// Leaves Writer Studio for the chat that was open before.
     func closeDocument() {
         if citationStudioOpen { closeCitationStudio() }
+        if storiesStudioOpen { closeStoriesStudio() }
         guard let id = selectedDocumentID else { return }
         // Dictation and reading belong to the open document.
         if dictationIntoDocument { Task { await stopDictation() } }

@@ -400,6 +400,8 @@ final class AppModel {
     var citationStudioOpen = false
     /// A source Citation Studio should show when it opens.
     var citationStudioRequest: UUID?
+    /// Stories Studio is shown in the main area.
+    var storiesStudioOpen = false
     /// Writer Studio shows a white sheet instead of the dark one.
     var writerLightPaper: Bool {
         didSet { settings.set(writerLightPaper, forKey: Keys.writerLightPaper) }
@@ -448,6 +450,8 @@ final class AppModel {
     @ObservationIgnored let imageGeneration = ImageGenerationCenter(settings: AppLibrary.current.settings)
     /// Citation Studio: sources and quotes of the library (read when first needed).
     @ObservationIgnored let citations = CitationLibrary(store: .library())
+    /// Stories Studio: the novel worlds of the library (read when first needed).
+    @ObservationIgnored let stories = StoryLibrary(store: .library())
     /// The instruction being written in Writer Studio's assistant bar.
     var writerInstruction = ""
     /// The assistant bar has the keyboard focus (⌘D then dictates into it).
@@ -553,6 +557,7 @@ final class AppModel {
         speechReader.stop()
         imageGeneration.cancelAll()
         citations.saveAll()
+        stories.saveAll()
         writerFlush?()
         if skillSaveTask != nil { saveSkillLibrary() }
         savePendingPersonas()
