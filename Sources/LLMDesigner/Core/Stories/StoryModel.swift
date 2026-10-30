@@ -5,14 +5,18 @@ import Foundation
 // (places), why (reasons) and to what end (literary purposes). The elements themselves are kept once per world
 // and only linked from the parts, so a figure is written up in one place and appears wherever it is used.
 
-/// The five kinds of elements a world keeps, in the order of the questions a part answers.
+/// The kinds of elements a world keeps: first the five a part answers its questions with, then species (the beings
+/// that live in the world) and facts (tagged notes, e.g. on the world's history).
 enum StoryElementKind: String, Codable, CaseIterable, Identifiable, Sendable {
-    case event, figure, place, reason, purpose
+    case event, figure, place, reason, purpose, species, fact
 
     var id: String { rawValue }
 
     /// The order of the navigator (the user's own order).
-    static let listOrder: [StoryElementKind] = [.figure, .place, .event, .reason, .purpose]
+    static let listOrder: [StoryElementKind] = [.figure, .species, .place, .event, .reason, .purpose, .fact]
+
+    /// The kinds a part answers its five questions with, in the order of the questions.
+    static let questions: [StoryElementKind] = [.event, .figure, .place, .reason, .purpose]
 
     var title: String {
         switch self {
@@ -21,6 +25,8 @@ enum StoryElementKind: String, Codable, CaseIterable, Identifiable, Sendable {
         case .place: "Orte"
         case .reason: "Reasons"
         case .purpose: "Purposes"
+        case .species: "Spezies"
+        case .fact: "Fakten"
         }
     }
 
@@ -31,6 +37,8 @@ enum StoryElementKind: String, Codable, CaseIterable, Identifiable, Sendable {
         case .place: "Ort"
         case .reason: "Reason"
         case .purpose: "Purpose"
+        case .species: "Spezies"
+        case .fact: "Fakt"
         }
     }
 
@@ -42,6 +50,8 @@ enum StoryElementKind: String, Codable, CaseIterable, Identifiable, Sendable {
         case .place: "Wo"
         case .reason: "Warum"
         case .purpose: "Wozu"
+        case .species: "Wesen"
+        case .fact: "Wissen"
         }
     }
 
@@ -52,6 +62,8 @@ enum StoryElementKind: String, Codable, CaseIterable, Identifiable, Sendable {
         case .place: "Wo spielt es, und wie wirkt der Ort?"
         case .reason: "Warum geschieht es – welche Annahmen und Gründe tragen es?"
         case .purpose: "Wozu dient es der Geschichte – was soll es bei den Leser:innen bewirken?"
+        case .species: "Welche Wesen kommen vor?"
+        case .fact: "Was ist darüber bekannt?"
         }
     }
 
@@ -62,6 +74,8 @@ enum StoryElementKind: String, Codable, CaseIterable, Identifiable, Sendable {
         case .place: "mappin.and.ellipse"
         case .reason: "point.3.connected.trianglepath.dotted"
         case .purpose: "scope"
+        case .species: "pawprint.fill"
+        case .fact: "note.text"
         }
     }
 
@@ -220,6 +234,8 @@ struct StoryPart: Identifiable, Hashable, Codable, Sendable {
     var povFigureID: UUID?
     var notes = ""
     var timeline = StoryTimeline()
+    /// Books only: pictures with a short description.
+    var gallery: [StoryImage] = []
     var children: [StoryPart] = []
     var createdAt = Date()
     var updatedAt = Date()
@@ -252,6 +268,10 @@ struct StoryWorld: Identifiable, Hashable, Codable, Sendable {
     var events: [StoryEvent] = []
     var reasons: [StoryReason] = []
     var purposes: [StoryPurpose] = []
+    var species: [StorySpecies] = []
+    var facts: [StoryFact] = []
+    /// Pictures of the world with a short description each.
+    var gallery: [StoryImage] = []
     var createdAt = Date()
     var updatedAt = Date()
 
@@ -264,7 +284,8 @@ struct StoryWorld: Identifiable, Hashable, Codable, Sendable {
 
 // MARK: - Images
 
-/// A picture of a figure or a place, copied into the library (`Geschichten/Bilder/<Welt>/`).
+/// A picture of a figure, place, species or fact, or one of a gallery, copied into the library
+/// (`Geschichten/Bilder/<Welt>/`).
 struct StoryImage: Hashable, Codable, Sendable {
     var fileName: String
     var caption = ""
@@ -310,6 +331,7 @@ extension StoryPart {
         povFigureID = c.lenient(.povFigureID, povFigureID)
         notes = c.lenient(.notes, notes)
         timeline = c.lenient(.timeline, timeline)
+        gallery = c.lenient(.gallery, gallery)
         children = c.lenient(.children, children)
         createdAt = c.lenient(.createdAt, createdAt)
         updatedAt = c.lenient(.updatedAt, createdAt)
@@ -335,12 +357,33 @@ extension StoryWorld {
         events = c.lenient(.events, events)
         reasons = c.lenient(.reasons, reasons)
         purposes = c.lenient(.purposes, purposes)
+        species = c.lenient(.species, species)
+        facts = c.lenient(.facts, facts)
+        gallery = c.lenient(.gallery, gallery)
         createdAt = c.lenient(.createdAt, createdAt)
         updatedAt = c.lenient(.updatedAt, createdAt)
     }
 }
 
 extension StoryImage {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(fileName: try c.decode(String.self, forKey: .fileName), caption: c.lenient(.caption, ""))
+    }
+}
+
+/// A video of a figure (a character video card), copied into the library (`Geschichten/Videos/<Welt>/`).
+struct StoryVideo: Hashable, Codable, Sendable {
+    var fileName: String
+    var caption = ""
+
+    init(fileName: String, caption: String = "") {
+        self.fileName = fileName
+        self.caption = caption
+    }
+}
+
+extension StoryVideo {
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.init(fileName: try c.decode(String.self, forKey: .fileName), caption: c.lenient(.caption, ""))

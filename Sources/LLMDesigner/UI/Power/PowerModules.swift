@@ -666,7 +666,7 @@ private struct PowerWorldView: View {
                     Button { power.storyKind = option } label: {
                         VStack(spacing: 1) {
                             Image(systemName: option.symbol).font(.system(size: 11))
-                            Text("\(option.title) \(count)").font(.system(size: 9.5, weight: .medium)).lineLimit(1)
+                            Text("\(option.title) \(count)").font(.system(size: 9.5, weight: .medium)).lineLimit(1).minimumScaleFactor(0.75)
                         }
                         .foregroundStyle(option == kind ? Theme.textPrimary : (matching ? Theme.accent : Theme.textTertiary))
                         .frame(maxWidth: .infinity)

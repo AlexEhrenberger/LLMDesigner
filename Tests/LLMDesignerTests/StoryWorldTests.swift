@@ -233,4 +233,123 @@ struct StoryWorldTests {
         #expect(store.loadAll().map(\.title) == ["Ablage"])
         #expect(store.loadAll().first?.books.count == 1)
     }
+
+    @Test func speciesAndFacts() {
+        var s = sample()
+        let dragons = s.world.addElement(.species, name: "Drachen")
+        s.world.updateElement(StorySpecies.self, dragons.id) { $0.habitatPlaceIDs = [s.castle.id] }
+        s.world.updateElement(StoryFigure.self, s.hero.id) { $0.speciesID = dragons.id }
+        #expect(s.world.figures(ofSpecies: dragons.id).map(\.id) == [s.hero.id])
+        #expect(s.world.count(of: .species) == 1)
+        #expect(s.world.name(of: dragons) == "Drachen")
+
+        let fact = s.world.addElement(.fact, name: "Die Schlacht am Trident")
+        s.world.updateElement(StoryFact.self, fact.id) {
+            $0.text = "Im Jahr 283 fiel der Prinz im Fluss."
+            $0.tags = ["Krieg", "Rebellion"]
+            $0.links = [s.hero, dragons, s.castle]
+        }
+        #expect(s.world.facts(about: s.hero).map(\.id) == [fact.id])
+        #expect(s.world.factTags.map(\.tag) == ["Krieg", "Rebellion"])
+
+        // Removing an element takes it out of the facts' links; removing the species frees its figures.
+        s.world.removeElement(s.castle)
+        #expect(s.world.element(StorySpecies.self, dragons.id)?.habitatPlaceIDs.isEmpty == true)
+        #expect(s.world.element(StoryFact.self, fact.id)?.links == [s.hero, dragons])
+        s.world.removeElement(dragons)
+        #expect(s.world.element(StoryFigure.self, s.hero.id)?.speciesID == nil)
+        #expect(s.world.element(StoryFact.self, fact.id)?.links == [s.hero])
+    }
+
+    @Test func factSearchAndTags() {
+        var fact = StoryFact()
+        fact.name = "Erbrecht im Norden"
+        fact.text = "Töchter erben nur, wenn kein Sohn lebt."
+        fact.tags = ["Gesetz", "Häuser"]
+        fact.source = "Chronik der Maester"
+        #expect(fact.matches(""))
+        #expect(fact.matches("töchter"))
+        #expect(fact.matches("#gesetz"))
+        #expect(fact.matches("#Häu chronik"))
+        #expect(fact.matches("#hau"))
+        #expect(!fact.matches("#Krieg"))
+        #expect(!fact.matches("#etz"))
+        #expect(!fact.matches("Süden"))
+        #expect(StoryFact.normalizedTag("  #Krieg, ") == "Krieg")
+        #expect(fact.subtitle == "#Gesetz #Häuser")
+    }
+
+    @Test func galleryAndMediaOfParts() {
+        var s = sample()
+        s.world.gallery = [StoryImage(fileName: "welt.png", caption: "Karte")]
+        s.world.updatePart(s.book) { $0.gallery = [StoryImage(fileName: "cover.png", caption: "Cover-Idee")] }
+        s.world.updatePart(s.act1) { $0.gallery = [StoryImage(fileName: "akt.png")] }
+        #expect(s.world.galleryImages(within: s.book).map(\.fileName) == ["cover.png", "akt.png"])
+        s.world.updateElement(StoryFigure.self, s.hero.id) {
+            $0.images = [StoryImage(fileName: "aria.png")]
+            $0.videos = [StoryVideo(fileName: "aria.mov", caption: "Aria spricht")]
+        }
+        let media = s.world.media(of: s.hero)
+        #expect(media.images.map(\.fileName) == ["aria.png"])
+        #expect(media.videos.map(\.caption) == ["Aria spricht"])
+    }
+
+    @Test func newFieldsRoundTripAndOldFilesStillRead() throws {
+        var s = sample()
+        let wolves = s.world.addElement(.species, name: "Schattenwölfe")
+        s.world.updateElement(StoryFigure.self, s.hero.id) {
+            $0.speciesID = wolves.id
+            $0.videos = [StoryVideo(fileName: "a.mov", caption: "Kampf")]
+        }
+        let fact = s.world.addElement(.fact, name: "Fakt")
+        s.world.updateElement(StoryFact.self, fact.id) { $0.tags = ["Alt"] }
+        s.world.gallery = [StoryImage(fileName: "g.png", caption: "Burg")]
+        s.world.updatePart(s.book) { $0.gallery = [StoryImage(fileName: "b.png", caption: "Cover")] }
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let decoded = try decoder.decode(StoryStore.Record.self, from: encoder.encode(StoryStore.Record(world: s.world))).world
+        #expect(decoded.element(StoryFigure.self, s.hero.id)?.speciesID == wolves.id)
+        #expect(decoded.element(StoryFigure.self, s.hero.id)?.videos.first?.caption == "Kampf")
+        #expect(decoded.element(StoryFact.self, fact.id)?.tags == ["Alt"])
+        #expect(decoded.gallery.first?.caption == "Burg")
+        #expect(decoded.part(s.book)?.gallery.first?.caption == "Cover")
+
+        let old = try decoder.decode(StoryStore.Record.self, from: Data("""
+        {"format": 1, "world": {"id": "\(UUID().uuidString)", "title": "Alt", "books": [{"id": "\(UUID().uuidString)", "level": "book"}]}}
+        """.utf8)).world
+        #expect(old.species.isEmpty && old.facts.isEmpty && old.gallery.isEmpty)
+        #expect(old.books.first?.gallery.isEmpty == true)
+    }
+
+    /// Typing stays a draft until it pauses; then it goes into the world, before any later change.
+    @MainActor @Test func draftsGoInTogether() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("stories-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let library = StoryLibrary(store: StoryStore(directory: folder))
+        let world = library.addWorld(title: "Entwurf")
+        let title = library.binding(world.id, \.title)
+        title.wrappedValue = "Entwurf 2"
+        #expect(title.wrappedValue == "Entwurf 2")
+        #expect(library.world(world.id)?.title == "Entwurf")
+        #expect(library.hasDrafts)
+
+        // Another change brings the draft in first.
+        let ref = library.addElement(.figure, name: "Kai", in: world.id)
+        #expect(library.world(world.id)?.title == "Entwurf 2")
+        #expect(!library.hasDrafts)
+
+        let name = library.binding(world.id, StoryFigure.self, ref.id, \.name)
+        name.wrappedValue = "Kai der Kühne"
+        // Goes in by itself once typing pauses (waits longer when the machine is busy with other tests).
+        for _ in 0..<30 where library.hasDrafts { try await Task.sleep(for: .milliseconds(100)) }
+        #expect(!library.hasDrafts)
+        #expect(library.world(world.id)?.element(StoryFigure.self, ref.id)?.name == "Kai der Kühne")
+
+        name.wrappedValue = "Kai"
+        library.saveAll()
+        #expect(StoryStore(directory: folder).loadAll().first?.figures.first?.name == "Kai")
+    }
 }

@@ -1,9 +1,10 @@
 import SwiftUI
 
-/// A figure in six tabs: life, character, psyche, stance, its place in the story, and its scene book.
+/// A figure in seven tabs: life, character, psyche, stance, its place in the story, its scene book and its
+/// character video cards.
 struct StoryFigurePage: View {
     enum Tab: Hashable {
-        case life, character, psyche, stance, story, scenes
+        case life, character, psyche, stance, story, scenes, videos
     }
 
     let figureID: UUID
@@ -31,6 +32,7 @@ struct StoryFigurePage: View {
                                     Button(role.label) { library.updateElement(world.id, StoryFigure.self, figureID) { $0.role = role } }
                                 }
                             }
+                            speciesMenu(figure)
                             if !figure.personality.code.isEmpty {
                                 Text(figure.personality.code)
                                     .font(.system(size: 11.5, weight: .semibold, design: .monospaced))
@@ -46,7 +48,8 @@ struct StoryFigurePage: View {
                 }
                 StoryTabBar(tabs: [(Tab.life, "Lebenslauf", "person.text.rectangle"), (.character, "Charakter", "person.fill.questionmark"),
                                    (.psyche, "Psyche", "brain.head.profile"), (.stance, "Haltung", "arrow.left.arrow.right"),
-                                   (.story, "Geschichte", "text.book.closed"), (.scenes, "Szenenbuch", "quote.bubble")],
+                                   (.story, "Geschichte", "text.book.closed"), (.scenes, "Szenenbuch", "quote.bubble"),
+                                   (.videos, figure.videos.isEmpty ? "Videocards" : "Videocards \(figure.videos.count)", "play.rectangle.on.rectangle")],
                             selection: tab)
                     .padding(.vertical, 4)
                 switch tab.wrappedValue {
@@ -56,7 +59,24 @@ struct StoryFigurePage: View {
                 case .stance: stance(figure)
                 case .story: story(figure)
                 case .scenes: StorySceneBook(figureID: figureID, world: world, model: model, library: library)
+                case .videos: videos(figure)
                 }
+            }
+        }
+    }
+
+    private func speciesMenu(_ figure: StoryFigure) -> some View {
+        let species = figure.speciesID.flatMap { world.element(StorySpecies.self, $0) }
+        return StoryHeaderMenu(title: species?.displayName ?? "Spezies …", symbol: StoryElementKind.species.symbol,
+                               help: "Welcher Spezies die Figur angehört") {
+            Button("Keine Angabe") { library.updateElement(world.id, StoryFigure.self, figureID) { $0.speciesID = nil } }
+            if !world.species.isEmpty { Divider() }
+            ForEach(world.species.sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }) { other in
+                Button(other.displayName) { library.updateElement(world.id, StoryFigure.self, figureID) { $0.speciesID = other.id } }
+            }
+            if let species {
+                Divider()
+                Button("„\(species.displayName)“ öffnen", systemImage: "arrow.right") { model.show(species.ref) }
             }
         }
     }
@@ -126,8 +146,25 @@ struct StoryFigurePage: View {
                       text: field(\.voice), lines: 3...14)
         StoryTextArea(title: "Wahrnehmung der Person in der Geschichte", hint: "Wie andere Figuren und die Leser:innen sie sehen – und wo dieses Bild täuscht.",
                       text: field(\.perception), lines: 3...14)
+        StoryRelatedFacts(ref: figure.ref, world: world, model: model)
         StoryUsageList(ref: figure.ref, world: world, model: model)
         StoryPinList(ref: figure.ref, world: world, model: model)
+    }
+
+    @ViewBuilder
+    private func videos(_ figure: StoryFigure) -> some View {
+        Text("Videocards zeigen die Figur in Bewegung – wie sie geht, spricht, kämpft, in Kostüm oder Maske. Ein Klick spielt ein Video in der Karte ab.")
+            .font(.system(size: 12))
+            .foregroundStyle(Theme.textTertiary)
+        StoryVideoCards(worldID: world.id, videos: figure.videos, library: library) { video in
+            library.elementText(world.id, StoryFigure.self, figureID, field: "video-" + video.fileName,
+                                get: { $0.videos.first { $0.fileName == video.fileName }?.caption },
+                                set: { figure, text in
+                                    if let index = figure.videos.firstIndex(where: { $0.fileName == video.fileName }) { figure.videos[index].caption = text }
+                                })
+        } onChange: { videos in
+            library.updateElement(world.id, StoryFigure.self, figureID) { $0.videos = videos }
+        }
     }
 }
 
@@ -167,8 +204,8 @@ private struct StoryPsycheEditor: View {
             slider(value: profile.neuroticism, range: 0...1, poles: ("Gelassen", "Neurotisch")) { value in
                 update { $0.neuroticism = value }
             }
-            TextField("Wie verändert sie sich, wenn der Druck wächst?", text: Binding(
-                get: { profile.stressNote }, set: { text in update { $0.stressNote = text } }
+            TextField("Wie verändert sie sich, wenn der Druck wächst?", text: library.elementText(
+                world.id, StoryFigure.self, figureID, field: "stressNote", get: { $0.personality.stressNote }, set: { $0.personality.stressNote = $1 }
             ), axis: .vertical)
             .lineLimit(1...8)
             .storyField()
@@ -195,9 +232,9 @@ private struct StoryPsycheEditor: View {
             slider(value: profile.values[axis], range: -1...1, poles: axis.poles) { value in
                 update { $0.values[axis] = value }
             }
-            TextField("Wie zeigt sich das?", text: Binding(
-                get: { profile.notes[axis] ?? "" },
-                set: { text in update { $0.notes[axis] = text.isEmpty ? nil : text } }
+            TextField("Wie zeigt sich das?", text: library.elementText(
+                world.id, StoryFigure.self, figureID, field: "axis-" + axis.rawValue,
+                get: { $0.personality.notes[axis] }, set: { $0.personality.notes[axis] = $1.isEmpty ? nil : $1 }
             ), axis: .vertical)
             .lineLimit(1...6)
             .storyField()
@@ -321,14 +358,11 @@ private struct StoryRelationEditor: View {
     }
 
     private func binding(_ id: UUID, _ keyPath: WritableKeyPath<StoryRelation, String>) -> Binding<String> {
-        Binding(
-            get: { world.element(StoryFigure.self, figure.id)?.relations.first { $0.id == id }?[keyPath: keyPath] ?? "" },
-            set: { text in
-                library.updateElement(world.id, StoryFigure.self, figure.id) { figure in
-                    if let index = figure.relations.firstIndex(where: { $0.id == id }) { figure.relations[index][keyPath: keyPath] = text }
-                }
-            }
-        )
+        library.elementText(world.id, StoryFigure.self, figure.id, field: [AnyHashable(id), AnyHashable(keyPath)],
+                            get: { $0.relations.first { $0.id == id }?[keyPath: keyPath] },
+                            set: { figure, text in
+                                if let index = figure.relations.firstIndex(where: { $0.id == id }) { figure.relations[index][keyPath: keyPath] = text }
+                            })
     }
 }
 
@@ -476,9 +510,12 @@ private struct StorySceneCard: View {
                 .buttonStyle(.plain)
                 .help("Eintrag löschen")
             }
-            TextField(placeholder, text: Binding(
-                get: { world.element(StoryFigure.self, figureID)?.scenes.first { $0.id == note.id }?.text ?? "" },
-                set: { text in update { $0.text = text } }
+            TextField(placeholder, text: library.elementText(
+                world.id, StoryFigure.self, figureID, field: note.id,
+                get: { $0.scenes.first { $0.id == note.id }?.text },
+                set: { figure, text in
+                    if let index = figure.scenes.firstIndex(where: { $0.id == note.id }) { figure.scenes[index].text = text }
+                }
             ), axis: .vertical)
             .textFieldStyle(.plain)
             .font(note.kind == .quote ? .system(size: 14, design: .serif).italic() : .system(size: 13))

@@ -248,6 +248,8 @@ extension AppModel {
         case .event: world.events.first { $0.id == ref.id }?.course ?? ""
         case .reason: world.reasons.first { $0.id == ref.id }?.conclusion ?? ""
         case .purpose: world.purposes.first { $0.id == ref.id }?.intent ?? ""
+        case .species: world.species.first { $0.id == ref.id }?.appearance ?? ""
+        case .fact: world.facts.first { $0.id == ref.id }?.text ?? ""
         }
     }
 
@@ -258,6 +260,8 @@ extension AppModel {
         case .event: "Verlauf"
         case .reason: "Schluss"
         case .purpose: "Absicht"
+        case .species: "Gestalt"
+        case .fact: "Notiz"
         }
     }
 
@@ -268,6 +272,8 @@ extension AppModel {
         case .event: if let i = world.events.firstIndex(where: { $0.id == ref.id }) { world.events[i].course = text; world.events[i].updatedAt = Date() }
         case .reason: if let i = world.reasons.firstIndex(where: { $0.id == ref.id }) { world.reasons[i].conclusion = text; world.reasons[i].updatedAt = Date() }
         case .purpose: if let i = world.purposes.firstIndex(where: { $0.id == ref.id }) { world.purposes[i].intent = text; world.purposes[i].updatedAt = Date() }
+        case .species: if let i = world.species.firstIndex(where: { $0.id == ref.id }) { world.species[i].appearance = text; world.species[i].updatedAt = Date() }
+        case .fact: if let i = world.facts.firstIndex(where: { $0.id == ref.id }) { world.facts[i].text = text; world.facts[i].updatedAt = Date() }
         }
     }
 
@@ -278,6 +284,8 @@ extension AppModel {
         case .event: world.events.removeAll { $0.id == ref.id }
         case .reason: world.reasons.removeAll { $0.id == ref.id }
         case .purpose: world.purposes.removeAll { $0.id == ref.id }
+        case .species: world.species.removeAll { $0.id == ref.id }
+        case .fact: world.facts.removeAll { $0.id == ref.id }
         }
     }
 
@@ -292,6 +300,8 @@ extension AppModel {
         case .event: return items(world.events)
         case .reason: return items(world.reasons)
         case .purpose: return items(world.purposes)
+        case .species: return items(world.species)
+        case .fact: return items(world.facts)
         }
     }
 }

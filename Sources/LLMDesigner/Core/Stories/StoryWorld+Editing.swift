@@ -288,6 +288,8 @@ extension StoryWorld {
         case .place: addElement(StoryPlace.self, name: name).ref
         case .reason: addElement(StoryReason.self, name: name).ref
         case .purpose: addElement(StoryPurpose.self, name: name).ref
+        case .species: addElement(StorySpecies.self, name: name).ref
+        case .fact: addElement(StoryFact.self, name: name).ref
         }
     }
 
@@ -298,6 +300,8 @@ extension StoryWorld {
         case .place: places.count
         case .reason: reasons.count
         case .purpose: purposes.count
+        case .species: species.count
+        case .fact: facts.count
         }
     }
 
@@ -312,6 +316,8 @@ extension StoryWorld {
         case .place: return list(places)
         case .reason: return list(reasons)
         case .purpose: return list(purposes)
+        case .species: return list(species)
+        case .fact: return list(facts)
         }
     }
 
@@ -322,6 +328,8 @@ extension StoryWorld {
         case .place: element(StoryPlace.self, ref.id)?.displayName
         case .reason: element(StoryReason.self, ref.id)?.displayName
         case .purpose: element(StoryPurpose.self, ref.id)?.displayName
+        case .species: element(StorySpecies.self, ref.id)?.displayName
+        case .fact: element(StoryFact.self, ref.id)?.displayName
         }
     }
 
@@ -335,6 +343,8 @@ extension StoryWorld {
         case .place: places.removeAll { $0.id == ref.id }
         case .reason: reasons.removeAll { $0.id == ref.id }
         case .purpose: purposes.removeAll { $0.id == ref.id }
+        case .species: species.removeAll { $0.id == ref.id }
+        case .fact: facts.removeAll { $0.id == ref.id }
         }
         let id = ref.id
         func forget(in parts: inout [StoryPart]) {
@@ -349,6 +359,9 @@ extension StoryWorld {
         timeline.entries.removeAll { $0.ref == ref }
         for index in figures.indices {
             figures[index].relations.removeAll { $0.target == ref }
+        }
+        for index in facts.indices {
+            facts[index].links.removeAll { $0 == ref }
         }
         for index in events.indices {
             for consequence in events[index].consequences.indices {
@@ -369,11 +382,55 @@ extension StoryWorld {
         case .place:
             for index in places.indices where places[index].parentID == id { places[index].parentID = nil }
             for index in events.indices { events[index].placeIDs.removeAll { $0 == id } }
+            for index in species.indices { species[index].habitatPlaceIDs.removeAll { $0 == id } }
         case .event:
             for index in events.indices { events[index].causeEventIDs.removeAll { $0 == id } }
-        case .reason, .purpose:
+        case .species:
+            for index in figures.indices where figures[index].speciesID == id { figures[index].speciesID = nil }
+        case .reason, .purpose, .fact:
             break
         }
+    }
+
+    /// The files an element keeps in the library: pictures, and a figure's videos.
+    func media(of ref: StoryRef) -> (images: [StoryImage], videos: [StoryVideo]) {
+        switch ref.kind {
+        case .figure:
+            let figure = element(StoryFigure.self, ref.id)
+            return (figure?.images ?? [], figure?.videos ?? [])
+        case .place: return (element(StoryPlace.self, ref.id)?.images ?? [], [])
+        case .species: return (element(StorySpecies.self, ref.id)?.images ?? [], [])
+        case .fact: return (element(StoryFact.self, ref.id)?.images ?? [], [])
+        case .event, .reason, .purpose: return ([], [])
+        }
+    }
+
+    /// The gallery pictures of a part and everything below it.
+    func galleryImages(within partID: UUID) -> [StoryImage] {
+        func collect(_ part: StoryPart) -> [StoryImage] { part.gallery + part.children.flatMap(collect) }
+        return part(partID).map(collect) ?? []
+    }
+
+    /// The figures that belong to a species.
+    func figures(ofSpecies speciesID: UUID) -> [StoryFigure] {
+        figures.filter { $0.speciesID == speciesID }
+    }
+
+    /// Facts that are linked to an element.
+    func facts(about ref: StoryRef) -> [StoryFact] {
+        facts.filter { $0.links.contains(ref) }
+    }
+
+    /// Every tag the facts use, with how often, most used first.
+    var factTags: [(tag: String, count: Int)] {
+        var counts: [String: (tag: String, count: Int)] = [:]
+        for fact in facts {
+            for tag in fact.tags {
+                let key = tag.lowercased()
+                counts[key] = (counts[key]?.tag ?? tag, (counts[key]?.count ?? 0) + 1)
+            }
+        }
+        return counts.values.sorted { $0.count != $1.count ? $0.count > $1.count : $0.tag.localizedStandardCompare($1.tag) == .orderedAscending }
     }
 
     /// The parts (and timelines) that use an element, in reading order.

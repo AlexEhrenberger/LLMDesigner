@@ -10,8 +10,14 @@ struct StoryNavigator: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 1) {
-                row(title: "Weltübersicht", symbol: "globe.europe.africa", color: Theme.accent, selected: model.page == .overview) {
+                row(title: "Weltübersicht", symbol: "globe.europe.africa", color: Theme.accent, selected: model.page == .overview && model.partTab != .gallery) {
                     model.page = .overview
+                    if model.partTab == .gallery { model.partTab = .content }
+                }
+                row(title: "Galerie", symbol: "photo.on.rectangle.angled", color: Theme.accent, selected: model.page == .overview && model.partTab == .gallery,
+                    trailing: world.gallery.isEmpty ? nil : "\(world.gallery.count)") {
+                    model.page = .overview
+                    model.partTab = .gallery
                 }
                 header("Werk") {
                     Menu {
@@ -61,7 +67,7 @@ struct StoryNavigator: View {
                 if case .part(let id) = model.page, world.path(to: id).contains(where: { $0.id == part.id }) {
                     model.page = world.parentID(of: part.id).map { .part($0) } ?? .overview
                 }
-                library.update(world.id) { $0.removePart(part.id) }
+                library.removePart(part.id, in: world.id)
                 deleting = nil
             }
         } message: {

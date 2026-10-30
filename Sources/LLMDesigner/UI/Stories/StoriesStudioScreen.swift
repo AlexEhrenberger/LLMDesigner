@@ -11,7 +11,7 @@ final class StoriesStudioModel {
     }
 
     enum PartTab: Hashable {
-        case content, timeline
+        case content, timeline, gallery
     }
 
     var worldID: UUID?
@@ -20,6 +20,8 @@ final class StoriesStudioModel {
     /// The element each kind's list has selected.
     var selected: [StoryElementKind: UUID] = [:]
     var searchText: [StoryElementKind: String] = [:]
+    /// The tags the list of facts is filtered by: a fact must have all of them.
+    var factTagFilter: [String] = []
     /// Parts open in the navigator.
     var expanded: Set<UUID> = []
     /// A new part or element whose name field should take the keyboard.
@@ -40,6 +42,7 @@ final class StoriesStudioModel {
         partTab = .content
         selected = [:]
         searchText = [:]
+        factTagFilter = []
         expanded = []
         selectedEntryID = nil
     }

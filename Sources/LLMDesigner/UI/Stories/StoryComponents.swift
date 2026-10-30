@@ -13,32 +13,62 @@ extension StoryElementKind {
         case .place: Color(hex: 0x4FD1A5)
         case .reason: Color(hex: 0x6CB4FF)
         case .purpose: Color(hex: 0xFF8FB8)
+        case .species: Color(hex: 0xC5E063)
+        case .fact: Color(hex: 0xE3C08D)
         }
     }
+
+    /// Kinds whose elements have pictures (the first is shown in lists).
+    var hasPictures: Bool { self == .figure || self == .place || self == .species || self == .fact }
 }
 
 // MARK: - Bindings
 
+// Text goes through drafts (see StoryLibrary), so typing doesn't redraw the whole studio on every key; other
+// values (menus, switches) change the world at once.
+
 extension StoryLibrary {
     func binding<T>(_ worldID: UUID, _ keyPath: WritableKeyPath<StoryWorld, T>) -> Binding<T> {
-        Binding(
+        if T.self == String.self {
+            return draftBinding(worldID, field: keyPath, fallback: StoryWorld()[keyPath: keyPath],
+                                get: { $0[keyPath: keyPath] }, set: { $0[keyPath: keyPath] = $1 })
+        }
+        return Binding(
             get: { self.world(worldID)?[keyPath: keyPath] ?? StoryWorld()[keyPath: keyPath] },
             set: { value in self.update(worldID) { $0[keyPath: keyPath] = value } }
         )
     }
 
     func binding<E: StoryElement, T>(_ worldID: UUID, _ type: E.Type, _ id: UUID, _ keyPath: WritableKeyPath<E, T>) -> Binding<T> {
-        Binding(
+        if T.self == String.self {
+            return draftBinding(worldID, field: [AnyHashable(id), AnyHashable(keyPath)], fallback: E()[keyPath: keyPath],
+                                get: { $0.element(type, id)?[keyPath: keyPath] },
+                                set: { world, value in world.updateElement(type, id) { $0[keyPath: keyPath] = value } })
+        }
+        return Binding(
             get: { self.world(worldID)?.element(type, id)?[keyPath: keyPath] ?? E()[keyPath: keyPath] },
             set: { value in self.update(worldID) { $0.updateElement(type, id) { $0[keyPath: keyPath] = value } } }
         )
     }
 
     func partBinding<T>(_ worldID: UUID, _ partID: UUID, _ keyPath: WritableKeyPath<StoryPart, T>) -> Binding<T> {
-        Binding(
+        if T.self == String.self {
+            return draftBinding(worldID, field: [AnyHashable(partID), AnyHashable(keyPath)], fallback: StoryPart(level: .chapter)[keyPath: keyPath],
+                                get: { $0.part(partID)?[keyPath: keyPath] },
+                                set: { world, value in world.updatePart(partID) { $0[keyPath: keyPath] = value } })
+        }
+        return Binding(
             get: { self.world(worldID)?.part(partID)?[keyPath: keyPath] ?? StoryPart(level: .chapter)[keyPath: keyPath] },
             set: { value in self.update(worldID) { $0.updatePart(partID) { $0[keyPath: keyPath] = value } } }
         )
+    }
+
+    /// Text of something nested in an element (a relation's note, a scene, a consequence), found by `id`.
+    func elementText<E: StoryElement>(_ worldID: UUID, _ type: E.Type, _ elementID: UUID, field: AnyHashable,
+                                      get: @escaping (E) -> String?, set: @escaping (inout E, String) -> Void) -> Binding<String> {
+        draftBinding(worldID, field: [AnyHashable(elementID), field], fallback: "",
+                     get: { $0.element(type, elementID).flatMap(get) },
+                     set: { world, text in world.updateElement(type, elementID) { set(&$0, text) } })
     }
 
     func updateElement<E: StoryElement>(_ worldID: UUID, _ type: E.Type, _ id: UUID, _ change: (inout E) -> Void) {

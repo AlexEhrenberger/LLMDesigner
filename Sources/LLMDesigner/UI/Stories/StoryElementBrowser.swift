@@ -32,6 +32,8 @@ struct StoryElementBrowser: View {
         case .event: StoryEventPage(eventID: id, world: world, model: model, library: library)
         case .reason: StoryReasonPage(reasonID: id, world: world, model: model, library: library)
         case .purpose: StoryPurposePage(purposeID: id, world: world, model: model, library: library)
+        case .species: StorySpeciesPage(speciesID: id, world: world, model: model, library: library)
+        case .fact: StoryFactPage(factID: id, world: world, model: model, library: library)
         }
     }
 
@@ -59,6 +61,8 @@ struct StoryElementBrowser: View {
         case .event: "Events sind das, was passiert – etwa der Sturz des Königs. Wichtig sind ihre Ursachen und Auswirkungen, und welche Events daraus folgen."
         case .reason: "Reasons erklären, warum etwas geschieht: Annahmen und Prämissen führen zu einer Konklusion – oft zu der einer Figur, die sich irrt."
         case .purpose: "Purposes halten fest, wozu etwas in der Geschichte dient – Vorausdeutung, Spannungsaufbau, falsche Fährte – und wo es vorbereitet und eingelöst wird."
+        case .species: "Spezies beschreiben die Wesen, die in der Welt leben – Völker, Bestien, magische Geschöpfe: Gestalt, Fähigkeiten, Lebensraum, Kultur. Figuren können einer Spezies angehören."
+        case .fact: "Fakten sind einfache Notizen zur Welt – historische Fakten, Gesetze, Daten, Details. Sie bekommen Schlagworte und Bilder, lassen sich durchsuchen und über das Menü „Schlagworte“ filtern – auch nach mehreren zugleich."
         }
     }
 }
@@ -87,9 +91,22 @@ private struct StoryElementList: View {
         let words = query.wrappedValue.lowercased().split(separator: " ").map(String.init)
         func fits(_ text: String) -> Bool { words.allSatisfy { text.lowercased().contains($0) } }
         switch kind {
+        case .species:
+            return world.species
+                .filter { fits($0.name + " " + $0.speciesKind.label) }
+                .sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
+                .map { Item(id: $0.id, name: $0.displayName, subtitle: $0.subtitle, image: $0.images.first, depth: 0) }
+        case .fact:
+            // Newest first: facts are collected as they come up.
+            let query = query.wrappedValue
+            let tags = model.factTagFilter
+            return world.facts
+                .filter { fact in fact.matches(query) && tags.allSatisfy(fact.hasTag) }
+                .sorted { $0.createdAt > $1.createdAt }
+                .map { Item(id: $0.id, name: $0.displayName, subtitle: $0.subtitle, image: $0.images.first, depth: 0) }
         case .figure:
             return world.figures
-                .filter { fits($0.name + " " + $0.epithet + " " + $0.role.label) }
+                .filter { fits($0.name + " " + $0.epithet + " " + $0.role.label + " " + ($0.speciesID.flatMap { world.element(StorySpecies.self, $0)?.name } ?? "")) }
                 .sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
                 .map { Item(id: $0.id, name: $0.displayName, subtitle: $0.subtitle, image: $0.images.first, depth: 0) }
         case .place:
@@ -155,6 +172,9 @@ private struct StoryElementList: View {
             .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white.opacity(0.045)))
             .padding(.horizontal, 10)
             .padding(.bottom, 8)
+            if kind == .fact {
+                tagFilter
+            }
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 1) {
                     ForEach(items) { item in
@@ -176,12 +196,45 @@ private struct StoryElementList: View {
         }
     }
 
+    /// The facts' tags as a dropdown with checkboxes; a fact must have every tag ticked.
+    @ViewBuilder
+    private var tagFilter: some View {
+        let tags = world.factTags
+        if !tags.isEmpty {
+            HStack(spacing: 6) {
+                StoryTagMenuButton(title: "Schlagworte", tags: tags, selected: model.factTagFilter, color: kind.color) { tag in
+                    if let index = model.factTagFilter.firstIndex(where: { StoryFact.sameTag($0, tag) }) {
+                        model.factTagFilter.remove(at: index)
+                    } else {
+                        model.factTagFilter.append(tag)
+                    }
+                } onClear: {
+                    model.factTagFilter = []
+                }
+                if !model.factTagFilter.isEmpty {
+                    Button {
+                        model.factTagFilter = []
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 12))
+                            .foregroundStyle(Theme.textTertiary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Filter aufheben")
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 10)
+            .padding(.bottom, 8)
+        }
+    }
+
     private func row(_ item: Item) -> some View {
         Button {
             model.selected[kind] = item.id
         } label: {
             HStack(spacing: 9) {
-                if kind == .figure || kind == .place {
+                if kind.hasPictures, kind != .fact || item.image != nil {
                     StoryAvatar(kind: kind, image: item.image, worldID: world.id, library: library, size: 28)
                 } else {
                     Image(systemName: kind.symbol)
@@ -205,7 +258,7 @@ private struct StoryElementList: View {
             }
             .padding(.leading, 8 + CGFloat(item.depth) * 14)
             .padding(.trailing, 8)
-            .frame(height: kind == .figure || kind == .place ? 40 : 34)
+            .frame(height: kind.hasPictures && kind != .fact ? 40 : 34)
             .contentShape(Rectangle())
         }
         .buttonStyle(StoryRowButtonStyle(selected: model.selected[kind] == item.id))
@@ -223,11 +276,7 @@ private struct StoryElementList: View {
 
     private func remove(_ id: UUID) {
         if model.selected[kind] == id { model.selected[kind] = nil }
-        let ref = StoryRef(kind: kind, id: id)
-        // Pictures of a figure or place go to the Trash with it.
-        let images = world.element(StoryFigure.self, id)?.images ?? world.element(StoryPlace.self, id)?.images ?? []
-        library.update(world.id) { $0.removeElement(ref) }
-        for image in images { library.removeImage(image, in: world.id) }
+        library.removeElement(StoryRef(kind: kind, id: id), in: world.id)
     }
 }
 
@@ -258,10 +307,8 @@ struct StoryElementHeader<Accessory: View>: View {
                 Spacer(minLength: 0)
                 StoryDeleteButton(title: "„\(world.name(of: ref) ?? "")“ löschen?",
                                   message: "Alle Verknüpfungen in Büchern, Timelines und anderen Elementen werden gelöst.") {
-                    let images = world.element(StoryFigure.self, ref.id)?.images ?? world.element(StoryPlace.self, ref.id)?.images ?? []
                     model.selected[ref.kind] = nil
-                    library.update(world.id) { $0.removeElement(ref) }
-                    for image in images { library.removeImage(image, in: world.id) }
+                    library.removeElement(ref, in: world.id)
                 }
             }
             TextField(placeholder ?? "Name", text: $name, axis: .vertical)

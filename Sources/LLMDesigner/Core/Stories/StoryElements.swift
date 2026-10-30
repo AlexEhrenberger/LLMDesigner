@@ -1,6 +1,6 @@
 import Foundation
 
-/// What the five kinds of elements share, so lists, pickers and links work the same for all of them.
+/// What all kinds of elements share, so lists, pickers and links work the same for all of them.
 protocol StoryElement: Identifiable, Hashable, Codable, Sendable where ID == UUID {
     static var kind: StoryElementKind { get }
     /// Where the world keeps elements of this kind.
@@ -191,7 +191,11 @@ struct StoryFigure: StoryElement {
     /// Title or byname: "die Mutter der Drachen".
     var epithet = ""
     var role: FigureRole = .none
+    /// What kind of being it is; nil: not set (in most worlds, a human).
+    var speciesID: UUID?
     var images: [StoryImage] = []
+    /// Character video cards: short clips that show the figure moving, speaking, in costume.
+    var videos: [StoryVideo] = []
     var birth = ""
     var origin = ""
     /// Biographical stations as one block; a fantasy life doesn't fit a CV.
@@ -533,6 +537,131 @@ struct StoryPurpose: StoryElement {
     var isOpenPromise: Bool { !setupPartIDs.isEmpty && payoffPartIDs.isEmpty }
 }
 
+// MARK: - Species
+
+enum SpeciesKind: String, Codable, CaseIterable, Identifiable, Sendable {
+    case people, beast, magical, spirit, undead, plant, other
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .people: "Volk / Humanoide"
+        case .beast: "Tier / Bestie"
+        case .magical: "Magisches Wesen"
+        case .spirit: "Geist / Gottheit"
+        case .undead: "Untot"
+        case .plant: "Pflanze / Pilz"
+        case .other: "Sonstige Wesen"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .people: "person.2"
+        case .beast: "pawprint"
+        case .magical: "sparkles"
+        case .spirit: "cloud.moon"
+        case .undead: "moon.zzz"
+        case .plant: "leaf"
+        case .other: "questionmark.circle"
+        }
+    }
+}
+
+/// A kind of being that lives in the world: a people, a beast, a magical creature. Figures can belong to one.
+struct StorySpecies: StoryElement {
+    static let kind = StoryElementKind.species
+    static let collection: WritableKeyPath<StoryWorld, [StorySpecies]> = \.species
+
+    var id = UUID()
+    var name = ""
+    var speciesKind: SpeciesKind = .other
+    var images: [StoryImage] = []
+    /// Body, size, how they move and sound.
+    var appearance = ""
+    var abilities = ""
+    var weaknesses = ""
+    /// How long they live, how they are born and grow up.
+    var lifeCycle = ""
+    var habitat = ""
+    var habitatPlaceIDs: [UUID] = []
+    /// Language, customs, rule, faith – if they have any.
+    var culture = ""
+    /// How they stand towards the other beings of the world.
+    var relations = ""
+    var history = ""
+    /// What the species stands for in the story.
+    var significance = ""
+    var secrets = ""
+    var notes = ""
+    var createdAt = Date()
+    var updatedAt = Date()
+
+    init() {}
+
+    var subtitle: String { speciesKind == .other ? "" : speciesKind.label }
+}
+
+// MARK: - Fact
+
+/// A simple note of the world – a historical fact, a law, a date, a detail to keep straight – with tags, pictures,
+/// a source, and links to the elements it is about.
+struct StoryFact: StoryElement {
+    static let kind = StoryElementKind.fact
+    static let collection: WritableKeyPath<StoryWorld, [StoryFact]> = \.facts
+
+    var id = UUID()
+    /// The fact's title.
+    var name = ""
+    var text = ""
+    var tags: [String] = []
+    var images: [StoryImage] = []
+    /// Where it comes from: a chronicle of the world, a real book, a link.
+    var source = ""
+    var links: [StoryRef] = []
+    var createdAt = Date()
+    var updatedAt = Date()
+
+    init() {}
+
+    var subtitle: String {
+        if !tags.isEmpty { return tags.map { "#" + $0 }.joined(separator: " ") }
+        return text.split(separator: "\n").first.map(String.init) ?? ""
+    }
+
+    /// A tag as it is kept: without "#", commas and surrounding blanks; empty when nothing is left.
+    static func normalizedTag(_ text: String) -> String {
+        text.replacingOccurrences(of: ",", with: " ")
+            .trimmingCharacters(in: .whitespaces)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "#"))
+            .trimmingCharacters(in: .whitespaces)
+    }
+
+    /// Tags are the same when they differ only in case ("krieg" and "Krieg").
+    static func sameTag(_ a: String, _ b: String) -> Bool {
+        a.compare(b, options: .caseInsensitive) == .orderedSame
+    }
+
+    func hasTag(_ tag: String) -> Bool {
+        tags.contains { Self.sameTag($0, tag) }
+    }
+
+    /// Search: every word must be found. "#Krieg" asks for a tag starting with "Krieg"; other words are looked for in
+    /// the title, the text, the tags and the source.
+    func matches(_ query: String) -> Bool {
+        let words = query.split(whereSeparator: \.isWhitespace).map(String.init)
+        let haystack = [name, text, source, tags.joined(separator: " ")].joined(separator: " ")
+        return words.allSatisfy { word in
+            if word.hasPrefix("#") {
+                let tag = Self.normalizedTag(word)
+                return tag.isEmpty || tags.contains { $0.range(of: tag, options: [.caseInsensitive, .diacriticInsensitive, .anchored]) != nil }
+            }
+            return haystack.range(of: word, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+        }
+    }
+}
+
 // MARK: - Coding (lenient, see StoryModel.swift)
 
 extension PersonalityProfile {
@@ -596,7 +725,9 @@ extension StoryFigure {
         name = c.lenient(.name, name)
         epithet = c.lenient(.epithet, epithet)
         role = c.lenient(.role, role)
+        speciesID = c.lenient(.speciesID, speciesID)
         images = c.lenient(.images, images)
+        videos = c.lenient(.videos, videos)
         birth = c.lenient(.birth, birth)
         origin = c.lenient(.origin, origin)
         biography = c.lenient(.biography, biography)
@@ -695,6 +826,47 @@ extension StoryPurpose {
         setupPartIDs = c.lenient(.setupPartIDs, setupPartIDs)
         payoffPartIDs = c.lenient(.payoffPartIDs, payoffPartIDs)
         notes = c.lenient(.notes, notes)
+        createdAt = c.lenient(.createdAt, createdAt)
+        updatedAt = c.lenient(.updatedAt, createdAt)
+    }
+}
+
+extension StorySpecies {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init()
+        id = try c.decode(UUID.self, forKey: .id)
+        name = c.lenient(.name, name)
+        speciesKind = c.lenient(.speciesKind, speciesKind)
+        images = c.lenient(.images, images)
+        appearance = c.lenient(.appearance, appearance)
+        abilities = c.lenient(.abilities, abilities)
+        weaknesses = c.lenient(.weaknesses, weaknesses)
+        lifeCycle = c.lenient(.lifeCycle, lifeCycle)
+        habitat = c.lenient(.habitat, habitat)
+        habitatPlaceIDs = c.lenient(.habitatPlaceIDs, habitatPlaceIDs)
+        culture = c.lenient(.culture, culture)
+        relations = c.lenient(.relations, relations)
+        history = c.lenient(.history, history)
+        significance = c.lenient(.significance, significance)
+        secrets = c.lenient(.secrets, secrets)
+        notes = c.lenient(.notes, notes)
+        createdAt = c.lenient(.createdAt, createdAt)
+        updatedAt = c.lenient(.updatedAt, createdAt)
+    }
+}
+
+extension StoryFact {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init()
+        id = try c.decode(UUID.self, forKey: .id)
+        name = c.lenient(.name, name)
+        text = c.lenient(.text, text)
+        tags = c.lenient(.tags, tags)
+        images = c.lenient(.images, images)
+        source = c.lenient(.source, source)
+        links = c.lenient(.links, [Lenient<StoryRef>]()).compactMap(\.value)
         createdAt = c.lenient(.createdAt, createdAt)
         updatedAt = c.lenient(.updatedAt, createdAt)
     }

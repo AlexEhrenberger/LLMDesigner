@@ -1,19 +1,23 @@
 import SwiftUI
 
-/// A page with "Inhalt | Timeline" in its head.
+/// A page with "Inhalt | Timeline | Galerie" in its head (as far as the page has them).
 private struct StoryPageHead<Leading: View>: View {
     let model: StoriesStudioModel
-    var hasTimeline = true
+    let tabs: [StoriesStudioModel.PartTab]
     @ViewBuilder let leading: () -> Leading
 
     var body: some View {
         HStack(spacing: 10) {
             leading()
             Spacer(minLength: 12)
-            if hasTimeline {
-                StoryTabBar(tabs: [(StoriesStudioModel.PartTab.content, "Inhalt", "text.alignleft"),
-                                   (.timeline, "Timeline", "calendar.day.timeline.left")],
-                            selection: Binding(get: { model.partTab }, set: { model.partTab = $0 }))
+            if tabs.count > 1 {
+                StoryTabBar(tabs: tabs.map { tab in
+                    switch tab {
+                    case .content: (tab, "Inhalt", "text.alignleft")
+                    case .timeline: (tab, "Timeline", "calendar.day.timeline.left")
+                    case .gallery: (tab, "Galerie", "photo.on.rectangle.angled")
+                    }
+                }, selection: Binding(get: { tabs.contains(model.partTab) ? model.partTab : .content }, set: { model.partTab = $0 }))
             }
         }
         .padding(.horizontal, 24)
@@ -32,7 +36,7 @@ struct StoryWorldPage: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            StoryPageHead(model: model) {
+            StoryPageHead(model: model, tabs: [.content, .timeline, .gallery]) {
                 Label("Romanwelt", systemImage: "globe.europe.africa")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(Theme.textSecondary)
@@ -43,6 +47,16 @@ struct StoryWorldPage: View {
             case .timeline:
                 StoryTimelineView(owner: .world, world: world, model: model, library: library)
                     .id(TimelineOwner.world)
+            case .gallery:
+                StoryGalleryView(title: "Galerie der Romanwelt", worldID: world.id, images: world.gallery, library: library) { image in
+                    library.draftBinding(world.id, field: ["gallery", image.fileName], fallback: "",
+                                         get: { $0.gallery.first { $0.fileName == image.fileName }?.caption },
+                                         set: { world, text in
+                                             if let index = world.gallery.firstIndex(where: { $0.fileName == image.fileName }) { world.gallery[index].caption = text }
+                                         })
+                } onChange: { images in
+                    library.update(world.id) { $0.gallery = images }
+                }
             }
         }
     }
@@ -181,17 +195,37 @@ struct StoryPartPage: View {
     var body: some View {
         if let part = world.part(partID) {
             VStack(spacing: 0) {
-                StoryPageHead(model: model, hasTimeline: part.level.hasTimeline) {
+                StoryPageHead(model: model, tabs: tabs(part)) {
                     breadcrumb(part)
                 }
                 Rectangle().fill(Theme.border).frame(height: 1)
                 if model.partTab == .timeline, part.level.hasTimeline {
                     StoryTimelineView(owner: .part(partID), world: world, model: model, library: library)
                         .id(TimelineOwner.part(partID))
+                } else if model.partTab == .gallery, part.level == .book {
+                    StoryGalleryView(title: "Galerie zu „\(world.displayTitle(of: part))“", worldID: world.id, images: part.gallery, library: library) { image in
+                        library.draftBinding(world.id, field: [AnyHashable(partID), AnyHashable("gallery"), AnyHashable(image.fileName)], fallback: "",
+                                             get: { [partID] in $0.part(partID)?.gallery.first { $0.fileName == image.fileName }?.caption },
+                                             set: { [partID] world, text in
+                                                 world.updatePart(partID) { part in
+                                                     if let index = part.gallery.firstIndex(where: { $0.fileName == image.fileName }) { part.gallery[index].caption = text }
+                                                 }
+                                             })
+                    } onChange: { images in
+                        library.update(world.id) { $0.updatePart(partID) { $0.gallery = images } }
+                    }
                 } else {
                     content(part)
                 }
             }
+        }
+    }
+
+    private func tabs(_ part: StoryPart) -> [StoriesStudioModel.PartTab] {
+        switch part.level {
+        case .book: [.content, .timeline, .gallery]
+        case .act, .chapter: [.content, .timeline]
+        case .section: []
         }
     }
 
@@ -234,7 +268,7 @@ struct StoryPartPage: View {
                     pointOfView(part)
                 }
                 VStack(alignment: .leading, spacing: 10) {
-                    ForEach(StoryElementKind.allCases) { kind in
+                    ForEach(StoryElementKind.questions) { kind in
                         StoryFocusCard(kind: kind, part: part, world: world, model: model, library: library)
                     }
                 }
@@ -264,7 +298,7 @@ struct StoryPartPage: View {
             StoryDeleteButton(title: "„\(world.displayTitle(of: part))“ löschen?",
                               message: part.children.isEmpty ? "Die verknüpften Elemente bleiben erhalten." : "Mit allem, was darin liegt. Die verknüpften Elemente bleiben erhalten.") {
                 model.page = world.parentID(of: partID).map { .part($0) } ?? .overview
-                library.update(world.id) { $0.removePart(partID) }
+                library.removePart(partID, in: world.id)
             }
         }
     }
@@ -440,9 +474,10 @@ private struct StoryFocusCard: View {
                     .foregroundStyle(Theme.textTertiary)
                 Spacer()
             }
-            TextField(kind.prompt, text: Binding(
-                get: { world.part(part.id)?.focus.text(kind) ?? "" },
-                set: { text in library.update(world.id) { $0.updatePart(part.id) { $0.focus.setText(text, for: kind) } } }
+            TextField(kind.prompt, text: library.draftBinding(
+                world.id, field: [AnyHashable(part.id), AnyHashable(kind)], fallback: "",
+                get: { $0.part(part.id)?.focus.text(kind) },
+                set: { world, text in world.updatePart(part.id) { $0.focus.setText(text, for: kind) } }
             ), axis: .vertical)
             .textFieldStyle(.plain)
             .font(.system(size: 13))

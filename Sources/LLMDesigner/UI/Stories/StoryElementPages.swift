@@ -41,6 +41,7 @@ struct StoryPlacePage: View {
                               text: field(\.significance), lines: 2...12)
                 StoryTextArea(title: "Geheimnisse", text: field(\.secrets), lines: 2...10)
                 related(place)
+                StoryRelatedFacts(ref: place.ref, world: world, model: model)
                 StoryUsageList(ref: place.ref, world: world, model: model)
                 StoryPinList(ref: place.ref, world: world, model: model)
                 StoryTextArea(title: "Notizen", text: field(\.notes), lines: 2...16)
@@ -63,8 +64,17 @@ struct StoryPlacePage: View {
     private func related(_ place: StoryPlace) -> some View {
         let subplaces = world.subplaces(of: placeID)
         let events = world.events.filter { $0.placeIDs.contains(placeID) }
-        if !subplaces.isEmpty || !events.isEmpty {
+        let species = world.species.filter { $0.habitatPlaceIDs.contains(placeID) }
+        if !subplaces.isEmpty || !events.isEmpty || !species.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
+                if !species.isEmpty {
+                    StoryLabel(title: "Wesen, die hier leben", symbol: StoryElementKind.species.symbol, color: StoryElementKind.species.color)
+                    FlowLayout(spacing: 6, lineSpacing: 6) {
+                        ForEach(species) { other in
+                            StoryElementChip(kind: .species, name: other.displayName, onOpen: { model.show(other.ref) })
+                        }
+                    }
+                }
                 if !subplaces.isEmpty {
                     StoryLabel(title: "Orte darin", symbol: StoryElementKind.place.symbol, color: StoryElementKind.place.color)
                     FlowLayout(spacing: 6, lineSpacing: 6) {
@@ -137,6 +147,7 @@ struct StoryEventPage: View {
                 knowledge(event)
                 StoryTextArea(title: "Bedeutung für die Handlung", hint: "Was dieses Event für den Bogen der Geschichte leistet – was ohne es nicht ginge.",
                               text: field(\.significance), lines: 2...12)
+                StoryRelatedFacts(ref: event.ref, world: world, model: model)
                 StoryPinList(ref: event.ref, world: world, model: model)
                 StoryUsageList(ref: event.ref, world: world, model: model)
                 StoryTextArea(title: "Notizen", text: field(\.notes), lines: 2...16)
@@ -286,9 +297,12 @@ private struct StoryConsequenceCard: View {
                 .buttonStyle(.plain)
                 .help("Auswirkung entfernen")
             }
-            TextField("Was ändert sich?", text: Binding(
-                get: { world.element(StoryEvent.self, eventID)?.consequences.first { $0.id == consequence.id }?.text ?? "" },
-                set: { text in update { $0.text = text } }
+            TextField("Was ändert sich?", text: library.elementText(
+                world.id, StoryEvent.self, eventID, field: consequence.id,
+                get: { $0.consequences.first { $0.id == consequence.id }?.text },
+                set: { event, text in
+                    if let index = event.consequences.firstIndex(where: { $0.id == consequence.id }) { event.consequences[index].text = text }
+                }
             ), axis: .vertical)
             .lineLimit(1...12)
             .storyField()
@@ -349,12 +363,12 @@ struct StoryReasonPage: View {
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.textTertiary)
                 StoryStatementColumn(title: "Annahmen", hint: "Was stillschweigend vorausgesetzt wird – Überzeugungen, Vorurteile, Weltbild.",
-                                     symbol: "cloud", dashed: true, statements: reason.assumptions, add: "Annahme") { statements in
+                                     symbol: "cloud", dashed: true, statements: reason.assumptions, add: "Annahme", text: { statementText($0, \.assumptions) }) { statements in
                     library.updateElement(world.id, StoryReason.self, reasonID) { $0.assumptions = statements }
                 }
                 arrow
                 StoryStatementColumn(title: "Prämissen", hint: "Die ausdrücklichen Gründe, auf die sich die Schlussfolgerung stützt.",
-                                     symbol: "square.stack.3d.up", dashed: false, statements: reason.premises, add: "Prämisse") { statements in
+                                     symbol: "square.stack.3d.up", dashed: false, statements: reason.premises, add: "Prämisse", text: { statementText($0, \.premises) }) { statements in
                     library.updateElement(world.id, StoryReason.self, reasonID) { $0.premises = statements }
                 }
                 arrow
@@ -385,6 +399,14 @@ struct StoryReasonPage: View {
         }
     }
 
+    private func statementText(_ id: UUID, _ list: WritableKeyPath<StoryReason, [ReasonStatement]>) -> Binding<String> {
+        library.elementText(world.id, StoryReason.self, reasonID, field: id,
+                            get: { $0[keyPath: list].first { $0.id == id }?.text },
+                            set: { reason, text in
+                                if let index = reason[keyPath: list].firstIndex(where: { $0.id == id }) { reason[keyPath: list][index].text = text }
+                            })
+    }
+
     private var arrow: some View {
         HStack {
             Spacer()
@@ -404,6 +426,7 @@ private struct StoryStatementColumn: View {
     let dashed: Bool
     let statements: [ReasonStatement]
     let add: String
+    let text: (UUID) -> Binding<String>
     let onChange: ([ReasonStatement]) -> Void
 
     var body: some View {
@@ -427,10 +450,7 @@ private struct StoryStatementColumn: View {
             }
             ForEach(statements) { statement in
                 HStack(alignment: .top, spacing: 8) {
-                    TextField(add, text: Binding(
-                        get: { statement.text },
-                        set: { text in change(statement.id) { $0.text = text } }
-                    ), axis: .vertical)
+                    TextField(add, text: text(statement.id), axis: .vertical)
                     .textFieldStyle(.plain)
                     .font(.system(size: 13))
                     .foregroundStyle(Theme.textPrimary)
