@@ -18,16 +18,26 @@ struct WriterScreen: View {
                 main(document)
                 // The document's contents and bookmarks; the check results take its place while they are open.
                 if app.isPanelDocked, !assistant.isPanelShown, showsToolbar, app.writerTab == .document {
-                    DocumentPanel(document: document, controller: controller, assistant: assistant)
-                        .frame(width: Theme.outlineWidth)
-                        .transition(.move(edge: .trailing))
+                    Group {
+                        if app.power.isOn {
+                            PowerPanel()
+                        } else {
+                            DocumentPanel(document: document, controller: controller, assistant: assistant)
+                        }
+                    }
+                    .frame(width: app.rightPanelWidth)
+                    .transition(.move(edge: .trailing))
                 }
             }
             // In a narrow window the panel lies over the sheet.
             .overlay {
                 FloatingPanel(isShown: app.panelCollapsed && app.panelOverlay && !assistant.isPanelShown && app.writerTab == .document,
-                              edge: .trailing, width: Theme.outlineWidth) {
-                    DocumentPanel(document: document, controller: controller, assistant: assistant)
+                              edge: .trailing, width: app.rightPanelWidth) {
+                    if app.power.isOn {
+                        PowerPanel()
+                    } else {
+                        DocumentPanel(document: document, controller: controller, assistant: assistant)
+                    }
                 }
             }
             .background(Theme.background)
@@ -381,7 +391,7 @@ private struct WriterTopBar: View {
         HStack(spacing: 8) {
             if !app.isSidebarDocked {
                 SidebarToggleButton()
-                IconButton(systemName: "square.and.pencil", help: "Neuer Chat (⌘N)", frameSize: Theme.titleBarControlSize) { app.newChat() }
+                NewItemMenu()
                     .padding(.trailing, 6)
             }
             Image(systemName: StudioApplication.writer.symbol)
@@ -414,6 +424,7 @@ private struct WriterTopBar: View {
                     .help(countsHelp)
             }
             PaperSwitch()
+            if app.writerTab == .document { PowerButton() }
             if !app.isPanelDocked, app.writerTab == .document {
                 IconButton(systemName: "sidebar.right", help: "Inhaltsverzeichnis und Lesezeichen einblenden (⌥⌘I)", frameSize: Theme.titleBarControlSize) {
                     app.toggleOutlinePanel()

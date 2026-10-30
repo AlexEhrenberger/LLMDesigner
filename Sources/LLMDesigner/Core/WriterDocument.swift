@@ -46,7 +46,9 @@ struct WriterDocument: Identifiable, Hashable, Sendable {
         if let deck {
             let backgrounds = [deck.backgrounds.titel, deck.backgrounds.kapitel, deck.backgrounds.folie] + deck.slides.map(\.background)
             sources += backgrounds.compactMap { $0?.image }
-            sources += deck.slides.flatMap { $0.images.map(\.source) }
+            sources += deck.slides.flatMap { $0.images.filter { !$0.isText }.map(\.source) }
+            // Pictures inside text fields.
+            sources += deck.slides.flatMap { $0.images.compactMap(\.text).flatMap(WriterImageStore.sources(in:)) }
         }
         return sources
     }

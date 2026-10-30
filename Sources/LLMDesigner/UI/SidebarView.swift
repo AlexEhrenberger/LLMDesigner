@@ -24,7 +24,7 @@ struct SidebarView: View {
                         Divider()
                         Button("Präsentation aus Dokument …", systemImage: "doc.text.below.ecg") { app.showDeckFromDocument() }
                     }
-                    IconButton(systemName: "square.and.pencil", help: "Neuer Chat (⌘N)", frameSize: Theme.titleBarControlSize) { app.newChat() }
+                    NewItemMenu()
                 case .skills:
                     IconButton(systemName: "plus", help: "Neuer Skill (⌥⌘N)", frameSize: Theme.titleBarControlSize) { app.createSkill() }
                 case .personas:
@@ -810,7 +810,7 @@ private struct SidebarRow<Leading: View, Trailing: View, MenuItems: View>: View 
     }
 }
 
-private struct SearchField: View {
+struct SearchField: View {
     @Binding var text: String
     let prompt: String
 

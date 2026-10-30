@@ -1,0 +1,17 @@
+title: LLM Designer
+description: Native macOS-App für lokale Sprachmodelle – Chat, Writer, Presenter, Citation und Stories Studio
+lang: de
+markdown: kramdown
+kramdown:
+  input: GFM
+  syntax_highlighter_opts:
+    disable: true
+plugins:
+  - jekyll-relative-links
+relative_links:
+  enabled: true
+defaults:
+  - scope:
+      path: ""
+    values:
+      layout: default

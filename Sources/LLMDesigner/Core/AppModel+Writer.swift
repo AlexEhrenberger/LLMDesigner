@@ -113,6 +113,8 @@ extension AppModel {
             presentationPlayer.stop()
             presentationPlayer.exitFullScreen()
             selectedSlideID = nil
+            editingSlideFieldID = nil
+            editingSlideTextArea = false
         }
         selectedDocumentID = nil
         if let document = document(id), document.isEmpty, !document.hasCustomTitle {

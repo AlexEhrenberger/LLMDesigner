@@ -64,8 +64,8 @@ enum PresenterPrompts {
 
     /// A slide's text without Markdown: its paragraphs, list items and the captions of its pictures.
     static func plainText(of slide: PresentationSlide) -> String {
-        var lines = DocumentOutlineBuilder.blocks(of: slide.markdown).map(\.text)
-        for line in slide.markdown.components(separatedBy: "\n") {
+        var lines = DocumentOutlineBuilder.blocks(of: slide.fullMarkdown).map(\.text)
+        for line in slide.fullMarkdown.components(separatedBy: "\n") {
             if let image = WriterImageReference.parse(line.trimmingCharacters(in: .whitespaces)), !image.caption.isEmpty {
                 lines.append("[Bild: \(image.caption)]")
             }

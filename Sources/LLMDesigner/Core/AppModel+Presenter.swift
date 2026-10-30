@@ -54,7 +54,56 @@ extension AppModel {
     func selectSlide(_ id: PresentationSlide.ID) {
         guard selectedSlideID != id else { return }
         writerFlush?()
+        endSlideFieldEditing()
         selectedSlideID = id
+    }
+
+    /// Back from a text field (or the text area's frame) to the slide's own text.
+    func endSlideFieldEditing() {
+        if editingSlideFieldID != nil { writerFlush?() }
+        editingSlideFieldID = nil
+        editingSlideTextArea = false
+    }
+
+    /// Puts a text field on the slide and opens it for writing.
+    func addSlideField(_ id: WriterDocument.ID, _ slideID: PresentationSlide.ID, _ field: SlideImage, undoManager: UndoManager?, actionName: String) {
+        guard let slide = document(id)?.deck?.slide(slideID) else { return }
+        writerFlush?()
+        setSlideImages(id, slideID, slide.images + [field], undoManager: undoManager, actionName: actionName)
+        selectedSlideImageID = field.id
+        editingSlideTextArea = false
+        editingSlideFieldID = field.id
+    }
+
+    /// A text field whose text needs more room gets taller (down to the slide's bottom); it never shrinks by itself.
+    func growSlideField(_ id: WriterDocument.ID, _ slideID: PresentationSlide.ID, _ fieldID: SlideImage.ID, toHeight height: CGFloat) {
+        guard let field = document(id)?.deck?.slide(slideID)?.images.first(where: { $0.id == fieldID }) else { return }
+        let frame = field.frame
+        let target = min(height, SlideImage.canvas.height - frame.minY)
+        guard target > frame.height + 0.5 else { return }
+        modifyDeck(id) { deck in
+            guard let index = deck.index(of: slideID), let field = deck.slides[index].images.firstIndex(where: { $0.id == fieldID }) else { return false }
+            var grown = deck.slides[index].images[field].frame
+            grown.size.height = target
+            deck.slides[index].images[field].frame = grown
+            return true
+        }
+    }
+
+    /// Moves the slide's own text: nil puts it back inside the standard margins.
+    func setSlideTextArea(_ id: WriterDocument.ID, _ slideID: PresentationSlide.ID, _ area: SlideArea?, undoManager: UndoManager?) {
+        guard let slide = document(id)?.deck?.slide(slideID), slide.textArea != area else { return }
+        let old = slide.textArea
+        modifyDeck(id) { deck in
+            guard let index = deck.index(of: slideID) else { return false }
+            deck.slides[index].textArea = area
+            return true
+        }
+        guard let undoManager else { return }
+        undoManager.registerUndo(withTarget: self) { app in
+            app.setSlideTextArea(id, slideID, old, undoManager: undoManager)
+        }
+        undoManager.setActionName("Textbereich")
     }
 
     // MARK: Changing the slides
@@ -73,12 +122,21 @@ extension AppModel {
         return true
     }
 
-    /// The editor reports a slide's text as Markdown.
-    func updateSlide(_ id: WriterDocument.ID, _ slideID: PresentationSlide.ID, markdown: String) {
+    /// The editor reports a slide's text as Markdown, or that of one of its text fields (`slideID` is then the field's).
+    func updateSlide(_ id: WriterDocument.ID, _ slideID: UUID, markdown: String) {
         modifyDeck(id, saveAfter: .milliseconds(700)) { deck in
-            guard let index = deck.index(of: slideID), deck.slides[index].markdown != markdown else { return false }
-            deck.slides[index].markdown = markdown
-            return true
+            if let index = deck.index(of: slideID) {
+                guard deck.slides[index].markdown != markdown else { return false }
+                deck.slides[index].markdown = markdown
+                return true
+            }
+            for index in deck.slides.indices {
+                guard let field = deck.slides[index].images.firstIndex(where: { $0.id == slideID }) else { continue }
+                guard deck.slides[index].images[field].text != markdown else { return false }
+                deck.slides[index].images[field].text = markdown
+                return true
+            }
+            return false
         }
     }
 

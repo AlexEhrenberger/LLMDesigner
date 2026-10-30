@@ -282,9 +282,10 @@ extension WriterTextView {
 
     /// Shows the formula bar over the table with the caret, or hides it.
     func updateTableBar() {
-        guard slideLayout == nil, window != nil, let cell = tableCellAtCaret, let model = tableModel(at: selectedRange().location),
+        guard window != nil, let cell = tableCellAtCaret, let model = tableModel(at: selectedRange().location),
               let layoutManager, let container = textContainer, textStorage?.editedMask.isEmpty != false else {
             tableBarHost?.isHidden = true
+            onTableBar?(nil)
             return
         }
         let glyphs = layoutManager.glyphRange(forCharacterRange: model.range, actualCharacterRange: nil)
@@ -307,6 +308,11 @@ extension WriterTextView {
             onSumRow: { [weak self] in self?.performTableAction(.sumRow) },
             onChart: { [weak self] in self?.makeChartFromTable() }
         )
+        // On a slide (magnified, maybe a small text field) the bar stands outside the canvas.
+        if slideLayout != nil, let onTableBar {
+            onTableBar(bar)
+            return
+        }
         let host: NSHostingView<WriterTableBarHost>
         if let existing = tableBarHost as? NSHostingView<WriterTableBarHost> {
             host = existing

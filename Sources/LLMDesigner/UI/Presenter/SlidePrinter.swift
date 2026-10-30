@@ -52,7 +52,11 @@ enum SlidePrinter {
         stage.background = background
         stage.tone = SlideLook.tone(of: background, role: slide.role)
         stage.designImage = designImage.flatMap { PrintImages.compact($0, key: "design|\(background.design ?? "")|\(slide.role.rawValue)", size: canvas) }
-        stage.images = slide.images.filter { $0.placement == .behind }
+        stage.images = slide.images.filter { $0.placement == .behind && !$0.isText }
+        let fieldPalette = SlideLook.fieldPalette(background, role: slide.role)
+        for field in slide.images where field.isText && field.placement == .behind {
+            stage.addSubview(fieldView(field, family: family, palette: fieldPalette, citations: citations))
+        }
 
         let text = WriterTextView.make()
         text.isEditable = false
@@ -71,9 +75,38 @@ enum SlidePrinter {
         stage.addSubview(text)
 
         let front = SlidePrintLayer(frame: frame)
-        front.images = slide.images.filter { $0.placement != .behind }
+        front.images = slide.images.filter { $0.placement != .behind && !$0.isText }
         stage.addSubview(front)
+        for field in slide.images where field.isText && field.placement != .behind {
+            stage.addSubview(fieldView(field, family: family, palette: fieldPalette, citations: citations))
+        }
         return stage
+    }
+
+    /// A text field: its box drawn behind Writer Studio's text view, both at the field's frame.
+    private static func fieldView(_ field: SlideImage, family: WriterFont, palette: WriterPalette, citations: CitationLibrary?) -> NSView {
+        let frame = field.frame
+        // The view's coordinates are flipped like the stage's (top left origin).
+        let holder = SlideFieldPrintView(frame: NSRect(x: frame.minX, y: frame.minY, width: frame.width, height: frame.height))
+        holder.field = field
+        let layout = WriterTextView.SlideLayout(field: field)
+        let text = WriterTextView.make()
+        text.isEditable = false
+        text.isSelectable = false
+        text.isContinuousSpellCheckingEnabled = false
+        text.slideLayout = layout
+        text.citations = citations
+        text.minSize = .zero
+        text.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude)
+        text.frame = NSRect(origin: .zero, size: layout.size)
+        text.load(markdown: field.text ?? "", family: family, palette: palette)
+        text.setFrameSize(layout.size)
+        if let layoutManager = text.layoutManager, let container = text.textContainer { layoutManager.ensureLayout(for: container) }
+        text.updateSlideCentering()
+        // Text that runs over the field is cut at its edge, as on the screen.
+        text.setFrameSize(layout.size)
+        holder.addSubview(text)
+        return holder
     }
 }
 
@@ -212,5 +245,47 @@ private final class SlidePrintLayer: NSView {
         NSBezierPath(rect: rect).addClip()
         image.draw(in: target, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: [.interpolation: NSImageInterpolation.high.rawValue])
         NSGraphicsContext.restoreGraphicsState()
+    }
+}
+
+/// A text field in the PDF: the box behind its text, cut at the field's edge.
+private final class SlideFieldPrintView: NSView {
+    var field: SlideImage?
+
+    override var isFlipped: Bool { true }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = false
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not supported")
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard let field, let kind = field.box else { return }
+        let color = NSColor(hex: SlideBoxBackground.hex(field, kind: kind))
+        let path = NSBezierPath(roundedRect: bounds, xRadius: 7, yRadius: 7)
+        switch field.boxFrame {
+        case .filled:
+            color.withAlphaComponent(0.26).setFill()
+            path.fill()
+        case .outline:
+            color.withAlphaComponent(0.1).setFill()
+            path.fill()
+            color.withAlphaComponent(0.9).setStroke()
+            let inner = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.8, dy: 0.8), xRadius: 6.2, yRadius: 6.2)
+            inner.lineWidth = 1.6
+            inner.stroke()
+        case .bar:
+            NSGraphicsContext.saveGraphicsState()
+            path.addClip()
+            color.withAlphaComponent(0.14).setFill()
+            bounds.fill()
+            color.setFill()
+            NSRect(x: 0, y: 0, width: 4, height: bounds.height).fill()
+            NSGraphicsContext.restoreGraphicsState()
+        }
     }
 }

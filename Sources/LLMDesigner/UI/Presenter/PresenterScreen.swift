@@ -11,6 +11,8 @@ struct PresenterScreen: View {
     @State private var appeared = false
     /// The free pictures while one is dragged (see `SlideImageEditor`).
     @State private var dragImages: [SlideImage]?
+    /// The slide's text area while it is dragged.
+    @State private var dragTextFrame: CGRect?
     /// The free picture the Draw Things sheet is open for.
     @State private var regeneratingImage: (slideID: PresentationSlide.ID, imageID: SlideImage.ID)?
 
@@ -32,16 +34,26 @@ struct PresenterScreen: View {
                     }
                 }
                 if app.isPanelDocked, app.writerTab == .document, !assistant.isPanelShown {
-                    PresenterPanel(document: document, deck: deck, currentSlideID: slide.id, controller: controller)
-                        .frame(width: Theme.outlineWidth)
-                        .transition(.move(edge: .trailing))
+                    Group {
+                        if app.power.isOn {
+                            PowerPanel()
+                        } else {
+                            PresenterPanel(document: document, deck: deck, currentSlideID: slide.id, controller: controller)
+                        }
+                    }
+                    .frame(width: app.rightPanelWidth)
+                    .transition(.move(edge: .trailing))
                 }
             }
             // In a narrow window the panel lies over the slide.
             .overlay {
                 FloatingPanel(isShown: app.panelCollapsed && app.panelOverlay && app.writerTab == .document && !assistant.isPanelShown,
-                              edge: .trailing, width: Theme.outlineWidth) {
-                    PresenterPanel(document: document, deck: deck, currentSlideID: slide.id, controller: controller)
+                              edge: .trailing, width: app.rightPanelWidth) {
+                    if app.power.isOn {
+                        PowerPanel()
+                    } else {
+                        PresenterPanel(document: document, deck: deck, currentSlideID: slide.id, controller: controller)
+                    }
                 }
             }
             .background(Theme.background)
@@ -81,6 +93,30 @@ struct PresenterScreen: View {
                     controller.cancelFormula()
                 }
             }
+            .sheet(item: Binding(get: { controller.figureRequest }, set: { if $0 == nil, controller.figureRequest != nil { controller.cancelFigure() } })) { request in
+                switch request.kind {
+                case .chart:
+                    ChartEditorSheet(request: request) { images, recipe, caption, table in
+                        controller.applyFigure(.chart, images: images, recipe: recipe, caption: caption, width: request.reference?.width ?? 100,
+                                               linkedTable: table, isExisting: request.isExisting)
+                    } onCancel: {
+                        controller.cancelFigure()
+                    }
+                case .mermaid:
+                    MermaidEditorSheet(request: request) { images, code, caption, width in
+                        controller.applyFigure(.mermaid, images: images, recipe: Data(code.utf8), caption: caption, width: width, isExisting: request.isExisting)
+                    } onCancel: {
+                        controller.cancelFigure()
+                    }
+                    .environment(app)
+                case .drawing:
+                    DrawingEditorSheet(request: request) { images, recipe, caption, width in
+                        controller.applyFigure(.drawing, images: images, recipe: recipe, caption: caption, width: width, isExisting: request.isExisting)
+                    } onCancel: {
+                        controller.cancelFigure()
+                    }
+                }
+            }
             .sheet(item: Binding(get: { controller.imageRequest }, set: { if $0 == nil, controller.imageRequest != nil { controller.cancelImageGeneration() } })) { request in
                 ImageGeneratorSheet(request: request) { info, caption, generate in
                     if let target = regeneratingImage {
@@ -114,6 +150,12 @@ struct PresenterScreen: View {
                         DocumentFindBar(find: controller.find)
                             .frame(maxWidth: .infinity, alignment: .trailing)
                             .transition(.move(edge: .top).combined(with: .opacity))
+                    }
+                    if let bar = controller.tableBar {
+                        WriterTableBarHost(bar: bar)
+                            .fixedSize()
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                            .transition(.opacity)
                     }
                     canvas(document, deck: deck, slide: slide)
                     DeckActivityCard(document: document)
@@ -174,24 +216,59 @@ struct PresenterScreen: View {
     private func canvas(_ document: WriterDocument, deck: PresentationDeck, slide: PresentationSlide) -> some View {
         let background = deck.background(of: slide)
         let palette = SlideLook.palette(background, role: slide.role)
+        let fieldLook = SlideLook.fieldLook(of: slide, in: deck, family: document.textFont)
         let images = dragImages ?? slide.images
+        let textLayout = WriterTextView.SlideLayout(slide: slide, images: images, textFrame: dragTextFrame)
+        // A text field open for writing: the editor moves into it, the slide's own text is drawn as it is.
+        let field = app.editingSlideFieldID.flatMap { id in images.first { $0.id == id && $0.isText } }
+        let editorFrame = field?.frame ?? CGRect(origin: .zero, size: SlideImage.canvas)
+        let content = field.map { WriterSlideContent(id: $0.id, markdown: $0.text ?? "", layout: WriterTextView.SlideLayout(field: $0), slideID: slide.id) }
+            ?? WriterSlideContent(id: slide.id, markdown: slide.markdown, layout: textLayout)
         return ZStack {
             SlideBackgroundView(background: background, role: slide.role)
-            SlideImagesLayer(images: images, placements: [.behind])
-            WriterEditor(
-                app: app,
-                document: document,
-                palette: palette,
-                controller: controller,
-                assistant: assistant,
-                isReadingAloud: app.speakingDocumentID != nil,
-                isDictating: app.dictationIntoDocument,
-                slide: WriterSlideContent(id: slide.id, markdown: slide.markdown, layout: WriterTextView.SlideLayout(slide: slide, images: images))
-            )
-            SlideImageEditor(document: document, slide: slide, controller: controller, dragImages: $dragImages) { image in
+            SlideImagesLayer(images: images, placements: [.behind], hiding: field?.id)
+            if field != nil {
+                SlideTextView(markdown: slide.markdown, family: document.textFont, palette: palette, layout: textLayout, citations: app.citations)
+                // A click beside the field goes back to the slide's text.
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        app.endSlideFieldEditing()
+                        controller.focus()
+                    }
+            }
+            GeometryReader { geometry in
+                let scale = geometry.size.width / SlideImage.canvas.width
+                ZStack(alignment: .topLeading) {
+                    if let field {
+                        SlideBoxBackground(field: field)
+                            .frame(width: editorFrame.width * scale, height: editorFrame.height * scale)
+                            .offset(x: editorFrame.minX * scale, y: editorFrame.minY * scale)
+                            .allowsHitTesting(false)
+                    }
+                    WriterEditor(
+                        app: app,
+                        document: document,
+                        palette: field == nil ? palette : fieldLook.palette,
+                        controller: controller,
+                        assistant: assistant,
+                        isReadingAloud: app.speakingDocumentID != nil,
+                        isDictating: app.dictationIntoDocument,
+                        slide: content
+                    )
+                    .frame(width: max(1, editorFrame.width * scale), height: max(1, editorFrame.height * scale))
+                    .offset(x: editorFrame.minX * scale, y: editorFrame.minY * scale)
+                }
+                .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
+            }
+            // The field being written in lies over the other things on the slide.
+            .zIndex(field == nil ? 0 : 2)
+            SlideImageEditor(document: document, slide: slide, controller: controller, dragImages: $dragImages, dragTextFrame: $dragTextFrame) { image in
                 regenerate(image, on: slide, in: document)
             }
+            .zIndex(1)
         }
+        .environment(\.slideTextLook, fieldLook)
         .aspectRatio(16 / 9, contentMode: .fit)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color.white.opacity(0.1)))
@@ -266,7 +343,7 @@ private struct PresenterTopBar: View {
         HStack(spacing: 8) {
             if !app.isSidebarDocked {
                 SidebarToggleButton()
-                IconButton(systemName: "square.and.pencil", help: "Neuer Chat (⌘N)", frameSize: Theme.titleBarControlSize) { app.newChat() }
+                NewItemMenu()
                     .padding(.trailing, 6)
             }
             Image(systemName: StudioApplication.presenter.symbol)
@@ -298,6 +375,7 @@ private struct PresenterTopBar: View {
             }
             PresentButton(document: document)
                 .fixedSize()
+            if app.writerTab == .document { PowerButton() }
             if !app.isPanelDocked, app.writerTab == .document {
                 IconButton(systemName: "sidebar.right", help: "Inhalt, Lesezeichen und Quellen einblenden (⌥⌘I)", frameSize: Theme.titleBarControlSize) {
                     app.toggleOutlinePanel()
@@ -425,6 +503,9 @@ private struct PresenterToolbar: View {
                 markButton("italic", .italic, "Kursiv (⌘I)", state)
                 markButton("underline", .underline, "Unterstrichen (⌘U)", state)
                 markButton("strikethrough", .strikethrough, "Durchgestrichen (⇧⌘X)", state)
+                markButton("textformat.superscript", .superscript, "Hochgestellt (⌃⌘+)", state)
+                markButton("textformat.subscript", .subscript, "Tiefgestellt (⌃⌘−)", state)
+                markButton("chevron.left.forwardslash.chevron.right", .code, "Code im Text (⌘E)", state)
                 ColorMenu(controller: controller).disabled(!isText)
             }
             divider
@@ -450,9 +531,15 @@ private struct PresenterToolbar: View {
             }
             HStack(spacing: 2) {
                 TableButton(controller: controller, isInTable: state.table != nil)
+                DiagramMenu(controller: controller, isInTable: state.table != nil, hasSelection: state.hasSelection)
+                ToolbarButton(symbol: "pencil.and.scribble", help: "Zeichnung … – Stift, Marker, Pfeile, Formen und Text", isActive: false) {
+                    controller.newFigure(.drawing)
+                }
                 ToolbarButton(symbol: "x.squareroot", help: "Formel (⌥⌘E)", isActive: state.isFormulaSelected) { controller.editFormula() }
                 CitationMenu(controller: controller)
             }
+            divider
+            FreeElementMenu(controller: controller, document: document, slide: slide, hasSelection: state.hasSelection)
             divider
             HStack(spacing: 2) {
                 ToolbarButton(
@@ -489,6 +576,107 @@ private struct PresenterToolbar: View {
     private func markButton(_ symbol: String, _ mark: WriterInline, _ help: String, _ state: WriterTextView.State) -> some View {
         ToolbarButton(symbol: symbol, help: help, isActive: state.marks.contains(mark)) { controller.toggle(mark) }
             .disabled(state.block == .code || state.block == .raw || state.block.isEmbed)
+    }
+}
+
+/// Things placed freely on the slide: text fields, boxes, tables, code, figures in a field of their own; the selection
+/// taken out of the slide's text into a field; the slide's own text area moved.
+private struct FreeElementMenu: View {
+    @Environment(AppModel.self) private var app
+    let controller: WriterEditorController
+    let document: WriterDocument
+    let slide: PresentationSlide
+    let hasSelection: Bool
+    @State private var hovering = false
+
+    var body: some View {
+        Menu {
+            Section("Frei auf der Folie") {
+                Button("Textfeld", systemImage: "character.textbox") { add("", actionName: "Textfeld") }
+                Menu("Kasten") {
+                    ForEach(WriterBoxKind.allCases) { kind in
+                        Button(kind.label, systemImage: kind.symbol) {
+                            add("**\(kind.label)**\n\n", box: kind, size: CGSize(width: 280, height: 110), actionName: "Kasten")
+                        }
+                    }
+                }
+                Button("Tabelle", systemImage: "tablecells") {
+                    add(Self.table, size: CGSize(width: 360, height: 130), actionName: "Tabelle")
+                }
+                Button("Code", systemImage: "chevron.left.forwardslash.chevron.right") {
+                    add("```swift\n\n```", size: CGSize(width: 340, height: 130), actionName: "Code")
+                }
+                Button("Zeichnung …", systemImage: "pencil.and.scribble") { addFigure(.drawing) }
+                Button("Diagramm …", systemImage: "chart.bar.xaxis") { addFigure(.chart) }
+                Button("Mermaid-Diagramm …", systemImage: "point.3.connected.trianglepath.dotted") { addFigure(.mermaid) }
+            }
+            Divider()
+            Button("Markierung als Textfeld herauslösen", systemImage: "rectangle.portrait.and.arrow.right") { detachSelection() }
+                .disabled(!hasSelection)
+            Divider()
+            Button(app.editingSlideTextArea ? "Textbereich fertig" : "Textbereich der Folie verschieben …", systemImage: "character.textbox.badge.sparkles") {
+                app.editingSlideFieldID = nil
+                app.selectedSlideImageID = nil
+                app.editingSlideTextArea.toggle()
+            }
+            Button("Textbereich zurücksetzen", systemImage: "arrow.uturn.backward") {
+                app.setSlideTextArea(document.id, slide.id, nil, undoManager: undoManager)
+            }
+            .disabled(slide.textArea == nil)
+        } label: {
+            Image(systemName: "square.on.square.dashed")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(hovering || app.editingSlideTextArea ? Theme.textPrimary : Theme.textSecondary)
+                .frame(width: 30, height: 28)
+                .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(hovering ? Theme.hover : .clear))
+                .contentShape(Rectangle())
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .onHover { hovering = $0 }
+        .help("Frei platzieren – Textfeld, Kasten, Tabelle, Code oder Abbildung als eigenes Element, das sich auf der Folie verschieben lässt")
+    }
+
+    private static let table = "| Spalte 1 | Spalte 2 | Spalte 3 |\n|---|---|---|\n|  |  |  |\n|  |  |  |"
+
+    private var undoManager: UndoManager? {
+        controller.textView?.undoManager ?? NSApp.keyWindow?.undoManager
+    }
+
+    private var offset: Int {
+        slide.images.filter(\.isText).count % 5
+    }
+
+    private func add(_ text: String, box: WriterBoxKind? = nil, size: CGSize = CGSize(width: 300, height: 90), actionName: String) {
+        let field = SlideImage(text: text, box: box, frame: SlideImage.defaultTextFrame(width: size.width, height: size.height, offset: offset))
+        app.addSlideField(document.id, slide.id, field, undoManager: undoManager, actionName: actionName)
+    }
+
+    /// A field of its own for the figure, whose editor opens once the field is in the editor.
+    private func addFigure(_ kind: WriterFigureKind) {
+        add("", size: CGSize(width: 380, height: 230), actionName: kind.label)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { controller.newFigure(kind) }
+    }
+
+    /// The selected passage leaves the slide's text and becomes a text field of its own.
+    private func detachSelection() {
+        guard let textView = controller.textView, let markdown = textView.selectedMarkdown() else { return }
+        let range = textView.selectedRange()
+        let undoManager = textView.undoManager
+        undoManager?.beginUndoGrouping()
+        if textView.shouldChangeText(in: range, replacementString: "") {
+            textView.replaceCharacters(in: range, with: "")
+            textView.didChangeText()
+        }
+        app.writerFlush?()
+        let lines = markdown.components(separatedBy: "\n").count
+        let height = min(300, max(60, CGFloat(lines) * 26 + 20))
+        let field = SlideImage(text: markdown, frame: SlideImage.defaultTextFrame(width: 320, height: height, offset: offset))
+        app.addSlideField(document.id, slide.id, field, undoManager: undoManager, actionName: "Als Textfeld herauslösen")
+        undoManager?.endUndoGrouping()
+        undoManager?.setActionName("Als Textfeld herauslösen")
     }
 }
 

@@ -33,6 +33,8 @@ enum Theme {
     static let trafficLightInset: CGFloat = 78
     static let sidebarWidth: CGFloat = 264
     static let outlineWidth: CGFloat = 280
+    /// The right-hand panel with the power access.
+    static let powerWidth: CGFloat = 400
     static let contentWidth: CGFloat = 768
 }
 

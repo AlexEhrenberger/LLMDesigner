@@ -23,11 +23,53 @@ struct ChatScreen: View {
             }
         }
         .background(Theme.background)
-        .onDrop(of: [.fileURL, .image], isTargeted: $isDropTarget, perform: dropImages)
+        .onDrop(of: [.fileURL, .image, .utf8PlainText, .plainText], delegate: ChatDropDelegate(isImageTarget: $isDropTarget, onImages: dropImages) { text in
+            // Text (from the power access, another app) goes to the end of the message being written.
+            let draft = app.draft.trimmingCharacters(in: .whitespacesAndNewlines)
+            app.draft = draft.isEmpty ? text : draft + "\n\n" + text
+        })
         .overlay {
             if isDropTarget { DropHint() }
         }
         .animation(.easeOut(duration: 0.15), value: isDropTarget)
+    }
+
+    /// Pictures and text dropped anywhere on the chat go into the composer; only pictures show the hint.
+    private struct ChatDropDelegate: DropDelegate {
+        @Binding var isImageTarget: Bool
+        let onImages: ([NSItemProvider]) -> Bool
+        let onText: (String) -> Void
+
+        private func hasImages(_ info: DropInfo) -> Bool {
+            info.hasItemsConforming(to: [.fileURL, .image])
+        }
+
+        func validateDrop(info: DropInfo) -> Bool {
+            hasImages(info) || info.hasItemsConforming(to: [.utf8PlainText, .plainText])
+        }
+
+        func dropEntered(info: DropInfo) {
+            isImageTarget = hasImages(info)
+        }
+
+        func dropExited(info: DropInfo) {
+            isImageTarget = false
+        }
+
+        func dropUpdated(info: DropInfo) -> DropProposal? {
+            DropProposal(operation: .copy)
+        }
+
+        func performDrop(info: DropInfo) -> Bool {
+            isImageTarget = false
+            if hasImages(info) { return onImages(info.itemProviders(for: [.fileURL, .image])) }
+            guard let provider = info.itemProviders(for: [.utf8PlainText, .plainText]).first else { return false }
+            _ = provider.loadObject(ofClass: NSString.self) { value, _ in
+                guard let text = (value as? NSString).map(String.init), !text.isEmpty else { return }
+                DispatchQueue.main.async { MainActor.assumeIsolated { onText(text) } }
+            }
+            return true
+        }
     }
 
     /// Pictures dropped anywhere on the chat go into the composer.
@@ -88,10 +130,12 @@ private struct TopBar: View {
         HStack(spacing: 2) {
             if !app.isSidebarDocked {
                 SidebarToggleButton()
-                IconButton(systemName: "square.and.pencil", help: "Neuer Chat (⌘N)", frameSize: Theme.titleBarControlSize) { app.newChat() }
+                NewItemMenu()
                     .padding(.trailing, 6)
             }
             Spacer(minLength: 0)
+            PowerButton()
+                .padding(.trailing, 2)
             if let chat = app.selectedChat, !chat.messages.isEmpty {
                 ChatExportControls(chat: chat)
                 if !app.isOutlinePanelShown && app.showsSidePanel(for: chat) {

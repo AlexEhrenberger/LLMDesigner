@@ -33,6 +33,33 @@ enum SlideLook {
     static func palette(of slide: PresentationSlide, in deck: PresentationDeck) -> WriterPalette {
         palette(deck.background(of: slide), role: slide.role)
     }
+
+    /// A text field's text: the slide's colours, but set from the left also on a title slide.
+    static func fieldPalette(_ background: SlideBackground, role: SlideRole) -> WriterPalette {
+        let accent = background.kind == .design ? design(of: background)?.accent : nil
+        return .slide(tone: tone(of: background, role: role), accent: accent, alignment: .natural)
+    }
+
+    static func fieldLook(of slide: PresentationSlide, in deck: PresentationDeck, family: WriterFont) -> SlideTextLook {
+        SlideTextLook(family: family, palette: fieldPalette(deck.background(of: slide), role: slide.role))
+    }
+}
+
+/// How the text fields of a slide are set: handed down to the layers that draw them.
+struct SlideTextLook: Equatable {
+    var family: WriterFont
+    var palette: WriterPalette
+}
+
+private struct SlideTextLookKey: EnvironmentKey {
+    static let defaultValue: SlideTextLook? = nil
+}
+
+extension EnvironmentValues {
+    var slideTextLook: SlideTextLook? {
+        get { self[SlideTextLookKey.self] }
+        set { self[SlideTextLookKey.self] = newValue }
+    }
 }
 
 // MARK: Background
@@ -242,6 +269,8 @@ struct SlideTextView: NSViewRepresentable {
         scrollView.documentView = textView
         textView.load(markdown: markdown, family: family, palette: palette)
         context.coordinator.shown = Shown(markdown: markdown, family: family, palette: palette, layout: layout)
+        // Text that runs over shows from its start (a field too small for it is cut at the bottom).
+        DispatchQueue.main.async { textView.scroll(.zero) }
         return scrollView
     }
 
@@ -252,6 +281,7 @@ struct SlideTextView: NSViewRepresentable {
         textView.slideLayout = layout
         textView.load(markdown: markdown, family: family, palette: palette)
         scrollView.fitCanvas()
+        DispatchQueue.main.async { textView.scroll(.zero) }
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -298,6 +328,7 @@ struct SlideStageView: View {
                 )
                 SlideImagesLayer(images: slide.images, placements: [.wrap, .front])
             }
+            .environment(\.slideTextLook, SlideLook.fieldLook(of: slide, in: deck, family: family))
             .id(slide.id)
             .transition(.opacity)
         }
@@ -321,7 +352,7 @@ enum SlideThumbnailRenderer {
     private static var textView: WriterTextView?
 
     static func image(markdown: String, family: WriterFont, palette: WriterPalette, layout: WriterTextView.SlideLayout, citations: CitationLibrary?, scale: CGFloat = 0.6) -> NSImage? {
-        let key = "\(layout.centersVertically)|\(layout.obstacles)|\(family.rawValue)|\(palette.isLight)|\(palette.accent.hashValue)|\(scale)|\(markdown)"
+        let key = "\(layout.centersVertically)|\(layout.obstacles)|\(layout.textRect)|\(family.rawValue)|\(palette.isLight)|\(palette.accent.hashValue)|\(scale)|\(markdown)"
         if let image = cache[key] { return image }
         guard !markdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         let canvas = WriterTextView.SlideLayout.canvas
@@ -371,6 +402,7 @@ struct SlideThumbnail: View {
             }
             SlideImagesLayer(images: slide.images, placements: [.wrap, .front])
         }
+        .environment(\.slideTextLook, SlideLook.fieldLook(of: slide, in: deck, family: family))
         .aspectRatio(16 / 9, contentMode: .fit)
         .clipped()
     }
@@ -378,13 +410,15 @@ struct SlideThumbnail: View {
 
 // MARK: Free pictures
 
-/// A slide's free pictures of some placements, drawn at the size there is (the canvas scaled to it).
+/// A slide's free pictures and text fields of some placements, drawn at the size there is (the canvas scaled to it).
 struct SlideImagesLayer: View {
     let images: [SlideImage]
     let placements: Set<SlideImage.Placement>
+    /// A text field being edited is drawn by the editor.
+    var hiding: SlideImage.ID?
 
     var body: some View {
-        let shown = images.filter { placements.contains($0.placement) }
+        let shown = images.filter { placements.contains($0.placement) && $0.id != hiding }
         if !shown.isEmpty {
             GeometryReader { geometry in
                 let scale = geometry.size.width / SlideImage.canvas.width
@@ -404,11 +438,14 @@ struct SlideImagesLayer: View {
 /// a placeholder with its progress.
 struct SlideImageView: View {
     @Environment(AppModel.self) private var app
+    @Environment(\.slideTextLook) private var look
     let image: SlideImage
 
     var body: some View {
-        let phase = app.imageGeneration.phase(for: image.source)
-        if phase == nil, let picture = SlideImageCache.image(image.source) {
+        let phase = image.isText ? nil : app.imageGeneration.phase(for: image.source)
+        if image.isText {
+            if let look { SlideFieldView(field: image, look: look) }
+        } else if phase == nil, let picture = SlideImageCache.image(image.source) {
             Image(nsImage: picture)
                 .resizable()
                 .interpolation(.high)
@@ -447,5 +484,62 @@ struct SlideImageView: View {
                 .overlay(Rectangle().strokeBorder(Color.white.opacity(0.25), style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
             }
         }
+    }
+}
+
+// MARK: Text fields
+
+/// A text field on the slide: its box (if it is one) and its text, at the size there is.
+struct SlideFieldView: View {
+    @Environment(AppModel.self) private var app
+    let field: SlideImage
+    let look: SlideTextLook
+    var showsText = true
+
+    var body: some View {
+        ZStack {
+            SlideBoxBackground(field: field)
+            if showsText, let text = field.text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                SlideTextView(
+                    markdown: text,
+                    family: look.family,
+                    palette: look.palette,
+                    layout: WriterTextView.SlideLayout(field: field),
+                    citations: app.citations
+                )
+            }
+        }
+    }
+}
+
+/// The tint and line of a box, scaled like the slide.
+struct SlideBoxBackground: View {
+    let field: SlideImage
+
+    var body: some View {
+        if let kind = field.box {
+            GeometryReader { geometry in
+                let scale = geometry.size.width / max(1, field.frame.width)
+                let color = Color(hex: SlideBoxBackground.hex(field, kind: kind))
+                let shape = RoundedRectangle(cornerRadius: 7 * scale, style: .continuous)
+                ZStack(alignment: .leading) {
+                    switch field.boxFrame {
+                    case .filled:
+                        shape.fill(color.opacity(0.26))
+                    case .outline:
+                        shape.fill(color.opacity(0.1))
+                        shape.strokeBorder(color.opacity(0.9), lineWidth: max(1, 1.6 * scale))
+                    case .bar:
+                        shape.fill(color.opacity(0.14))
+                        Rectangle().fill(color).frame(width: max(2, 4 * scale))
+                    }
+                }
+                .clipShape(shape)
+            }
+        }
+    }
+
+    static func hex(_ field: SlideImage, kind: WriterBoxKind) -> UInt32 {
+        UInt32(kind.color, radix: 16) ?? 0x6B6B76
     }
 }

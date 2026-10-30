@@ -241,6 +241,8 @@ struct AppCommands: Commands {
                 .disabled(app.selectedChat == nil || app.isGenerating)
             Button(app.isPanelShown ? "Inhaltsverzeichnis ausblenden" : "Inhaltsverzeichnis einblenden") { app.toggleOutlinePanel() }
                 .keyboardShortcut("i", modifiers: [.command, .option])
+            Button(app.power.isOn ? "Power-Zugriff ausschalten" : "Power-Zugriff einschalten") { app.togglePower() }
+                .keyboardShortcut("j", modifiers: [.command, .option])
             Divider()
             Button("Modelle aktualisieren") { Task { await app.refreshModels() } }
                 .keyboardShortcut("r")

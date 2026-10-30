@@ -51,6 +51,49 @@ struct IconMenu<Items: View>: View {
     }
 }
 
+/// The pencil in the title bar: a menu with a new chat and every application (a new document, a new presentation,
+/// Citation Studio, Stories Studio).
+struct NewItemMenu: View {
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        IconMenu(systemName: "square.and.pencil", help: "Neu: Chat oder Applikation", frameSize: Theme.titleBarControlSize) {
+            Button("Neuer Chat (⌘N)", systemImage: "bubble.left.and.bubble.right") { app.newChat() }
+            Section("Applikationen") {
+                ForEach(StudioApplication.allCases) { application in
+                    Button { app.openApplication(application) } label: {
+                        Label(application.isAvailable ? application.menuTitle : "\(application.title) – bald", systemImage: application.symbol)
+                    }
+                    .disabled(!application.isAvailable)
+                }
+            }
+            Divider()
+            Button("Präsentation aus Dokument …", systemImage: "doc.text.below.ecg") { app.showDeckFromDocument() }
+        }
+    }
+}
+
+/// The bolt in the title bars: the power access in the right-hand panel on or off.
+struct PowerButton: View {
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        let isOn = app.power.isOn && app.isPanelShown
+        Button { 
+            if app.power.isOn, !app.isPanelShown { app.toggleOutlinePanel() } else { app.togglePower() }
+        } label: {
+            Image(systemName: isOn ? "bolt.fill" : "bolt")
+                .font(.system(size: 13.5, weight: .medium))
+                .foregroundStyle(isOn ? Theme.accent : Theme.textSecondary)
+                .frame(width: Theme.titleBarControlSize, height: Theme.titleBarControlSize)
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(isOn ? Theme.accent.opacity(0.14) : .clear))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(isOn ? "Power-Zugriff ausschalten (⌥⌘J)" : "Power-Zugriff (⌥⌘J): Dokumente, Folien, Chats, Zitate und Romanwelten in der Seitenleiste – Text hin- und herziehen")
+    }
+}
+
 struct SidebarToggleButton: View {
     @Environment(AppModel.self) private var app
 

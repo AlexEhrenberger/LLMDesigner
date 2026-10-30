@@ -79,7 +79,11 @@ struct RootView: View {
             .animation(.easeInOut(duration: 0.4), value: app.selectedDocumentID == nil)
             .animation(.easeInOut(duration: 0.25), value: app.citationStudioOpen)
             .animation(.easeInOut(duration: 0.25), value: app.storiesStudioOpen)
-            if showsChatOutline, app.isPanelDocked, let chat = app.selectedChat {
+            if showsChatPower, app.isPanelDocked {
+                PowerPanel()
+                    .frame(width: Theme.powerWidth)
+                    .transition(.move(edge: .trailing))
+            } else if showsChatOutline, app.isPanelDocked, let chat = app.selectedChat {
                 OutlinePanel(chat: chat)
                     .frame(width: Theme.outlineWidth)
                     .transition(.move(edge: .trailing))
@@ -87,8 +91,13 @@ struct RootView: View {
         }
         // In a narrow window the chat's outline and the sidebar lie over the content (the studios lay out their own panel).
         .overlay {
-            FloatingPanel(isShown: showsChatOutline && app.panelCollapsed && app.panelOverlay, edge: .trailing, width: Theme.outlineWidth) {
-                if let chat = app.selectedChat { OutlinePanel(chat: chat) }
+            FloatingPanel(isShown: (showsChatOutline || showsChatPower) && app.panelCollapsed && app.panelOverlay, edge: .trailing,
+                          width: showsChatPower ? Theme.powerWidth : Theme.outlineWidth) {
+                if showsChatPower {
+                    PowerPanel()
+                } else if let chat = app.selectedChat {
+                    OutlinePanel(chat: chat)
+                }
             }
         }
         .overlay {
@@ -107,9 +116,14 @@ struct RootView: View {
         app.sidebarMode == .chats && app.selectedDocumentID == nil && !app.citationStudioOpen && !app.storiesStudioOpen && app.isOutlinePanelShown && app.selectedChat != nil
     }
 
+    /// The power access stands beside the chat even when the chat has no contents yet.
+    private var showsChatPower: Bool {
+        app.sidebarMode == .chats && app.selectedDocumentID == nil && !app.citationStudioOpen && !app.storiesStudioOpen && app.isPanelShown && app.power.isOn
+    }
+
     /// What decides whether the sidebars fit: the width and the screen, whose content needs more or less room.
     private var foldingKey: [Double] {
-        [Double(workspaceWidth), contentMinimum, app.sidebarVisible ? 1 : 0]
+        [Double(workspaceWidth), contentMinimum, app.sidebarVisible ? 1 : 0, app.power.isOn ? 1 : 0]
     }
 
     private var openedKey: String {
@@ -126,7 +140,7 @@ struct RootView: View {
         guard workspaceWidth > 0 else { return }
         let sidebar = workspaceWidth - Theme.sidebarWidth < contentMinimum
         let besideSidebar = app.sidebarVisible && !sidebar ? Theme.sidebarWidth : 0
-        let panel = workspaceWidth - besideSidebar - Theme.outlineWidth < contentMinimum
+        let panel = workspaceWidth - besideSidebar - app.rightPanelWidth < contentMinimum
         if app.sidebarCollapsed != sidebar {
             app.sidebarCollapsed = sidebar
             app.sidebarOverlay = false

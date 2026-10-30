@@ -152,8 +152,9 @@ struct RoleBackgrounds: Codable, Hashable, Sendable {
     }
 }
 
-/// A picture placed freely on a slide, outside the text: it can be moved and resized with the mouse. Its frame is
-/// stored in fractions of the slide, so it keeps its place at every size (editor, slide list, presentation, PDF).
+/// Something placed freely on a slide, outside the text: a picture, or a text field of its own (plain text, a box,
+/// a table, code – any of Writer Studio's text). It can be moved and resized with the mouse. Its frame is stored in
+/// fractions of the slide, so it keeps its place at every size (editor, slide list, presentation, PDF).
 struct SlideImage: Identifiable, Hashable, Codable, Sendable {
     /// How the picture and the slide's text share the slide.
     enum Placement: String, Codable, CaseIterable, Sendable {
@@ -182,9 +183,15 @@ struct SlideImage: Identifiable, Hashable, Codable, Sendable {
     }
 
     var id = UUID()
-    /// The picture's place, as in the documents (`Bilder/….png`).
+    /// The picture's place, as in the documents (`Bilder/….png`); empty for a text field.
     var source: String
     var caption = ""
+    /// A text field's text (Writer Studio's Markdown); nil for a picture.
+    var text: String?
+    /// A text field drawn as a box of this kind (its colour); nil: plain text on the slide.
+    var box: WriterBoxKind?
+    /// How the box is drawn.
+    var boxFrame: WriterBoxStyle.Frame = .filled
     /// The frame, top left origin, in fractions of the slide's width and height.
     var x: Double
     var y: Double
@@ -196,6 +203,21 @@ struct SlideImage: Identifiable, Hashable, Codable, Sendable {
 
     /// The smallest side, in fractions of the slide's width.
     static let minimumWidth = 0.04
+
+    var isText: Bool { text != nil }
+
+    /// A text field (a box when `box` is set) at `frame` on the canvas.
+    init(text: String, box: WriterBoxKind? = nil, frame: CGRect, placement: Placement = .front) {
+        self.init(source: "", frame: frame, placement: placement)
+        self.text = text
+        self.box = box
+    }
+
+    /// Where a new text field goes: in the middle of the slide's lower part, `offset` moving several apart.
+    static func defaultTextFrame(width: CGFloat = 300, height: CGFloat = 120, offset: Int = 0) -> CGRect {
+        let shift = CGFloat(offset) * 18
+        return CGRect(x: (canvas.width - width) / 2 + shift, y: canvas.height * 0.42 + shift, width: width, height: height)
+    }
 
     init(source: String, caption: String = "", frame: CGRect, placement: Placement = .wrap, generated: Bool = false) {
         self.source = source
@@ -248,12 +270,16 @@ struct SlideImage: Identifiable, Hashable, Codable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case id, source = "quelle", caption = "text", x, y, width = "b", height = "h", placement = "lage", generated = "generiert"
+        case content = "inhalt", box = "kasten", boxFrame = "rahmen"
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = (try? container.decodeIfPresent(UUID.self, forKey: .id)) ?? UUID()
-        source = try container.decode(String.self, forKey: .source)
+        source = (try? container.decodeIfPresent(String.self, forKey: .source)) ?? ""
+        text = try? container.decodeIfPresent(String.self, forKey: .content)
+        box = (try? container.decodeIfPresent(String.self, forKey: .box)).flatMap { $0.flatMap(WriterBoxKind.init(rawValue:)) }
+        boxFrame = (try? container.decodeIfPresent(String.self, forKey: .boxFrame)).flatMap { $0.flatMap(WriterBoxStyle.Frame.init(rawValue:)) } ?? .filled
         caption = (try? container.decodeIfPresent(String.self, forKey: .caption)) ?? ""
         x = (try? container.decodeIfPresent(Double.self, forKey: .x)) ?? 0.5
         y = (try? container.decodeIfPresent(Double.self, forKey: .y)) ?? 0.25
@@ -266,7 +292,13 @@ struct SlideImage: Identifiable, Hashable, Codable, Sendable {
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(id, forKey: .id)
-        try container.encode(source, forKey: .source)
+        if let text {
+            try container.encode(text, forKey: .content)
+            if let box { try container.encode(box.rawValue, forKey: .box) }
+            if box != nil, boxFrame != .filled { try container.encode(boxFrame.rawValue, forKey: .boxFrame) }
+        } else {
+            try container.encode(source, forKey: .source)
+        }
         if !caption.isEmpty { try container.encode(caption, forKey: .caption) }
         // Four digits are a tenth of a point on the canvas.
         func rounded(_ value: Double) -> Double { (value * 10000).rounded() / 10000 }
@@ -276,6 +308,45 @@ struct SlideImage: Identifiable, Hashable, Codable, Sendable {
         try container.encode(rounded(height), forKey: .height)
         if placement != .wrap { try container.encode(placement, forKey: .placement) }
         if generated { try container.encode(true, forKey: .generated) }
+    }
+}
+
+/// Where a slide's own text runs when it was moved from the standard margins: a frame in fractions of the slide.
+struct SlideArea: Hashable, Codable, Sendable {
+    var x: Double
+    var y: Double
+    var width: Double
+    var height: Double
+
+    init(frame: CGRect) {
+        let canvas = SlideImage.canvas
+        x = Double(frame.minX / canvas.width)
+        y = Double(frame.minY / canvas.height)
+        width = Double(frame.width / canvas.width)
+        height = Double(frame.height / canvas.height)
+    }
+
+    var frame: CGRect {
+        let canvas = SlideImage.canvas
+        return CGRect(x: x * canvas.width, y: y * canvas.height, width: width * canvas.width, height: height * canvas.height)
+    }
+
+    /// The canvas inside the standard margins (see `WriterTextView.SlideLayout.margin`).
+    static var standardFrame: CGRect {
+        CGRect(origin: .zero, size: SlideImage.canvas).insetBy(dx: 46, dy: 34)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case x, y, width = "b", height = "h"
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        func rounded(_ value: Double) -> Double { (value * 10000).rounded() / 10000 }
+        try container.encode(rounded(x), forKey: .x)
+        try container.encode(rounded(y), forKey: .y)
+        try container.encode(rounded(width), forKey: .width)
+        try container.encode(rounded(height), forKey: .height)
     }
 }
 
@@ -289,8 +360,23 @@ struct PresentationSlide: Identifiable, Hashable, Codable, Sendable {
     var notes = ""
     /// nil: the presentation's background for the slide's role.
     var background: SlideBackground?
-    /// Pictures placed freely on the slide, the last one on top.
+    /// Pictures and text fields placed freely on the slide, the last one on top.
     var images: [SlideImage] = []
+    /// Where the slide's own text runs, in fractions of the slide; nil: inside the standard margins.
+    var textArea: SlideArea?
+
+    /// The text's room on the canvas.
+    var textFrame: CGRect {
+        textArea?.frame ?? SlideArea.standardFrame
+    }
+
+    /// The slide's text with that of its text fields, for the AI, the handout and the like.
+    var fullMarkdown: String {
+        ([markdown] + images.compactMap(\.text))
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n\n")
+    }
 
     /// The first line of the slide, for the slide list and the contents.
     var title: String {
@@ -393,6 +479,7 @@ struct PresentationDeck: Hashable, Sendable {
             var meta: [String: Any] = ["id": slide.id.uuidString, "rolle": slide.role.rawValue]
             if let background = slide.background, let object = Self.jsonObject(background) { meta["hintergrund"] = object }
             if !slide.images.isEmpty, let object = Self.jsonObject(slide.images) { meta["bilder"] = object }
+            if let area = slide.textArea, let object = Self.jsonObject(area) { meta["textbereich"] = object }
             var parts = ["<!-- folie \(Self.jsonLine(meta)) -->"]
             let text = slide.markdown.trimmingCharacters(in: .whitespacesAndNewlines)
             if !text.isEmpty { parts.append(text) }
@@ -471,6 +558,9 @@ struct PresentationDeck: Hashable, Sendable {
         }
         if let images = object["bilder"], let data = try? JSONSerialization.data(withJSONObject: images) {
             slide.images = (try? JSONDecoder().decode([SlideImage].self, from: data)) ?? []
+        }
+        if let area = object["textbereich"], let data = try? JSONSerialization.data(withJSONObject: area) {
+            slide.textArea = try? JSONDecoder().decode(SlideArea.self, from: data)
         }
         return slide
     }

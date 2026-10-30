@@ -27,6 +27,15 @@ enum StudioApplication: String, CaseIterable, Identifiable {
         }
     }
 
+    /// What the entry in the "Neu" menu does: Writer and Presenter start a new document, the others open.
+    var menuTitle: String {
+        switch self {
+        case .writer: "Writer Studio – neues Dokument"
+        case .presenter: "Presenter Studio – neue Präsentation"
+        default: title
+        }
+    }
+
     /// Notes is not built yet.
     var isAvailable: Bool { self != .notes }
 

@@ -29,14 +29,21 @@ final class WriterEditorController {
     @ObservationIgnored weak var app: AppModel?
     /// Presenter Studio: the slide whose text the editor holds.
     @ObservationIgnored private(set) var shownSlideID: PresentationSlide.ID?
+    /// On a slide: the bar over the table with the caret (formulas, sorting, chart).
+    var tableBar: WriterTableBar?
+    /// The slide's text field in the editor; nil while the slide's own text is.
+    @ObservationIgnored private(set) var shownFieldID: UUID?
+    /// The slide whose own text is in the editor (not while one of its text fields is).
+    var editedSlideID: PresentationSlide.ID? { shownFieldID == nil ? shownSlideID : nil }
 
     init() {
         find.controller = self
     }
 
     /// A document or slide was put into the text view.
-    func textLoaded(slideID: PresentationSlide.ID?) {
+    func textLoaded(slideID: PresentationSlide.ID?, fieldID: UUID? = nil) {
         shownSlideID = slideID
+        shownFieldID = fieldID
         find.textLoaded()
     }
 
@@ -251,9 +258,19 @@ final class WriterEditorController {
 
 /// Presenter Studio: the editor shows one slide of a presentation instead of a document's text.
 struct WriterSlideContent: Equatable {
-    let id: PresentationSlide.ID
+    /// The slide's id, or that of the slide's text field being edited.
+    let id: UUID
     let markdown: String
     let layout: WriterTextView.SlideLayout
+    /// The slide the text is on (the same as `id` for the slide's own text).
+    var slideID: PresentationSlide.ID
+
+    init(id: UUID, markdown: String, layout: WriterTextView.SlideLayout, slideID: PresentationSlide.ID? = nil) {
+        self.id = id
+        self.markdown = markdown
+        self.layout = layout
+        self.slideID = slideID ?? id
+    }
 }
 
 /// The text view in its scroll view. Loads a document (or a slide) when its ID changes and reports the text as
@@ -327,18 +344,18 @@ struct WriterEditor: NSViewRepresentable {
         if slide != nil {
             // Pictures lie freely on the slide.
             textView.onSlideImages = { [weak app, weak coordinator, weak textView] sources, point in
-                guard let app, let coordinator, let id = coordinator.documentID, let slideID = coordinator.slideID else { return }
+                guard let app, let coordinator, let id = coordinator.documentID, let slideID = coordinator.ownerSlideID else { return }
                 let added = app.addSlideImages(id, slideID, sources: sources, at: point, undoManager: textView?.undoManager)
                 if let last = added.last { coordinator.selectSlideImage(last) }
             }
             textView.onSlideGeneratedImage = { [weak app, weak coordinator, weak textView] info, caption, generate in
-                guard let app, let coordinator, let id = coordinator.documentID, let slideID = coordinator.slideID else { return }
+                guard let app, let coordinator, let id = coordinator.documentID, let slideID = coordinator.ownerSlideID else { return }
                 if let added = app.addGeneratedSlideImage(id, slideID, info: info, caption: caption, generate: generate, undoManager: textView?.undoManager) {
                     coordinator.selectSlideImage(added)
                 }
             }
             textView.onDetachSlideImage = { [weak app, weak coordinator, weak textView] reference, frame in
-                guard let app, let coordinator, let id = coordinator.documentID, let slideID = coordinator.slideID,
+                guard let app, let coordinator, let id = coordinator.documentID, let slideID = coordinator.ownerSlideID,
                       let slide = app.document(id)?.deck?.slide(slideID) else { return }
                 coordinator.flush()
                 let image = SlideImage(source: reference.source, caption: reference.caption, frame: frame, generated: reference.generated)
@@ -346,6 +363,13 @@ struct WriterEditor: NSViewRepresentable {
                 coordinator.selectSlideImage(image.id)
             }
             textView.onFocus = { [weak app] in app?.selectedSlideImageID = nil }
+            textView.onTableBar = { [weak controller] bar in controller?.tableBar = bar }
+            // A text field grows with its text instead of running over.
+            textView.onSlideTextHeight = { [weak app, weak coordinator] height in
+                guard let app, let coordinator, let id = coordinator.documentID, let fieldID = coordinator.slideID,
+                      let slideID = coordinator.ownerSlideID, fieldID != slideID else { return }
+                DispatchQueue.main.async { app.growSlideField(id, slideID, fieldID, toHeight: height) }
+            }
         }
         // A dynamic table of contents put into the text: the model makes the topics if there are none yet.
         textView.onDynamicTOCNeeded = { [weak app, weak coordinator] in
@@ -400,8 +424,9 @@ struct WriterEditor: NSViewRepresentable {
             textView.documentTitle = document.displayTitle
         }
         if let slide, textView.slideLayout != slide.layout {
-            let restyles = !slide.layout.sameText(as: textView.slideLayout)
+            let restyles = slide.layout.centersVertically != textView.slideLayout?.centersVertically
             textView.slideLayout = slide.layout
+            (scrollView as? SlideScrollView)?.fitCanvas()
             if restyles, textView.palette == palette { textView.restyleAll() }
         }
         if textView.palette != palette || textView.family != document.textFont {
@@ -422,8 +447,10 @@ struct WriterEditor: NSViewRepresentable {
         weak var controller: WriterEditorController?
         var onChange: ((WriterDocument.ID, String) -> Void)?
         private(set) var documentID: WriterDocument.ID?
-        /// The slide shown, in Presenter Studio.
-        private(set) var slideID: PresentationSlide.ID?
+        /// The slide shown, in Presenter Studio (or the text field of a slide being edited).
+        private(set) var slideID: UUID?
+        /// The slide the shown text is on.
+        private(set) var ownerSlideID: PresentationSlide.ID?
         /// The text last loaded or reported; anything else in the model was changed elsewhere.
         private(set) var knownMarkdown: String?
         private var isDirty = false
@@ -439,6 +466,7 @@ struct WriterEditor: NSViewRepresentable {
             guard let textView else { return }
             documentID = document.id
             slideID = slide?.id
+            ownerSlideID = slide?.slideID
             knownMarkdown = slide?.markdown ?? document.markdown
             isDirty = false
             textView.dynamicOutline = document.outline
@@ -449,9 +477,14 @@ struct WriterEditor: NSViewRepresentable {
             textView.citationStyleCache = nil
             textView.lastCitedKeys = []
             textView.load(markdown: slide?.markdown ?? document.markdown, family: document.textFont, palette: palette)
+            // A new table or code field starts in its first cell or line.
+            if let slide, slide.id != slide.slideID {
+                let start = slide.markdown.trimmingCharacters(in: .whitespacesAndNewlines)
+                if start.hasPrefix("|") || start.hasPrefix("```") { textView.setSelectedRange(NSRange(location: 0, length: 0)) }
+            }
             controller?.state = textView.state
             controller?.refreshComments()
-            controller?.textLoaded(slideID: slide?.id)
+            controller?.textLoaded(slideID: slide?.slideID, fieldID: slide.flatMap { $0.id == $0.slideID ? nil : $0.id })
             updateGenerationTimer()
             DispatchQueue.main.async { [weak textView, weak controller] in
                 guard let textView else { return }
@@ -481,7 +514,7 @@ struct WriterEditor: NSViewRepresentable {
             textView.setSelectedRange(NSRange(location: min(selection.location, length), length: 0))
             textView.scroll(visible)
             controller?.state = textView.state
-            controller?.textLoaded(slideID: slideID)
+            controller?.textLoaded(slideID: ownerSlideID, fieldID: slideID == ownerSlideID ? nil : slideID)
             if !hadFocus, textView.window?.firstResponder === textView { textView.window?.makeFirstResponder(nil) }
         }
 
@@ -609,7 +642,8 @@ class SlideScrollView: NSScrollView {
 
     func fitCanvas() {
         guard bounds.width > 1 else { return }
-        let target = bounds.width / WriterTextView.SlideLayout.canvas.width
+        let canvas = (documentView as? WriterTextView)?.slideLayout?.size.width ?? WriterTextView.SlideLayout.canvas.width
+        let target = bounds.width / canvas
         if abs(magnification - target) > 0.0005 { magnification = target }
     }
 }

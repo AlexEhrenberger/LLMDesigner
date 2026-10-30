@@ -471,6 +471,12 @@ final class AppModel {
     var selectedSlideID: PresentationSlide.ID?
     /// The free picture selected on the open slide (moved with the mouse, deleted with ⌫).
     var selectedSlideImageID: SlideImage.ID?
+    /// The text field of the open slide whose text is in the editor; nil: the slide's own text.
+    var editingSlideFieldID: SlideImage.ID?
+    /// The slide's own text area shows its frame, to be moved and resized.
+    var editingSlideTextArea = false
+    /// The small versions of the applications in the right-hand panel.
+    let power = PowerAccess()
     /// A slide that was just deleted and can still be brought back.
     var deletedSlide: DeletedSlide?
     @ObservationIgnored var deletedSlideTask: Task<Void, Never>?

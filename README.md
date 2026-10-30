@@ -1,6 +1,14 @@
 # LLM Designer
 
-Native macOS-App (SwiftUI) als „LM Studio Plus“: Chat-Oberfläche im Stil von ChatGPT, die auf dem lokalen LM-Studio-Server aufsetzt. Die UI ist immer schwarz, unabhängig vom System-Erscheinungsbild.
+Native macOS-App (SwiftUI) als „LM Studio Plus“: Chat-Oberfläche im Stil von ChatGPT, die auf dem lokalen LM-Studio-Server (oder Kapitsa) aufsetzt – dazu Writer, Presenter, Citation und Stories Studio. Die UI ist immer schwarz, unabhängig vom System-Erscheinungsbild.
+
+**Dokumentation** mit Diagrammen: [Übersicht](docs/index.md) · [Funktionsweise](docs/funktionen.md) · [Architektur](docs/architektur.md) · [Code-Führer](docs/code.md) · [Speicherformate](docs/speicherformate.md)
+
+## Neu
+
+- **Neu-Menü**: Das Stift-Symbol öffnet ein Menü mit „Neuer Chat“ und allen Applikationen (Writer, Citation, Presenter, Stories).
+- **Power-Zugriff** (Blitz in der Titelleiste, ⌥⌘J): Das rechte Panel zeigt kompakte Versionen von Chats, Writer, Presenter, Citation und Stories Studio. Durchsuchen, Text in beide Richtungen ziehen, Zitate und Story-Elemente direkt anlegen, Änderungen rückgängig machen. Details in [docs/funktionen.md](docs/funktionen.md#power-zugriff).
+- **Presenter Studio** erbt Writers Formatierungen (hoch-/tiefgestellt, durchgestrichen, Code, Tabellen mit Formeln, Diagramme, Zeichnungen) und kennt **frei verschiebbare Elemente**: Textfelder, Kästen, Tabellen, Code und Abbildungen lassen sich wie Bilder auf der Folie verschieben und skalieren (Doppelklick zum Schreiben); auch der Textbereich der Folie ist verschiebbar.
 
 ## Bauen & Starten
 

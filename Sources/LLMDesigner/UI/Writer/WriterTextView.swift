@@ -58,6 +58,8 @@ final class WriterTextView: NSTextView {
     var lastTableCellEdited = false
     /// The bar over the table with the caret: the cell's formula, sorting, sums, a chart.
     var tableBarHost: NSView?
+    /// On a slide: the bar over the table with the caret is shown by the screen (nil hides it).
+    var onTableBar: ((WriterTableBar?) -> Void)?
 
     // MARK: Figures (see WriterTextView+Figures.swift)
 
@@ -165,6 +167,10 @@ final class WriterTextView: NSTextView {
         static let margin = CGSize(width: 46, height: 34)
 
         var centersVertically = false
+        /// The canvas of this text: the slide's, or a text field's own.
+        var size = SlideLayout.canvas
+        /// Where the text runs on the canvas.
+        var textRect = CGRect(origin: .zero, size: SlideLayout.canvas).insetBy(dx: SlideLayout.margin.width, dy: SlideLayout.margin.height)
         /// What an empty slide shows where its first line goes, and in which block.
         var placeholder = ""
         var firstBlock: WriterBlock = .heading1
@@ -179,22 +185,39 @@ final class WriterTextView: NSTextView {
             firstBlock = role.firstBlock
         }
 
-        init(slide: PresentationSlide, images: [SlideImage]? = nil) {
+        init(slide: PresentationSlide, images: [SlideImage]? = nil, textFrame: CGRect? = nil) {
             self.init(role: slide.role)
+            textRect = textFrame ?? slide.textFrame
             obstacles = (images ?? slide.images).filter { $0.placement == .wrap }.map(\.frame)
+        }
+
+        /// A text field of its own on the slide: its frame is its canvas, with a little room inside (more in a box).
+        init(field: SlideImage, frame: CGRect? = nil) {
+            let frame = frame ?? field.frame
+            size = CGSize(width: max(20, frame.width), height: max(14, frame.height))
+            let inset = field.box == nil ? CGSize(width: 4, height: 3) : CGSize(width: 12, height: 9)
+            textRect = CGRect(origin: .zero, size: size).insetBy(dx: min(inset.width, size.width / 4), dy: min(inset.height, size.height / 4))
+            placeholder = "Text"
+            firstBlock = .paragraph
         }
 
         /// The same but for the pictures: changing only them needs no restyling.
         func sameText(as other: SlideLayout?) -> Bool {
             guard let other else { return false }
             return centersVertically == other.centersVertically && placeholder == other.placeholder && firstBlock == other.firstBlock
+                && size == other.size && textRect == other.textRect
         }
     }
 
     var slideLayout: SlideLayout? {
         didSet {
             guard oldValue != slideLayout else { return }
-            textContainerInset = slideLayout == nil ? NSSize(width: 0, height: 170) : NSSize(width: 0, height: SlideLayout.margin.height)
+            textContainerInset = slideLayout.map { NSSize(width: 0, height: $0.textRect.minY) } ?? NSSize(width: 0, height: 170)
+            if oldValue?.size != slideLayout?.size || oldValue?.textRect != slideLayout?.textRect {
+                setFrameSize(frame.size)
+                invalidateTextContainerOrigin()
+                needsDisplay = true
+            }
             updateSlideCentering()
         }
     }
@@ -202,6 +225,8 @@ final class WriterTextView: NSTextView {
     private var slideCenterOffset: CGFloat = 0
     /// The slide's text is longer than the slide (reported to the screen as a hint).
     var onSlideOverflow: ((Bool) -> Void)?
+    /// The room the slide's text needs on its canvas (its height with the margins); a text field grows to it.
+    var onSlideTextHeight: ((CGFloat) -> Void)?
     private var slideOverflows = false
 
     private let restyler = WriterRestyler()
@@ -263,7 +288,7 @@ final class WriterTextView: NSTextView {
     // MARK: Page
 
     var columnWidth: CGFloat {
-        if slideLayout != nil { return SlideLayout.canvas.width - 2 * SlideLayout.margin.width }
+        if let slideLayout { return slideLayout.textRect.width }
         // A paperback's or a Normseite's line is as long as in print.
         let width = WriterStyler.columnWidth(palette.format, family: family, setup: palette.pageSetup) ?? Self.maxColumnWidth
         return min(width, max(260, bounds.width - 120))
@@ -274,7 +299,7 @@ final class WriterTextView: NSTextView {
     }
 
     override var textContainerOrigin: NSPoint {
-        if slideLayout != nil { return NSPoint(x: SlideLayout.margin.width, y: SlideLayout.margin.height + slideCenterOffset) }
+        if let slideLayout { return NSPoint(x: slideLayout.textRect.minX, y: slideLayout.textRect.minY + slideCenterOffset) }
         return NSPoint(x: floor((bounds.width - columnWidth) / 2), y: textTop)
     }
 
@@ -288,13 +313,13 @@ final class WriterTextView: NSTextView {
             }
             return
         }
-        let room = SlideLayout.canvas.height - 2 * SlideLayout.margin.height
+        let room = layout.textRect.height
         // The pictures' frames depend on where the text starts, and a centred text's start on its height with
         // them: a few rounds settle it.
         var offset = slideCenterOffset
         var used: CGFloat = 0
         for _ in 0..<3 {
-            applySlideObstacles(layout.obstacles, offset: offset)
+            applySlideObstacles(layout, offset: offset)
             layoutManager.ensureLayout(for: container)
             used = layoutManager.usedRect(for: container).height
             let next = layout.centersVertically ? max(0, floor((room - used) / 2)) : 0
@@ -308,6 +333,7 @@ final class WriterTextView: NSTextView {
             updateAICursorIndicator()
             updateImageControls()
         }
+        onSlideTextHeight?(ceil(used) + layout.textRect.minY + max(0, layout.size.height - layout.textRect.maxY))
         let overflows = used > room + 1
         if overflows != slideOverflows {
             slideOverflows = overflows
@@ -319,14 +345,14 @@ final class WriterTextView: NSTextView {
     }
 
     /// The free pictures as exclusion paths of the text container (whose origin is the text's top left).
-    private func applySlideObstacles(_ obstacles: [CGRect], offset: CGFloat) {
+    private func applySlideObstacles(_ layout: SlideLayout, offset: CGFloat) {
         guard let container = textContainer else { return }
-        let origin = CGPoint(x: SlideLayout.margin.width, y: SlideLayout.margin.height + offset)
-        let paths = obstacles.map { frame -> NSBezierPath in
+        let origin = CGPoint(x: layout.textRect.minX, y: layout.textRect.minY + offset)
+        let paths = layout.obstacles.map { frame -> NSBezierPath in
             var rect = frame.insetBy(dx: -SlideLayout.obstacleGap, dy: -SlideLayout.obstacleGap)
             // The text passes the picture on one side only, the wider one: lines aren't torn in two.
-            if frame.midX >= SlideLayout.canvas.width / 2 {
-                rect = CGRect(x: rect.minX, y: rect.minY, width: SlideLayout.canvas.width + 100 - rect.minX, height: rect.height)
+            if frame.midX >= layout.textRect.midX {
+                rect = CGRect(x: rect.minX, y: rect.minY, width: layout.size.width + 100 - rect.minX, height: rect.height)
             } else {
                 rect = CGRect(x: -100, y: rect.minY, width: rect.maxX + 100, height: rect.height)
             }
@@ -363,13 +389,14 @@ final class WriterTextView: NSTextView {
 
     override func setFrameSize(_ newSize: NSSize) {
         var newSize = newSize
-        if slideLayout != nil {
+        if let slideLayout {
             // The canvas keeps its width; the scroll view magnifies it to the space there is. Its height is the
             // slide's (what AppKit computes ignores the centring), more only when the text runs over.
-            newSize.width = SlideLayout.canvas.width
+            newSize.width = slideLayout.size.width
             let used = layoutManager.flatMap { manager in textContainer.map { manager.usedRect(for: $0).height } } ?? 0
-            let visible = floor(enclosingScrollView?.contentView.bounds.height ?? SlideLayout.canvas.height)
-            newSize.height = max(ceil(used) + 2 * SlideLayout.margin.height, min(visible, SlideLayout.canvas.height))
+            let visible = floor(enclosingScrollView?.contentView.bounds.height ?? slideLayout.size.height)
+            let margins = slideLayout.textRect.minY + max(0, slideLayout.size.height - slideLayout.textRect.maxY)
+            newSize.height = max(ceil(used) + margins, min(visible, slideLayout.size.height))
         } else if let visible = enclosingScrollView?.contentSize.height {
             // At least as tall as the visible area, so the sheet reaches the bottom of the window.
             newSize.height = max(newSize.height, visible)

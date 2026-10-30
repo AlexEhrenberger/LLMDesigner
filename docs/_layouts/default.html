@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ page.title | default: site.title }}</title>
+  <style>
+    :root { --bg: #0c0c0e; --panel: #141417; --text: #ededef; --muted: #a1a1a9; --accent: #a996ff; --border: rgba(255,255,255,.1); }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    header { border-bottom: 1px solid var(--border); padding: 14px 20px; display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
+    header strong { color: var(--accent); }
+    header a { color: var(--muted); text-decoration: none; }
+    header a:hover { color: var(--text); }
+    main { max-width: 980px; margin: 0 auto; padding: 24px 16px 80px; }
+    a { color: var(--accent); }
+    h1, h2, h3 { line-height: 1.25; }
+    table { border-collapse: collapse; width: 100%; display: block; overflow-x: auto; }
+    th, td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: var(--panel); }
+    code { background: var(--panel); padding: 1px 5px; border-radius: 4px; font-size: .9em; }
+    pre { background: var(--panel); padding: 12px; border-radius: 8px; overflow-x: auto; border: 1px solid var(--border); }
+    pre code { background: none; padding: 0; }
+    blockquote { border-left: 3px solid var(--accent); margin: 0; padding: 4px 14px; color: var(--muted); }
+    .mermaid { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin: 16px 0; overflow-x: auto; text-align: center; }
+  </style>
+</head>
+<body>
+  <header>
+    <strong>LLM Designer</strong>
+    <a href="{{ '/' | relative_url }}">Übersicht</a>
+    <a href="{{ '/funktionen.html' | relative_url }}">Funktionsweise</a>
+    <a href="{{ '/architektur.html' | relative_url }}">Architektur</a>
+    <a href="{{ '/code.html' | relative_url }}">Code-Führer</a>
+    <a href="{{ '/speicherformate.html' | relative_url }}">Speicherformate</a>
+  </header>
+  <main>
+    {{ content }}
+  </main>
+  {% if page.mermaid %}
+  <script type="module">
+    // GitHub Pages turns ```mermaid fences into code blocks; here they become diagrams.
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
+    const blocks = document.querySelectorAll("div.language-mermaid, pre > code.language-mermaid");
+    for (const block of blocks) {
+      const target = block.tagName === "CODE" ? block.parentElement : block;
+      const diagram = document.createElement("div");
+      diagram.className = "mermaid";
+      diagram.textContent = block.textContent;
+      target.replaceWith(diagram);
+    }
+    mermaid.initialize({ startOnLoad: false, theme: "dark", securityLevel: "strict" });
+    await mermaid.run({ querySelector: ".mermaid" });
+  </script>
+  {% endif %}
+</body>
+</html>

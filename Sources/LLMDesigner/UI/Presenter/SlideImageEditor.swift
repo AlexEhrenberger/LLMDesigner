@@ -1,8 +1,10 @@
 import SwiftUI
 
-/// The free pictures of the open slide, over the editor: a click selects one, dragging moves it (it snaps to the
-/// slide's middle and margins), the corners resize it (⇧ frees its shape). The bar above it sets how the text
-/// runs around it. Pictures behind the text are reached with ⌘-click, so clicks on the text still go to the text.
+/// The free pictures and text fields of the open slide, over the editor: a click selects one, dragging moves it (it
+/// snaps to the slide's middle and margins), the corners resize it (⇧ frees a picture's shape, keeps a text field's).
+/// The bar above it sets how the text runs around it. A double click on a text field opens it for writing: the
+/// editor moves into it. Pictures behind the text are reached with ⌘-click, so clicks on the text still go to the
+/// text. In the text-area mode the slide's own text shows its frame, to be moved and resized the same way.
 struct SlideImageEditor: View {
     @Environment(AppModel.self) private var app
     let document: WriterDocument
@@ -10,11 +12,14 @@ struct SlideImageEditor: View {
     let controller: WriterEditorController
     /// The pictures while one is being dragged: the text flows around them live, the slide only changes at the end.
     @Binding var dragImages: [SlideImage]?
+    /// The slide's text area while it is dragged.
+    @Binding var dragTextFrame: CGRect?
     let onRegenerate: (SlideImage) -> Void
 
     @State private var commandHeld = false
     @State private var monitor: Any?
     @State private var dragStart: SlideImage?
+    @State private var areaStart: CGRect?
     @State private var guides: Guides = []
 
     struct Guides: OptionSet {
@@ -39,8 +44,11 @@ struct SlideImageEditor: View {
                 ForEach(images) { image in
                     imageView(image, scale: scale)
                 }
+                if app.editingSlideTextArea {
+                    textArea(scale: scale, size: geometry.size)
+                }
                 guideLines(scale: scale)
-                if let selected = images.first(where: { $0.id == app.selectedSlideImageID }) {
+                if !app.editingSlideTextArea, let selected = images.first(where: { $0.id == app.selectedSlideImageID }) {
                     handles(selected, scale: scale)
                     bar(selected, scale: scale, size: geometry.size)
                 }
@@ -54,36 +62,92 @@ struct SlideImageEditor: View {
         .onChange(of: slide.id) { _, _ in
             dragImages = nil
             dragStart = nil
+            dragTextFrame = nil
+            areaStart = nil
         }
     }
 
     // MARK: Pictures
 
+    @ViewBuilder
     private func imageView(_ image: SlideImage, scale: CGFloat) -> some View {
         let frame = image.frame
         let isSelected = app.selectedSlideImageID == image.id
-        return Group {
-            // A picture behind the text is drawn below the editor; here only its place to grab.
-            if image.placement == .behind {
-                Color.clear
-            } else {
-                SlideImageView(image: image)
+        let isEditing = app.editingSlideFieldID == image.id
+        if isEditing {
+            // The editor writes in the field; here only its outline and a grip to move it by.
+            Rectangle()
+                .strokeBorder(Theme.accent.opacity(0.8), style: StrokeStyle(lineWidth: 1, dash: [5, 3]))
+                .frame(width: max(1, frame.width * scale), height: max(1, frame.height * scale))
+                .allowsHitTesting(false)
+                .position(x: frame.midX * scale, y: frame.midY * scale)
+            grip(image, scale: scale)
+        } else {
+            Group {
+                // A picture behind the text is drawn below the editor; here only its place to grab.
+                if image.placement == .behind {
+                    Color.clear
+                } else {
+                    SlideImageView(image: image)
+                }
             }
-        }
-        .frame(width: max(1, frame.width * scale), height: max(1, frame.height * scale))
-        .overlay {
-            if isSelected {
-                Rectangle().strokeBorder(Theme.accent, lineWidth: 1.5)
-            } else if commandHeld {
-                Rectangle().strokeBorder(Theme.accent.opacity(0.55), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+            .frame(width: max(1, frame.width * scale), height: max(1, frame.height * scale))
+            .overlay {
+                if isSelected {
+                    Rectangle().strokeBorder(Theme.accent, lineWidth: 1.5)
+                } else if commandHeld {
+                    Rectangle().strokeBorder(Theme.accent.opacity(0.55), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                } else if image.isText, image.box == nil {
+                    // A plain text field shows where it is.
+                    Rectangle().strokeBorder(Color.white.opacity(0.16), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                }
             }
+            .overlay {
+                if image.isText, (image.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text("Doppelklick zum Schreiben")
+                        .font(.system(size: max(8, 11 * scale), weight: .medium))
+                        .foregroundStyle(Color.white.opacity(0.45))
+                }
+            }
+            .contentShape(Rectangle())
+            .gesture(moveGesture(image, scale: scale))
+            .simultaneousGesture(TapGesture(count: 2).onEnded {
+                if image.isText { edit(image) }
+            })
+            .contextMenu { menu(image) }
+            .allowsHitTesting(image.placement != .behind || isSelected || commandHeld)
+            .help(help(for: image))
+            .position(x: frame.midX * scale, y: frame.midY * scale)
         }
-        .contentShape(Rectangle())
-        .gesture(moveGesture(image, scale: scale))
-        .contextMenu { menu(image) }
-        .allowsHitTesting(image.placement != .behind || isSelected || commandHeld)
-        .help(image.placement == .behind ? "Bild hinter dem Text – ziehen zum Verschieben" : "Ziehen zum Verschieben, an den Ecken die Größe ändern")
-        .position(x: frame.midX * scale, y: frame.midY * scale)
+    }
+
+    private func help(for image: SlideImage) -> String {
+        if image.isText { return "Doppelklick zum Schreiben – ziehen zum Verschieben, an den Ecken die Größe ändern" }
+        return image.placement == .behind ? "Bild hinter dem Text – ziehen zum Verschieben" : "Ziehen zum Verschieben, an den Ecken die Größe ändern"
+    }
+
+    /// While a text field is being written in, it moves by this grip above its top left corner.
+    private func grip(_ image: SlideImage, scale: CGFloat) -> some View {
+        let frame = image.frame
+        return Image(systemName: "arrow.up.and.down.and.arrow.left.and.right")
+            .font(.system(size: 9.5, weight: .bold))
+            .foregroundStyle(Color.white)
+            .frame(width: 20, height: 20)
+            .background(Circle().fill(Theme.accent))
+            .contentShape(Circle())
+            .gesture(moveGesture(image, scale: scale))
+            .help("Textfeld verschieben")
+            .position(x: frame.minX * scale + 2, y: frame.minY * scale - 14)
+    }
+
+    /// Opens a text field for writing: the editor moves into it.
+    private func edit(_ image: SlideImage) {
+        app.selectedSlideImageID = image.id
+        app.editingSlideTextArea = false
+        if app.editingSlideFieldID != image.id {
+            app.writerFlush?()
+            app.editingSlideFieldID = image.id
+        }
     }
 
     private func moveGesture(_ image: SlideImage, scale: CGFloat) -> some Gesture {
@@ -91,7 +155,7 @@ struct SlideImageEditor: View {
             .onChanged { value in
                 if dragStart?.id != image.id {
                     dragStart = image
-                    select(image.id)
+                    if app.editingSlideFieldID != image.id { select(image.id) }
                 }
                 guard let start = dragStart, hypot(value.translation.width, value.translation.height) > 2 else { return }
                 var frame = start.frame
@@ -104,7 +168,7 @@ struct SlideImageEditor: View {
             .onEnded { _ in
                 dragStart = nil
                 guides = []
-                commit("Bild verschieben")
+                commit(image.isText ? "Textfeld verschieben" : "Bild verschieben")
             }
     }
 
@@ -148,7 +212,8 @@ struct SlideImageEditor: View {
                 let minimum = canvas.width * SlideImage.minimumWidth
                 var width = max(minimum, start.width + (left ? -dx : dx))
                 var height = max(minimum, start.height + (top ? -dy : dy))
-                if !NSEvent.modifierFlags.contains(.shift) {
+                // A picture keeps its shape unless ⇧ is held; a text field only with ⇧.
+                if NSEvent.modifierFlags.contains(.shift) == image.isText {
                     // The picture keeps its shape: the larger change decides.
                     let aspect = start.width / max(1, start.height)
                     if abs(width - start.width) >= abs(height - start.height) * aspect {
@@ -163,7 +228,7 @@ struct SlideImageEditor: View {
             }
             .onEnded { _ in
                 dragStart = nil
-                commit("Bildgröße ändern")
+                commit(image.isText ? "Größe des Textfelds" : "Bildgröße ändern")
             }
     }
 
@@ -195,14 +260,25 @@ struct SlideImageEditor: View {
             .fixedSize()
             .help("Wie Bild und Text die Folie teilen")
             separator
+            if image.isText {
+                if app.editingSlideFieldID == image.id {
+                    IconButton(systemName: "checkmark", help: "Fertig – zurück zum Text der Folie (esc)", size: 11.5, frameSize: 24) { finishEditing(image) }
+                } else {
+                    IconButton(systemName: "pencil", help: "Text bearbeiten (Doppelklick)", size: 11.5, frameSize: 24) { edit(image) }
+                }
+                boxMenu(image)
+                separator
+            }
             IconButton(systemName: "square.3.layers.3d.top.filled", help: "Ganz nach vorn", size: 11.5, frameSize: 24) { reorder(image, toFront: true) }
             IconButton(systemName: "square.3.layers.3d.bottom.filled", help: "Ganz nach hinten", size: 11.5, frameSize: 24) { reorder(image, toFront: false) }
-            IconButton(systemName: "aspectratio", help: "Ursprüngliches Seitenverhältnis", size: 11.5, frameSize: 24) { restoreAspect(image) }
+            if !image.isText {
+                IconButton(systemName: "aspectratio", help: "Ursprüngliches Seitenverhältnis", size: 11.5, frameSize: 24) { restoreAspect(image) }
+            }
             if image.generated {
                 IconButton(systemName: "wand.and.stars", help: "Mit Draw Things neu generieren …", size: 11.5, frameSize: 24) { onRegenerate(image) }
             }
             separator
-            IconButton(systemName: "trash", help: "Bild entfernen (⌫)", size: 11.5, frameSize: 24) { delete(image.id) }
+            IconButton(systemName: "trash", help: image.isText ? "Textfeld entfernen (⌫)" : "Bild entfernen (⌫)", size: 11.5, frameSize: 24) { delete(image.id) }
         }
         .padding(.horizontal, 4)
         .background(Capsule().fill(Theme.elevated))
@@ -212,12 +288,58 @@ struct SlideImageEditor: View {
         .position(x: x, y: y)
     }
 
+    /// Plain text or a box of some kind, and how the box is drawn.
+    private func boxMenu(_ image: SlideImage) -> some View {
+        Menu {
+            boxItems(image)
+        } label: {
+            Image(systemName: image.box?.symbol ?? "textformat")
+                .font(.system(size: 11.5, weight: .medium))
+                .foregroundStyle(image.box == nil ? Theme.textSecondary : Theme.textPrimary)
+                .frame(width: 24, height: 24)
+                .contentShape(Rectangle())
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Kasten: Art und Rahmen")
+    }
+
+    @ViewBuilder
+    private func boxItems(_ image: SlideImage) -> some View {
+        Button { setBox(nil, of: image) } label: {
+            if image.box == nil { Label("Nur Text", systemImage: "checkmark") } else { Text("Nur Text") }
+        }
+        Section("Kasten") {
+            ForEach(WriterBoxKind.allCases) { kind in
+                Button { setBox(kind, of: image) } label: {
+                    if image.box == kind { Label(kind.label, systemImage: "checkmark") } else { Label(kind.label, systemImage: kind.symbol) }
+                }
+            }
+        }
+        if image.box != nil {
+            Section("Rahmen") {
+                ForEach(WriterBoxStyle.Frame.allCases) { frame in
+                    Button { setBoxFrame(frame, of: image) } label: {
+                        if image.boxFrame == frame { Label(frame.label, systemImage: "checkmark") } else { Text(frame.label) }
+                    }
+                }
+            }
+        }
+    }
+
     private var separator: some View {
         Rectangle().fill(Theme.border).frame(width: 1, height: 14).padding(.horizontal, 3)
     }
 
     @ViewBuilder
     private func menu(_ image: SlideImage) -> some View {
+        if image.isText {
+            Button("Text bearbeiten", systemImage: "pencil") { edit(image) }
+            Menu("Kasten") { boxItems(image) }
+            Divider()
+        }
         Section("Lage zum Text") {
             ForEach(SlideImage.Placement.allCases, id: \.self) { placement in
                 Button { setPlacement(placement, of: image) } label: {
@@ -228,7 +350,9 @@ struct SlideImageEditor: View {
         Divider()
         Button("Ganz nach vorn", systemImage: "square.3.layers.3d.top.filled") { reorder(image, toFront: true) }
         Button("Ganz nach hinten", systemImage: "square.3.layers.3d.bottom.filled") { reorder(image, toFront: false) }
-        Button("Ursprüngliches Seitenverhältnis", systemImage: "aspectratio") { restoreAspect(image) }
+        if !image.isText {
+            Button("Ursprüngliches Seitenverhältnis", systemImage: "aspectratio") { restoreAspect(image) }
+        }
         Button("Auf der Folie zentrieren", systemImage: "align.horizontal.center") {
             update(image.id, "Bild zentrieren") { images, index in
                 var frame = images[index].frame
@@ -239,12 +363,14 @@ struct SlideImageEditor: View {
         if image.generated {
             Button("Mit Draw Things neu generieren …", systemImage: "wand.and.stars") { onRegenerate(image) }
         }
-        Button("Im Finder zeigen", systemImage: "folder") {
-            if let url = WriterImageStore.url(for: image.source) { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+        if !image.isText {
+            Button("Im Finder zeigen", systemImage: "folder") {
+                if let url = WriterImageStore.url(for: image.source) { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+            }
+            .disabled(WriterImageStore.url(for: image.source) == nil)
         }
-        .disabled(WriterImageStore.url(for: image.source) == nil)
         Divider()
-        Button("Bild entfernen", systemImage: "trash", role: .destructive) { delete(image.id) }
+        Button(image.isText ? "Textfeld entfernen" : "Bild entfernen", systemImage: "trash", role: .destructive) { delete(image.id) }
     }
 
     // MARK: Changes
@@ -316,17 +442,147 @@ struct SlideImageEditor: View {
 
     private func delete(_ id: SlideImage.ID) {
         if app.selectedSlideImageID == id { app.selectedSlideImageID = nil }
-        update(id, "Bild entfernen") { images, index in images.remove(at: index) }
+        if app.editingSlideFieldID == id { app.endSlideFieldEditing() }
+        let isText = current?.slide.images.first { $0.id == id }?.isText == true
+        update(id, isText ? "Textfeld entfernen" : "Bild entfernen") { images, index in images.remove(at: index) }
+    }
+
+    private func setBox(_ kind: WriterBoxKind?, of image: SlideImage) {
+        update(image.id, "Kasten") { images, index in images[index].box = kind }
+    }
+
+    private func setBoxFrame(_ frame: WriterBoxStyle.Frame, of image: SlideImage) {
+        update(image.id, "Rahmen des Kastens") { images, index in images[index].boxFrame = frame }
+    }
+
+    /// Back to the slide's own text; the field stays selected.
+    private func finishEditing(_ image: SlideImage) {
+        app.endSlideFieldEditing()
+        app.selectedSlideImageID = image.id
+        if let window = controller.textView?.window { window.makeFirstResponder(nil) }
     }
 
     private func nudge(by offset: CGSize) {
+        if app.editingSlideTextArea, let current {
+            var frame = current.slide.textFrame
+            frame.origin.x += offset.width
+            frame.origin.y += offset.height
+            app.setSlideTextArea(current.id, current.slide.id, SlideArea(frame: clampArea(frame)), undoManager: undoManager)
+            return
+        }
         guard let id = app.selectedSlideImageID else { return }
-        update(id, "Bild verschieben") { images, index in
+        update(id, "Verschieben") { images, index in
             var frame = images[index].frame
             frame.origin.x += offset.width
             frame.origin.y += offset.height
             images[index].frame = clamp(frame)
         }
+    }
+
+    // MARK: The slide's text area
+
+    /// The frame of the slide's own text, with a grip area and corners; the bar puts it back or ends the mode.
+    private func textArea(scale: CGFloat, size: CGSize) -> some View {
+        let frame = dragTextFrame ?? slide.textFrame
+        return ZStack(alignment: .topLeading) {
+            Rectangle()
+                .fill(Theme.accent.opacity(0.06))
+                .overlay(Rectangle().strokeBorder(Theme.accent, style: StrokeStyle(lineWidth: 1.5, dash: [6, 3])))
+                .frame(width: frame.width * scale, height: frame.height * scale)
+                .contentShape(Rectangle())
+                .gesture(areaMoveGesture(scale: scale))
+                .help("Textbereich der Folie – ziehen zum Verschieben, an den Ecken die Größe ändern")
+                .position(x: frame.midX * scale, y: frame.midY * scale)
+            ForEach(Corner.allCases) { corner in
+                let point: CGPoint = switch corner {
+                case .topLeft: CGPoint(x: frame.minX, y: frame.minY)
+                case .topRight: CGPoint(x: frame.maxX, y: frame.minY)
+                case .bottomLeft: CGPoint(x: frame.minX, y: frame.maxY)
+                case .bottomRight: CGPoint(x: frame.maxX, y: frame.maxY)
+                }
+                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                    .fill(Color.white)
+                    .overlay(RoundedRectangle(cornerRadius: 2, style: .continuous).strokeBorder(Theme.accent, lineWidth: 1.5))
+                    .frame(width: 10, height: 10)
+                    .frame(width: 22, height: 22)
+                    .contentShape(Rectangle())
+                    .gesture(areaResizeGesture(corner: corner, scale: scale))
+                    .position(x: point.x * scale, y: point.y * scale)
+            }
+            HStack(spacing: 2) {
+                Label("Textbereich", systemImage: "character.textbox")
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundStyle(Theme.textPrimary)
+                    .padding(.horizontal, 7)
+                separator
+                IconButton(systemName: "arrow.uturn.backward", help: "Zurück in die Standardränder", size: 11.5, frameSize: 24) {
+                    guard let current else { return }
+                    app.setSlideTextArea(current.id, current.slide.id, nil, undoManager: undoManager)
+                }
+                .disabled(slide.textArea == nil)
+                IconButton(systemName: "checkmark", help: "Fertig (esc)", size: 11.5, frameSize: 24) {
+                    app.editingSlideTextArea = false
+                    controller.focus()
+                }
+            }
+            .padding(.horizontal, 4)
+            .background(Capsule().fill(Theme.elevated))
+            .overlay(Capsule().strokeBorder(Theme.strongBorder))
+            .shadow(color: .black.opacity(0.35), radius: 8, y: 3)
+            .fixedSize()
+            .position(
+                x: min(max(frame.midX * scale, 150), size.width - 150),
+                y: frame.minY * scale > 44 ? frame.minY * scale - 24 : min(size.height - 20, frame.maxY * scale + 24)
+            )
+        }
+    }
+
+    private func areaMoveGesture(scale: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 2, coordinateSpace: .named(Self.space))
+            .onChanged { value in
+                if areaStart == nil { areaStart = slide.textFrame }
+                guard var frame = areaStart else { return }
+                frame.origin.x += value.translation.width / scale
+                frame.origin.y += value.translation.height / scale
+                let (snapped, lines) = snap(frame, tolerance: 5 / scale)
+                guides = lines
+                dragTextFrame = clampArea(snapped)
+            }
+            .onEnded { _ in commitArea() }
+    }
+
+    private func areaResizeGesture(corner: Corner, scale: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 1, coordinateSpace: .named(Self.space))
+            .onChanged { value in
+                if areaStart == nil { areaStart = slide.textFrame }
+                guard let start = areaStart else { return }
+                let dx = value.translation.width / scale
+                let dy = value.translation.height / scale
+                let left = corner == .topLeft || corner == .bottomLeft
+                let top = corner == .topLeft || corner == .topRight
+                let width = max(80, start.width + (left ? -dx : dx))
+                let height = max(40, start.height + (top ? -dy : dy))
+                dragTextFrame = CGRect(x: left ? start.maxX - width : start.minX, y: top ? start.maxY - height : start.minY, width: width, height: height)
+            }
+            .onEnded { _ in commitArea() }
+    }
+
+    private func commitArea() {
+        guides = []
+        areaStart = nil
+        guard let frame = dragTextFrame, let current else { return }
+        app.setSlideTextArea(current.id, current.slide.id, SlideArea(frame: frame), undoManager: undoManager)
+        dragTextFrame = nil
+    }
+
+    /// The text area stays on the slide.
+    private func clampArea(_ frame: CGRect) -> CGRect {
+        var frame = frame
+        frame.size.width = min(frame.width, canvas.width)
+        frame.size.height = min(frame.height, canvas.height)
+        frame.origin.x = min(max(0, frame.minX), canvas.width - frame.width)
+        frame.origin.y = min(max(0, frame.minY), canvas.height - frame.height)
+        return frame
     }
 
     // MARK: Snapping
@@ -388,11 +644,24 @@ struct SlideImageEditor: View {
                 if held != commandHeld { commandHeld = held }
                 return event
             }
-            guard app.selectedSlideImageID != nil, let window = controller.textView?.window, event.window === window,
+            // esc ends the text-area mode, also while the slide's text has the keyboard.
+            if event.keyCode == 53, app.editingSlideTextArea, app.writerTab == .document, event.window === controller.textView?.window {
+                app.editingSlideTextArea = false
+                return nil
+            }
+            // esc while writing in a text field: back to the slide's text, the field selected.
+            if event.keyCode == 53, let id = app.editingSlideFieldID, app.writerTab == .document, app.speakingDocumentID == nil,
+               let textView = controller.textView, event.window === textView.window, !textView.hasMarkedText(),
+               let field = current?.slide.images.first(where: { $0.id == id }) {
+                finishEditing(field)
+                return nil
+            }
+            guard app.selectedSlideImageID != nil || app.editingSlideTextArea, let window = controller.textView?.window, event.window === window,
                   !(window.firstResponder is NSText), app.writerTab == .document else { return event }
             let step: CGFloat = event.modifierFlags.contains(.shift) ? 10 : 1
             switch event.keyCode {
             case 51, 117:
+                if app.editingSlideTextArea { return event }
                 if let id = app.selectedSlideImageID { delete(id) }
             case 123: nudge(by: CGSize(width: -step, height: 0))
             case 124: nudge(by: CGSize(width: step, height: 0))
@@ -400,6 +669,7 @@ struct SlideImageEditor: View {
             case 126: nudge(by: CGSize(width: 0, height: -step))
             case 53:
                 app.selectedSlideImageID = nil
+                app.editingSlideTextArea = false
                 controller.focus()
             default:
                 return event

@@ -132,7 +132,7 @@ final class DocumentFind {
         controller?.textView?.setFindMatches([], current: nil)
         markNotes()
         guard let match, let controller else { return }
-        if match.place == .text, match.slideID == controller.shownSlideID {
+        if match.place == .text, match.slideID == controller.editedSlideID {
             controller.textView?.selectFindMatch(match.range)
         } else if match.place == .notes, match.slideID == notesSlideID, let notesView {
             notesView.window?.makeFirstResponder(notesView)
@@ -254,7 +254,7 @@ final class DocumentFind {
         for (index, slide) in deck.slides.enumerated() {
             slideOrder[slide.id] = index
             // The open slide as it is being written; the others as the editor would show them.
-            let text = slide.id == controller.shownSlideID ? storage.string : slideText(slide)
+            let text = slide.id == controller.editedSlideID ? storage.string : slideText(slide)
             result += TextSearch.ranges(of: query, in: text, options: options).map { Match(slideID: slide.id, place: .text, range: $0) }
             if searchesNotes {
                 let notes = slide.id == notesSlideID ? notesView?.string ?? slide.notes : slide.notes
@@ -327,7 +327,7 @@ final class DocumentFind {
     /// or opening the card first), `select` also selects it there.
     private func apply(reveal: Bool, select: Bool = false) {
         guard let controller, let textView = controller.textView else { return }
-        let shown = controller.shownSlideID
+        let shown = controller.editedSlideID
         let match = currentMatch
         if isShown {
             let here = matches.filter { $0.place == .text && $0.slideID == shown }.map(\.range)
