@@ -18,11 +18,17 @@ struct DocumentPanel: View {
                 PanelTab(title: "Inhalt", count: nil, isSelected: app.documentPanelTab == .contents) {
                     app.documentPanelTab = .contents
                 }
-                PanelTab(title: "Lesezeichen", count: bookmarks.count, isSelected: app.documentPanelTab == .bookmarks) {
+                // Four tabs don't fit the panel by name: the others show their symbol, the name is the tooltip.
+                PanelTab(title: "Lesezeichen", count: bookmarks.count, isSelected: app.documentPanelTab == .bookmarks, symbol: "bookmark") {
                     app.documentPanelTab = .bookmarks
                 }
-                PanelTab(title: "Quellen", count: CitationMarkup.keys(in: document.markdown).count, isSelected: app.documentPanelTab == .sources) {
+                PanelTab(title: "Quellen", count: CitationMarkup.keys(in: document.markdown).count, isSelected: app.documentPanelTab == .sources,
+                         symbol: "quote.bubble") {
                     app.documentPanelTab = .sources
+                }
+                PanelTab(title: "Kommentare", count: controller.comments.filter { !$0.comment.isResolved }.count,
+                         isSelected: app.documentPanelTab == .comments, symbol: "text.bubble") {
+                    app.documentPanelTab = .comments
                 }
                 Spacer(minLength: 0)
                 if app.documentPanelTab == .contents, mode == .dynamic {
@@ -60,12 +66,14 @@ struct DocumentPanel: View {
 
             if app.documentPanelTab == .sources {
                 DocumentSourcesPanel(document: document, controller: controller, library: app.citations)
+            } else if app.documentPanelTab == .comments {
+                CommentsPanel(controller: controller, assistant: assistant)
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
                         switch app.documentPanelTab {
                         case .bookmarks: bookmarkList(bookmarks)
-                        case .contents, .sources:
+                        case .contents, .sources, .comments:
                             if mode == .headings { headingList } else { dynamicContents(isGenerating: isGenerating) }
                         }
                     }

@@ -195,6 +195,11 @@ extension WriterTextView {
 
     func codeMenuItems() -> [NSMenuItem] {
         guard let current = codeLanguageAtCaret else { return [] }
+        if let run = codeRunAtCaret, mermaidCode(in: run) != nil {
+            let diagram = ClosureMenuItem(title: "Als Diagramm einsetzen") { [weak self] in self?.convertMermaidBlock(run) }
+            diagram.image = NSImage(systemSymbolName: "point.3.connected.trianglepath.dotted", accessibilityDescription: nil)
+            return [diagram, .separator()]
+        }
         let format = ClosureMenuItem(title: "Code formatieren (⌥⇧⌘F)") { [weak self] in self?.formatCode() }
         format.image = NSImage(systemSymbolName: "text.alignleft", accessibilityDescription: nil)
         let languageItem = NSMenuItem(title: "Sprache des Codes", action: nil, keyEquivalent: "")

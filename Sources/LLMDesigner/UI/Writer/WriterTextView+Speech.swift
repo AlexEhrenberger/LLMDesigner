@@ -266,6 +266,8 @@ extension WriterTextView {
         if selectedEmbed != nil || currentParagraph?.block.isEmbed == true || currentParagraph?.block == .rule {
             return []
         }
+        items += commentMenuItems()
+        items += boxMenuItems()
         if let bookmark = bookmarkAtCaret, !hasSelection {
             let remove = ClosureMenuItem(title: "Lesezeichen „\(bookmark.title)“ entfernen") { [weak self] in self?.removeBookmark(bookmark.id) }
             remove.image = NSImage(systemSymbolName: "bookmark.slash", accessibilityDescription: nil)

@@ -36,11 +36,28 @@ final class FlowImageRenderer: NSObject, WKNavigationDelegate {
     }
 
     private func make(_ graph: FlowGraph, opaque: Bool) async throws -> Images {
-        let light = try await MermaidRenderer.shared.render(graph.mermaid(palette: .light), palette: .light)
-        let dark = try await MermaidRenderer.shared.render(graph.mermaid(palette: .dark), palette: .dark)
+        try await make(light: graph.mermaid(palette: .light), dark: graph.mermaid(palette: .dark), opaque: opaque, darkOpaque: false)
+    }
+
+    /// Pictures of a Mermaid diagram from Writer Studio's editor. In the app's colours it has a dark version; with a
+    /// theme of its own the dark sheet shows it on a white card.
+    func images(mermaid code: String) async throws -> Images {
+        let previous = lastRender
+        let task = Task { @MainActor () throws -> Images in
+            await previous?.value
+            let ownTheme = WriterMermaid.style(of: code).theme != nil
+            return try await self.make(light: code, dark: code, opaque: false, darkOpaque: ownTheme)
+        }
+        lastRender = Task { _ = try? await task.value }
+        return try await task.value
+    }
+
+    private func make(light lightCode: String, dark darkCode: String, opaque: Bool, darkOpaque: Bool) async throws -> Images {
+        let light = try await MermaidRenderer.shared.render(lightCode, palette: .light)
+        let dark = try await MermaidRenderer.shared.render(darkCode, palette: darkOpaque ? .light : .dark)
         let size = light.size
         guard let lightPNG = try await png(svg: light.svg, size: size, opaque: opaque),
-              let darkPNG = try await png(svg: dark.svg, size: size, opaque: false),
+              let darkPNG = try await png(svg: dark.svg, size: size, opaque: darkOpaque),
               let pdf = try await pdf(svg: light.svg, size: size) else { throw RenderError.failed }
         return Images(light: lightPNG, dark: darkPNG, pdf: pdf, size: size)
     }

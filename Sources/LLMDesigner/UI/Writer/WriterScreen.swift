@@ -70,6 +70,30 @@ struct WriterScreen: View {
                 case .runningHeads: RunningHeadsSheet(document: document).environment(app)
                 }
             }
+            .sheet(item: Binding(get: { controller.figureRequest }, set: { if $0 == nil, controller.figureRequest != nil { controller.cancelFigure() } })) { request in
+                switch request.kind {
+                case .chart:
+                    ChartEditorSheet(request: request) { images, recipe, caption, table in
+                        controller.applyFigure(.chart, images: images, recipe: recipe, caption: caption, width: request.reference?.width ?? 80,
+                                               linkedTable: table, isExisting: request.isExisting)
+                    } onCancel: {
+                        controller.cancelFigure()
+                    }
+                case .mermaid:
+                    MermaidEditorSheet(request: request) { images, code, caption, width in
+                        controller.applyFigure(.mermaid, images: images, recipe: Data(code.utf8), caption: caption, width: width, isExisting: request.isExisting)
+                    } onCancel: {
+                        controller.cancelFigure()
+                    }
+                    .environment(app)
+                case .drawing:
+                    DrawingEditorSheet(request: request) { images, recipe, caption, width in
+                        controller.applyFigure(.drawing, images: images, recipe: recipe, caption: caption, width: width, isExisting: request.isExisting)
+                    } onCancel: {
+                        controller.cancelFigure()
+                    }
+                }
+            }
             .sheet(item: Binding(get: { controller.imageRequest }, set: { if $0 == nil, controller.imageRequest != nil { controller.cancelImageGeneration() } })) { request in
                 ImageGeneratorSheet(request: request) { info, caption, generate in
                     controller.applyGeneratedImage(info: info, caption: caption, generate: generate, isExisting: request.isExisting)
@@ -635,6 +659,8 @@ private struct WriterToolbar: View {
             HStack(spacing: 2) {
                 group(10) { AlignmentButtons(controller: controller) }
                 group(10) { ParagraphFormatButton(controller: controller, state: state) }
+                group(10) { ColumnsButton(controller: controller) }
+                group(10) { BoxButton(controller: controller) }
             }
             divider(11)
             HStack(spacing: 2) {
@@ -675,6 +701,13 @@ private struct WriterToolbar: View {
                         isActive: state.bookmarkID != nil
                     ) { controller.toggleBookmark() }
                 }
+                group(19) {
+                    ToolbarButton(
+                        symbol: controller.activeCommentID != nil ? "text.bubble.fill" : "text.bubble",
+                        help: "Kommentar (⌥⌘M) – zur Markierung, von dir oder der KI; steht am Rand und kommt nicht in den Druck",
+                        isActive: controller.activeCommentID != nil
+                    ) { controller.addComment() }
+                }
                 group(20) {
                     ToolbarButton(symbol: "minus", help: "Trennlinie / Abschnittsmarke", isActive: false) { controller.insertRule() }
                 }
@@ -699,6 +732,12 @@ private struct WriterToolbar: View {
                 group(21) {
                     ToolbarButton(symbol: "wand.and.stars", help: "Bild mit Draw Things generieren (⌥⌘G) – beschreiben, die KI schreibt den Prompt für Qwen Image", isActive: false) {
                         controller.generateImage()
+                    }
+                }
+                group(21) { DiagramMenu(controller: controller, isInTable: state.table != nil, hasSelection: state.hasSelection) }
+                group(21) {
+                    ToolbarButton(symbol: "pencil.and.scribble", help: "Zeichnung … – Stift, Marker, Pfeile, Formen und Text", isActive: false) {
+                        controller.newFigure(.drawing)
                     }
                 }
                 group(22) { TableButton(controller: controller, isInTable: state.table != nil) }
@@ -875,6 +914,44 @@ private struct TableOfContentsMenu: View {
         .fixedSize()
         .onHover { hovering = $0 }
         .help("Inhaltsverzeichnis einfügen – aus den Überschriften (nummeriert wie im Export) oder dynamisch vom Modell")
+    }
+}
+
+/// Diagrams: a chart of numbers (typed in, or of the table with the caret, which it then follows) and Mermaid diagrams,
+/// which the model can write from a description or the selected text.
+struct DiagramMenu: View {
+    let controller: WriterEditorController
+    let isInTable: Bool
+    let hasSelection: Bool
+    @State private var hovering = false
+
+    var body: some View {
+        Menu {
+            Section("Diagramm aus Zahlen") {
+                if isInTable {
+                    Button("Aus dieser Tabelle …", systemImage: "tablecells") { controller.chartFromTable() }
+                }
+                Button("Säulen, Linien, Kreis … ", systemImage: "chart.bar.xaxis") { controller.newFigure(.chart) }
+            }
+            Section("Mermaid") {
+                Button(hasSelection ? "Aus der Markierung mit KI …" : "Mermaid-Diagramm …", systemImage: "point.3.connected.trianglepath.dotted") {
+                    controller.newFigure(.mermaid)
+                }
+            }
+        } label: {
+            Image(systemName: "chart.bar.doc.horizontal")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(hovering ? Theme.textPrimary : Theme.textSecondary)
+                .frame(width: 30, height: 28)
+                .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(hovering ? Theme.hover : .clear))
+                .contentShape(Rectangle())
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .onHover { hovering = $0 }
+        .help("Diagramm – aus Zahlen oder einer Tabelle (Säulen, Linien, Kreis …) oder als Mermaid-Diagramm, auch von der KI")
     }
 }
 

@@ -17,18 +17,23 @@ struct WriterImageReference: Equatable, Sendable {
     var generated = false
     /// A flow chart of code (`.diagram`): like a plot it has a version for the dark sheet and a PDF for LaTeX.
     var isDiagram = false
+    /// A chart, a drawing or a Mermaid diagram made in Writer Studio (`.chart`, `.drawing`, `.mermaid`): its recipe
+    /// lies next to it (`WriterFigureKind.recipeExtension`), and it opens in its editor again.
+    var figure: WriterFigureKind?
 
-    init(source: String, caption: String, width: Int?, plot: PlotSpec? = nil, generated: Bool = false, isDiagram: Bool = false) {
+    init(source: String, caption: String, width: Int?, plot: PlotSpec? = nil, generated: Bool = false, isDiagram: Bool = false,
+         figure: WriterFigureKind? = nil) {
         self.source = source
         self.caption = caption
         self.width = width
         self.plot = plot
         self.generated = generated
         self.isDiagram = isDiagram
+        self.figure = figure
     }
 
-    /// Has a version for the dark sheet and a vector version for print (plots and diagrams).
-    var hasVariants: Bool { plot != nil || isDiagram }
+    /// Has a version for the dark sheet and a vector version for print (plots, diagrams, charts and drawings).
+    var hasVariants: Bool { plot != nil || isDiagram || figure != nil }
 
     /// A generated picture whose file isn't there (yet).
     var isPlaceholder: Bool { generated && WriterImageStore.url(for: source) == nil }
@@ -90,6 +95,7 @@ struct WriterImageReference: Equatable, Sendable {
         var plot: PlotSpec?
         var generated = false
         var isDiagram = false
+        var figure: WriterFigureKind?
         let rest = String(characters[index...]).trimmingCharacters(in: .whitespaces)
         if !rest.isEmpty {
             guard rest.hasPrefix("{"), rest.hasSuffix("}") else { return nil }
@@ -97,6 +103,7 @@ struct WriterImageReference: Equatable, Sendable {
             if attributes.contains(".plot") { plot = PlotSpec() }
             generated = attributes.contains(".generated")
             isDiagram = attributes.contains(".diagram")
+            figure = WriterFigureKind.allCases.first { attributes.contains(Substring("." + $0.rawValue)) }
             for attribute in attributes {
                 let pair = attribute.split(separator: "=", maxSplits: 1).map(String.init)
                 guard pair.count == 2 else { continue }
@@ -107,7 +114,8 @@ struct WriterImageReference: Equatable, Sendable {
                 }
             }
         }
-        return WriterImageReference(source: source, caption: caption, width: width, plot: plot, generated: generated, isDiagram: isDiagram)
+        return WriterImageReference(source: source, caption: caption, width: width, plot: plot, generated: generated, isDiagram: isDiagram,
+                                    figure: figure)
     }
 
     var markdown: String {
@@ -122,6 +130,7 @@ struct WriterImageReference: Equatable, Sendable {
         attributes += plot?.markdownAttributes ?? []
         if generated { attributes.append(".generated") }
         if isDiagram { attributes.append(".diagram") }
+        if let figure { attributes.append("." + figure.rawValue) }
         return "![\(caption)](\(destination))" + (attributes.isEmpty ? "" : "{" + attributes.joined(separator: " ") + "}")
     }
 }
@@ -265,7 +274,7 @@ enum WriterImageStore {
     static func removeUnused(_ sources: [String], stillUsedIn documents: [[String]]) {
         let used = Set(documents.joined())
         for source in Set(sources) where source.hasPrefix(folderName + "/") && !used.contains(source) {
-            for variant in [source, darkVariant(of: source), pdfVariant(of: source), infoVariant(of: source)] {
+            for variant in [source, darkVariant(of: source), pdfVariant(of: source), infoVariant(of: source), mermaidVariant(of: source)] {
                 if let url = url(for: variant) { try? FileManager.default.removeItem(at: url) }
             }
         }
@@ -304,11 +313,98 @@ enum WriterImageStore {
         return folderName + "/" + name + ".png"
     }
 
+    // MARK: Charts, drawings and Mermaid diagrams
+
+    /// "Bilder/mermaid-1.png" → "Bilder/mermaid-1.mmd": the diagram's Mermaid code.
+    static func mermaidVariant(of source: String) -> String {
+        (source as NSString).deletingPathExtension + ".mmd"
+    }
+
+    /// The file that holds how a figure is made: its JSON, or its Mermaid code.
+    static func recipeVariant(of source: String, kind: WriterFigureKind) -> String {
+        kind == .mermaid ? mermaidVariant(of: source) : infoVariant(of: source)
+    }
+
+    /// Stores a figure made in Writer Studio: its PNG for white paper and for the dark sheet, its PDF and its recipe.
+    /// Returns the Markdown source of the light PNG.
+    static func storeFigure(_ kind: WriterFigureKind, images: WriterFigureImages, recipe: Data) throws -> String {
+        let name = kind.filePrefix + "-" + UUID().uuidString.prefix(13).lowercased()
+        let source = folderName + "/" + name + ".png"
+        try write(images, to: source)
+        try recipe.write(to: targetURL(for: recipeVariant(of: source, kind: kind)), options: .atomic)
+        return source
+    }
+
+    /// Writes a figure's pictures anew in place (a chart that follows its table): the editor shows them at once.
+    static func write(_ images: WriterFigureImages, to source: String) throws {
+        _ = directory
+        try images.light.write(to: targetURL(for: source), options: .atomic)
+        try images.dark.write(to: targetURL(for: darkVariant(of: source)), options: .atomic)
+        try images.pdf.write(to: targetURL(for: pdfVariant(of: source)), options: .atomic)
+        forget(source)
+    }
+
+    /// The recipe of a figure, if it has one.
+    static func recipe(for reference: WriterImageReference) -> Data? {
+        guard let kind = reference.figure else { return nil }
+        return try? Data(contentsOf: targetURL(for: recipeVariant(of: reference.source, kind: kind)))
+    }
+
+    /// Drops what is remembered of a picture's files, so they are read again.
+    static func forget(_ source: String) {
+        for variant in [source, darkVariant(of: source)] {
+            let path = targetURL(for: variant).path
+            sizes[path] = nil
+            images.removeObject(forKey: path as NSString)
+        }
+    }
+
     /// The file LaTeX should print for a picture: the PDF of a plot or diagram when there is one.
     static func printURL(for reference: WriterImageReference) -> URL? {
         if reference.hasVariants, let pdf = url(for: pdfVariant(of: reference.source)) { return pdf }
         return url(for: reference.source)
     }
+}
+
+/// What a figure made in Writer Studio is; each has its own editor.
+enum WriterFigureKind: String, CaseIterable, Sendable {
+    /// A chart of numbers, from a table or typed in (`WriterChart`).
+    case chart
+    /// A drawing of strokes and shapes (`WriterDrawing`).
+    case drawing
+    /// A diagram in Mermaid's language.
+    case mermaid
+
+    var filePrefix: String {
+        switch self {
+        case .chart: "diagramm"
+        case .drawing: "zeichnung"
+        case .mermaid: "mermaid"
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .chart: "Diagramm"
+        case .drawing: "Zeichnung"
+        case .mermaid: "Mermaid-Diagramm"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .chart: "chart.bar.xaxis"
+        case .drawing: "pencil.and.scribble"
+        case .mermaid: "point.3.connected.trianglepath.dotted"
+        }
+    }
+}
+
+/// The pictures of a figure: PNG for white paper and for the dark sheet, PDF for print.
+struct WriterFigureImages: Sendable {
+    let light: Data
+    let dark: Data
+    let pdf: Data
 }
 
 /// A picture in the editor: an attachment on a paragraph of its own (block `.image`). Never changed in place;

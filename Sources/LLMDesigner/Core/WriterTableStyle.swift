@@ -109,15 +109,25 @@ struct WriterTableStyle: Hashable, Sendable {
     /// The background of cells (six hex digits as `WriterColors` keeps them), by the cell's place; a merged cell's
     /// colour sits at its first cell.
     var fills: [WriterCellPosition: String] = [:]
+    /// Formulas by the cell's place, without their "=" (see `WriterTableCalc`); the cell's text is the result.
+    var formulas: [WriterCellPosition: String] = [:]
+    /// The table's name for charts made from it (`#tab-…` in the div); nil until a chart needs one.
+    var id: String?
 
     static let lineWidths: [(value: Double?, label: String)] = [(nil, "Dünn"), (1, "Mittel"), (1.6, "Kräftig")]
     static let className = "table"
+    private static let formulaPrefix = "calc-"
 
-    init(lines: WriterTableLines = .standard, lineWidth: Double? = nil, fills: [WriterCellPosition: String] = [:]) {
+    init(lines: WriterTableLines = .standard, lineWidth: Double? = nil, fills: [WriterCellPosition: String] = [:],
+         formulas: [WriterCellPosition: String] = [:], id: String? = nil) {
         self.lines = lines
         self.lineWidth = lineWidth
         self.fills = fills
+        self.formulas = formulas
+        self.id = id
     }
+
+    static func newID() -> String { "tab-" + UUID().uuidString.prefix(8).lowercased() }
 
     /// The style a div's attributes describe.
     init(attributes: [String: String]) {
@@ -130,20 +140,47 @@ struct WriterTableStyle: Hashable, Sendable {
             guard place.count == 2, place[0] >= 0, place[1] >= 0 else { continue }
             fills[WriterCellPosition(row: place[0], column: place[1])] = color
         }
+        for (key, value) in attributes where key.hasPrefix(Self.formulaPrefix) {
+            let place = key.dropFirst(Self.formulaPrefix.count).split(separator: "-").compactMap { Int($0) }
+            let formula = WriterTableCalc.normalized(value)
+            guard place.count == 2, place[0] >= 0, place[1] >= 0, !formula.isEmpty else { continue }
+            formulas[WriterCellPosition(row: place[0], column: place[1])] = formula
+        }
+        id = attributes["id"].flatMap { $0.isEmpty ? nil : $0 }
     }
 
-    var isStandard: Bool { lines == .standard && lineWidth == nil && fills.isEmpty }
+    var isStandard: Bool { lines == .standard && lineWidth == nil && fills.isEmpty && formulas.isEmpty && id == nil }
 
     /// The div that holds the style; nil for the standard look.
     var divOpening: String? {
         guard !isStandard else { return nil }
         var parts = ["." + Self.className]
+        if let id { parts.append("#" + id) }
         if lines != .standard { parts.append("lines=" + lines.rawValue) }
         if let lineWidth { parts.append("line-width=" + WriterParagraphFormat.number(lineWidth)) }
         if !fills.isEmpty {
             parts.append("fill=" + fills.sorted { $0.key < $1.key }.map { "\($0.key.row).\($0.key.column):\($0.value)" }.joined(separator: ","))
         }
+        for (place, formula) in formulas.sorted(by: { $0.key < $1.key }) {
+            parts.append("\(Self.formulaPrefix)\(place.row)-\(place.column)=\"\(formula.replacingOccurrences(of: "\"", with: "'"))\"")
+        }
         return "::: {" + parts.joined(separator: " ") + "}"
+    }
+
+    /// The formulas after a row or column was put in at `index` (`delta` 1) or taken out (`delta` -1): their places and
+    /// the cells they read move along; a formula in a row or column that went goes with it.
+    func formulasShifted(at index: Int, isRow: Bool, delta: Int) -> [WriterCellPosition: String] {
+        var shifted: [WriterCellPosition: String] = [:]
+        for (place, formula) in formulas {
+            var place = place
+            let position = isRow ? place.row : place.column
+            if delta < 0, position == index { continue }
+            if position >= index + (delta < 0 ? 1 : 0) {
+                if isRow { place.row += delta } else { place.column += delta }
+            }
+            shifted[place] = WriterTableCalc.shifting(formula, at: index, isRow: isRow, delta: delta)
+        }
+        return shifted
     }
 
     /// The weight of a line in print, in points.

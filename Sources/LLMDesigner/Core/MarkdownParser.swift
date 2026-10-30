@@ -23,6 +23,16 @@ enum MarkdownBlock: Hashable {
     case rule
     /// A line of its own that is only `\newpage` (also `\pagebreak`, `\clearpage`): the text goes on on a new page.
     case pageBreak
+    /// A line of its own that is only `\columnbreak`: in a section in columns, the text goes on in the next column.
+    case columnBreak
+}
+
+/// One Pandoc div a block stands in: its classes, its `key=value` attributes (an `#id` as `id`) and which opening line
+/// it was, so blocks of the same div can be told from blocks of the next one with the same classes.
+struct MarkdownDiv: Hashable {
+    let serial: Int
+    let classes: [String]
+    let attributes: [String: String]
 }
 
 /// A block and the classes of the Pandoc divs it stands in (`::: {.center}` … `:::`), outermost first, and their
@@ -31,6 +41,25 @@ struct AnnotatedMarkdownBlock: Hashable {
     let block: MarkdownBlock
     let classes: [String]
     var attributes: [String: String] = [:]
+    /// The divs one by one, outermost first.
+    var divs: [MarkdownDiv] = []
+
+    /// The innermost div with this class.
+    func div(_ className: String) -> MarkdownDiv? {
+        divs.last { $0.classes.contains(className) }
+    }
+
+    /// The classes and attributes of the divs that only set the paragraph (not a box or a column section around it).
+    var formatClasses: [String] { divs.filter { !MarkdownDiv.structuralClasses.contains(where: $0.classes.contains) }.flatMap(\.classes) }
+    var formatAttributes: [String: String] {
+        divs.filter { !MarkdownDiv.structuralClasses.contains(where: $0.classes.contains) }
+            .reduce(into: [String: String]()) { result, div in result.merge(div.attributes) { $1 } }
+    }
+}
+
+extension MarkdownDiv {
+    /// Divs that hold whole blocks together instead of formatting them: a box and a section in columns.
+    static let structuralClasses = ["box", "columns"]
 }
 
 /// Small block-level Markdown parser tuned for streamed LLM output (unclosed code fences are fine).
@@ -45,12 +74,13 @@ enum MarkdownParser {
         let lines = text.components(separatedBy: "\n")
         var blocks: [AnnotatedMarkdownBlock] = []
         var paragraph: [String] = []
-        var divs: [(classes: [String], attributes: [String: String])] = []
+        var divs: [MarkdownDiv] = []
+        var serial = 0
         var index = 0
 
         func append(_ block: MarkdownBlock) {
             let attributes = divs.reduce(into: [String: String]()) { result, div in result.merge(div.attributes) { $1 } }
-            blocks.append(AnnotatedMarkdownBlock(block: block, classes: divs.flatMap(\.classes), attributes: attributes))
+            blocks.append(AnnotatedMarkdownBlock(block: block, classes: divs.flatMap(\.classes), attributes: attributes, divs: divs))
         }
 
         func flushParagraph() {
@@ -90,7 +120,8 @@ enum MarkdownParser {
             // A div's fences: `::: {.center}` opens one, `:::` closes the innermost (and is text when none is open).
             if let classes = divOpening(trimmed) {
                 flushParagraph()
-                divs.append((classes, divAttributes(trimmed)))
+                serial += 1
+                divs.append(MarkdownDiv(serial: serial, classes: classes, attributes: divAttributes(trimmed)))
                 index += 1
                 continue
             }
@@ -162,6 +193,12 @@ enum MarkdownParser {
             if pageBreakCommands.contains(trimmed) {
                 flushParagraph()
                 append(.pageBreak)
+                index += 1
+                continue
+            }
+            if trimmed == columnBreakCommand {
+                flushParagraph()
+                append(.columnBreak)
                 index += 1
                 continue
             }
@@ -313,6 +350,8 @@ enum MarkdownParser {
 
     /// The lines that break the page: LaTeX's commands, which Pandoc passes on to LaTeX.
     static let pageBreakCommands: Set<String> = ["\\newpage", "\\pagebreak", "\\clearpage"]
+    /// The line that breaks a column: LaTeX's command in `multicols`.
+    static let columnBreakCommand = "\\columnbreak"
 
     /// The classes of a line that opens a div: `::: {.center}`, `::: {.note #id}` or `::: note`.
     static func divOpening(_ line: String) -> [String]? {
@@ -330,6 +369,10 @@ enum MarkdownParser {
         guard let core = divCore(line), core.hasPrefix("{"), core.hasSuffix("}") else { return [:] }
         var attributes: [String: String] = [:]
         for token in attributeTokens(String(core.dropFirst().dropLast())) {
+            if token.hasPrefix("#"), token.count > 1 {
+                attributes["id"] = String(token.dropFirst())
+                continue
+            }
             guard let equals = token.firstIndex(of: "="), equals != token.startIndex else { continue }
             var value = String(token[token.index(after: equals)...])
             if value.count >= 2, let first = value.first, first == "\"" || first == "'", value.last == first {

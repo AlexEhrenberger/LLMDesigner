@@ -196,9 +196,16 @@ enum WriterStyler {
         }
     }
 
+    /// Where a paragraph stands in a box: it opens it (room for the box's top and title) or closes it (room for its bottom).
+    struct BoxEdges {
+        var box: WriterBox?
+        var opens = false
+        var closes = false
+    }
+
     static func paragraphStyle(_ block: WriterBlock, level: Int, family: WriterFont, previous: WriterBlock?, next: WriterBlock?,
                                cell: WriterTableCell? = nil, format: WriterParagraphFormat = WriterParagraphFormat(),
-                               palette: WriterPalette = .dark) -> NSParagraphStyle {
+                               palette: WriterPalette = .dark, box: BoxEdges = BoxEdges()) -> NSParagraphStyle {
         let style = NSMutableParagraphStyle()
         style.lineHeightMultiple = 1.32
         style.paragraphSpacing = 10
@@ -274,6 +281,13 @@ enum WriterStyler {
         // The text of the user's own format is set with its line spacing.
         if let setup = palette.pageSetup, cell == nil, abs(setup.lineSpacing - 1) > 0.001, block != .code, block != .raw, !block.isEmbed, block != .rule {
             style.lineHeightMultiple *= CGFloat(setup.lineSpacing)
+        }
+        // A box keeps room above its first paragraph (and its title) and below its last one; the container narrows its lines.
+        if let boxStyle = box.box?.style, cell == nil {
+            if box.opens {
+                style.paragraphSpacingBefore = WriterBoxStyle.marginTop + WriterBoxStyle.paddingTop + (boxStyle.hasTitle ? WriterBoxStyle.titleHeight : 0)
+            }
+            if box.closes { style.paragraphSpacing = WriterBoxStyle.paddingBottom + WriterBoxStyle.marginBottom }
         }
         return style
     }
@@ -369,7 +383,16 @@ enum WriterStyler {
             attributes[.baselineOffset] = marks.contains(.superscript) ? (size * 0.36).rounded() : -(size * 0.16).rounded()
         }
         attributes[.foregroundColor] = color ?? (block == .quote ? palette.secondaryText : palette.text)
+        // A commented passage is tinted until the comment is done.
+        if let comment = semantic[.writerComment] as? WriterComment, !comment.isResolved {
+            attributes[.backgroundColor] = commentColor(palette).withAlphaComponent(palette.isLight ? 0.24 : 0.2)
+        }
         return attributes
+    }
+
+    /// The colour of comments: a warm yellow, deeper on white paper.
+    static func commentColor(_ palette: WriterPalette) -> NSColor {
+        palette.isLight ? NSColor(hex: 0xE0A800) : NSColor(hex: 0xF2C14C)
     }
 
     private static let displayKeys: [NSAttributedString.Key] = [.font, .foregroundColor, .backgroundColor, .paragraphStyle, .obliqueness, .baselineOffset]
@@ -404,13 +427,23 @@ enum WriterStyler {
             }
             var semantic: [NSAttributedString.Key: Any] = paragraph.cell?.attributes
                 ?? [.writerBlock: block.rawValue, .writerListLevel: block.isList ? paragraph.level : 0]
+            // The whole paragraph stands in the box and section of its first character, if its block may.
+            if paragraph.cell == nil {
+                if WriterBox.holds(block), let box = storage.attribute(.writerBox, at: paragraph.range.location, effectiveRange: nil) as? WriterBox {
+                    semantic[.writerBox] = box
+                }
+                if WriterColumnSection.holds(block),
+                   let section = storage.attribute(.writerColumns, at: paragraph.range.location, effectiveRange: nil) as? WriterColumnSection {
+                    semantic[.writerColumns] = section
+                }
+            }
             if block == .code, let language = paragraph.language { semantic[.writerCodeLanguage] = language }
             // The whole paragraph is set like its first character: alignment, line spacing, indents.
             let format = paragraph.cell == nil ? paragraph.format.applying(to: block) : WriterParagraphFormat()
             semantic.merge(format.attributes) { $1 }
             storage.addAttributes(semantic, range: paragraph.range)
             if block != .code { storage.removeAttribute(.writerCodeLanguage, range: paragraph.range) }
-            for key in WriterParagraphFormat.keys where semantic[key] == nil { storage.removeAttribute(key, range: paragraph.range) }
+            for key in WriterParagraphFormat.keys + WriterMarkdown.containerKeys where semantic[key] == nil { storage.removeAttribute(key, range: paragraph.range) }
             // Code has no sizes of its own.
             if block == .code || block == .raw { storage.removeAttribute(.writerFontSize, range: paragraph.range) }
             if paragraph.cell == nil {
@@ -419,8 +452,12 @@ enum WriterStyler {
 
             let previous = index > 0 ? paragraphs[index - 1].block : previousBlock(in: storage, before: paragraph.range.location)
             let next = index + 1 < paragraphs.count ? paragraphs[index + 1].block : nextBlock(in: storage, after: NSMaxRange(paragraph.range))
+            let ownBox = semantic[.writerBox] as? WriterBox
+            let boxBefore = paragraph.range.location > 0 ? storage.attribute(.writerBox, at: paragraph.range.location - 1, effectiveRange: nil) as? WriterBox : nil
+            let boxAfter = NSMaxRange(paragraph.range) < storage.length ? storage.attribute(.writerBox, at: NSMaxRange(paragraph.range), effectiveRange: nil) as? WriterBox : nil
+            let edges = BoxEdges(box: ownBox, opens: ownBox != nil && boxBefore !== ownBox, closes: ownBox != nil && boxAfter !== ownBox)
             let style = paragraphStyle(block, level: paragraph.level, family: family, previous: previous, next: next, cell: paragraph.cell,
-                                       format: format, palette: palette)
+                                       format: format, palette: palette, box: edges)
 
             for key in displayKeys { storage.removeAttribute(key, range: paragraph.range) }
             storage.addAttribute(.paragraphStyle, value: style, range: paragraph.range)
@@ -455,8 +492,11 @@ enum WriterStyler {
     /// Typing attributes for a paragraph with this block and these marks.
     static func typingAttributes(block: WriterBlock, level: Int, semantic: [NSAttributedString.Key: Any], family: WriterFont, palette: WriterPalette) -> [NSAttributedString.Key: Any] {
         var attributes = semantic.filter {
-            (WriterInline.keys + [.link] + WriterMarkdown.passageKeys + WriterParagraphFormat.keys).contains($0.key)
+            (WriterInline.keys + [.link] + WriterMarkdown.passageKeys + WriterParagraphFormat.keys + WriterMarkdown.containerKeys).contains($0.key)
         }
+        // New text stays in the box and section it is typed in, where its block may.
+        if !WriterBox.holds(block) { attributes.removeValue(forKey: .writerBox) }
+        if !WriterColumnSection.holds(block) { attributes.removeValue(forKey: .writerColumns) }
         // Code has no colours, fonts or sizes of its own.
         if block == .code || block == .raw {
             for key in WriterMarkdown.passageKeys { attributes.removeValue(forKey: key) }

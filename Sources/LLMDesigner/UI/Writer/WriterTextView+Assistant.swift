@@ -9,6 +9,8 @@ enum WriterAssistantCommand {
     case placeCursorHere
     case continueHere
     case focusBar
+    /// The model comments on the selection or the whole document.
+    case comment
 }
 
 /// Where the assistant's text goes relative to the paragraph at the AI cursor.
@@ -278,6 +280,8 @@ extension WriterTextView {
             }
             breakUndoCoalescing()
             cursor = writing.location + contentLength
+            // Diagrams the model wrote as Mermaid code become pictures.
+            for run in mermaidRuns(in: NSRange(location: writing.location, length: rendered.length)).reversed() { convertMermaidBlock(run) }
         }
         untrackedKeys = []
         trackedRanges[Self.aiWritingKey] = nil

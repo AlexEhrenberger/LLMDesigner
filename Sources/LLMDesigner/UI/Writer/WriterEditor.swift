@@ -9,6 +9,12 @@ final class WriterEditorController {
     var formulaRequest: WriterFormulaRequest?
     /// The Draw Things sheet is open for this.
     var imageRequest: WriterImageGenerationRequest?
+    /// The editor of a chart, drawing or Mermaid diagram is open for this.
+    var figureRequest: WriterFigureRequest?
+    /// The document's comments in text order, the one at the caret, and the one the panel should show and focus.
+    var comments: [WriterCommentEntry] = []
+    var activeCommentID: String?
+    var focusedCommentID: String?
     /// The heading the reader is in (for the side panel).
     var currentHeading: Int?
     /// A bookmark that was just made; the side panel shows it highlighted for a moment.
@@ -112,6 +118,62 @@ final class WriterEditorController {
     func cancelImageGeneration() {
         imageRequest = nil
         textView?.trackedRanges[WriterTextView.generationKey] = nil
+        focus()
+    }
+
+    // MARK: Boxes and columns
+
+    func insertBox(_ kind: WriterBoxKind) { perform { $0.insertBox(kind) } }
+    func setBoxStyle(_ style: WriterBoxStyle) { perform { $0.setBoxStyle(style) } }
+    func removeBox() { perform { $0.removeBox() } }
+    func setColumns(_ style: WriterColumnStyle) { perform { $0.setColumns(style) } }
+    func removeColumns(fromHere: Bool = false) { perform { $0.removeColumns(fromHere: fromHere) } }
+    func insertColumnBreak() { perform { $0.insertColumnBreak() } }
+
+    // MARK: Comments
+
+    func addComment() { perform { $0.newComment() } }
+    func replyToComment(_ id: String, text: String) { textView?.replyToComment(id, text: text) ; refreshComments() }
+    func resolveComment(_ id: String, _ resolved: Bool) { textView?.resolveComment(id, resolved); refreshComments() }
+    func deleteComment(_ id: String) { textView?.deleteComment(id); refreshComments() }
+    func jumpToComment(_ id: String) { textView?.jumpToComment(id) }
+
+    /// A comment was made or its bubble clicked: the side panel shows it, with its field ready.
+    func commentSelected(_ id: String) {
+        guard let app else { return }
+        refreshComments()
+        app.documentPanelTab = .comments
+        if app.panelCollapsed {
+            if !app.panelOverlay { app.toggleOutlinePanel() }
+        } else {
+            app.revealSidePanel()
+        }
+        focusedCommentID = nil
+        DispatchQueue.main.async { self.focusedCommentID = id }
+    }
+
+    func refreshComments() {
+        guard let textView else { return }
+        let comments = textView.comments
+        if comments != self.comments { self.comments = comments }
+        let active = textView.commentAtCaret?.id
+        if active != activeCommentID { activeCommentID = active }
+    }
+
+    // MARK: Charts, drawings and Mermaid diagrams
+
+    func newFigure(_ kind: WriterFigureKind) { perform { $0.newFigure(kind) } }
+    func chartFromTable() { perform { $0.makeChartFromTable() } }
+
+    func applyFigure(_ kind: WriterFigureKind, images: WriterFigureImages, recipe: Data, caption: String, width: Int?, linkedTable: String? = nil,
+                     isExisting: Bool) {
+        figureRequest = nil
+        perform { $0.applyFigure(kind, images: images, recipe: recipe, caption: caption, width: width, linkedTable: linkedTable, isExisting: isExisting) }
+    }
+
+    func cancelFigure() {
+        figureRequest = nil
+        textView?.cancelFigure()
         focus()
     }
 
@@ -240,7 +302,9 @@ struct WriterEditor: NSViewRepresentable {
         textView.onStateChange = { [weak controller, weak textView] in
             guard let controller, let textView else { return }
             controller.state = textView.state
+            controller.refreshComments()
         }
+        textView.onCommentSelected = { [weak controller] id in controller?.commentSelected(id) }
         textView.onReadAloud = { [weak controller] in controller?.readAloud() }
         textView.onSlideOverflow = { [weak controller] overflows in controller?.slideOverflows = overflows }
         textView.onPageCount = { [weak controller] count in controller?.pageCount = count }
@@ -252,6 +316,7 @@ struct WriterEditor: NSViewRepresentable {
         textView.citations = app.citations
         textView.onShowSource = { [weak app] id in app?.openCitationStudio(showing: id) }
         textView.onImageGeneration = { [weak controller] request in controller?.imageRequest = request }
+        textView.onFigure = { [weak controller] request in controller?.figureRequest = request }
         textView.onGenerateImage = { [weak app] source, info in app?.imageGeneration.generate(source: source, info: info) }
         textView.onCancelImageGeneration = { [weak app] source in app?.imageGeneration.cancel(source) }
         textView.onImageDefaults = { [weak app] in app?.imageGeneration.defaults ?? GeneratedImageInfo() }
@@ -385,6 +450,7 @@ struct WriterEditor: NSViewRepresentable {
             textView.lastCitedKeys = []
             textView.load(markdown: slide?.markdown ?? document.markdown, family: document.textFont, palette: palette)
             controller?.state = textView.state
+            controller?.refreshComments()
             controller?.textLoaded(slideID: slide?.id)
             updateGenerationTimer()
             DispatchQueue.main.async { [weak textView, weak controller] in

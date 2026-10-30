@@ -214,14 +214,21 @@ struct PanelTab: View {
     let title: String
     let count: Int?
     let isSelected: Bool
+    /// Shown instead of the title (which becomes the tooltip) where tabs are many and the panel is narrow.
+    var symbol: String? = nil
     let action: () -> Void
     @State private var hovering = false
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 5) {
-                Text(title)
-                    .font(.system(size: 12.5, weight: .semibold))
+                if let symbol {
+                    Image(systemName: symbol)
+                        .font(.system(size: 12, weight: .semibold))
+                } else {
+                    Text(title)
+                        .font(.system(size: 12.5, weight: .semibold))
+                }
                 if let count, count > 0 {
                     Text("\(count)")
                         .font(.system(size: 10.5, weight: .semibold).monospacedDigit())
@@ -236,6 +243,7 @@ struct PanelTab: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
+        .help(symbol == nil ? "" : title)
     }
 }
 

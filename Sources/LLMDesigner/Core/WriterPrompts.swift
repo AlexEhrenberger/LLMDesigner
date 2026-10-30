@@ -81,6 +81,8 @@ enum WriterPrompts {
             - Er schließt an das an, was vor \(cursorMarker) steht, und wiederholt nichts, was schon im Dokument steht.
             - Sprache und Stil wie im Dokument; ist das Dokument leer, auf Deutsch.
             - Formatierung als Markdown: Absätze durch eine Leerzeile, **fett**, *kursiv*, Listen mit „- “. Überschriften (## …) nur, wenn die Anweisung danach verlangt.
+            - Verlangt die Anweisung ein Diagramm (Ablauf, Mindmap, Zeitstrahl, Sequenz, Gantt, Kreisdiagramm …), schreibe es als Mermaid-Codeblock \
+            (```mermaid … ```); die Textverarbeitung zeichnet daraus das Bild. Knoten-IDs ohne Leerzeichen, Text mit Klammern oder Doppelpunkt in "…".
             """
         let user = """
             Dokument (\(cursorMarker) ist die Stelle, an der dein Text eingefügt wird):
@@ -221,6 +223,82 @@ enum WriterPrompts {
             ChatPayloadMessage(role: "system", content: system),
             ChatPayloadMessage(role: "user", content: "Text:\n\"\"\"\n\(text)\n\"\"\""),
         ]
+    }
+
+    // MARK: Comments
+
+    static let commentSchemaName = "kommentare"
+
+    static let commentSchema: [String: Any] = [
+        "type": "object",
+        "properties": [
+            "kommentare": [
+                "type": "array",
+                "items": [
+                    "type": "object",
+                    "properties": [
+                        "zitat": ["type": "string"],
+                        "kommentar": ["type": "string"],
+                    ],
+                    "required": ["zitat", "kommentar"],
+                    "additionalProperties": false,
+                ],
+            ],
+        ],
+        "required": ["kommentare"],
+        "additionalProperties": false,
+    ]
+
+    /// The model reads a piece of the document like an editor and leaves comments in the margin.
+    static func comments(text: String) -> [ChatPayloadMessage] {
+        let system = """
+            Du bist eine aufmerksame Lektorin und schreibst Randkommentare zu einem Text, wie in einer Textverarbeitung.
+            Kommentiere, was dem Text weiterhilft: unklare oder missverständliche Stellen, Behauptungen ohne Beleg, Widersprüche,             Lücken in der Argumentation, holprigen Aufbau, Stellen, die ein Beispiel brauchen, und Fragen an den Autor.
+            Keine Rechtschreib- oder Kommafehler – dafür gibt es eine eigene Prüfung. Kein Lob ohne Hinweis.
+            Für jeden Kommentar:
+            - zitat: die Stelle, auf die er sich bezieht, wörtlich und Zeichen für Zeichen so, wie sie im Text steht (3 bis 12 Wörter)
+            - kommentar: ein bis zwei kurze Sätze auf Deutsch, freundlich und konkret, in Du-Form
+            Höchstens fünf Kommentare. Gibt es nichts zu sagen, eine leere Liste.
+            """
+        return [
+            ChatPayloadMessage(role: "system", content: system),
+            ChatPayloadMessage(role: "user", content: "Text:\n\"\"\"\n\(text)\n\"\"\"") ,
+        ]
+    }
+
+    struct CommentReply: Decodable {
+        let zitat: String
+        let kommentar: String
+    }
+
+    static func parseComments(_ answer: String) -> [CommentReply] {
+        let content = ThinkingSplitter.split(answer).content
+        guard let start = content.firstIndex(of: "{"), let end = content.lastIndex(of: "}"),
+              let data = String(content[start...end]).data(using: .utf8) else { return [] }
+        struct Reply: Decodable { let kommentare: [CommentReply] }
+        return (try? JSONDecoder().decode(Reply.self, from: data))?.kommentare ?? []
+    }
+
+    /// The model answers in a comment's thread, about the commented passage.
+    static func commentAnswer(passage: String, context: String, thread: [WriterComment.Entry]) -> [ChatPayloadMessage] {
+        let system = """
+            Du antwortest in einem Kommentarfaden am Rand eines Dokuments. Der Kommentar bezieht sich auf eine markierte Stelle.
+            Antworte kurz (höchstens vier Sätze), konkret und hilfreich auf Deutsch. Schlägst du eine Formulierung vor, gib sie wörtlich an. \
+            Keine Einleitung, keine Wiederholung der Frage, kein Markdown außer *kursiv* für Vorschläge.
+            """
+        let lines = thread.map { "\($0.isAI ? "KI" : $0.author): \($0.text)" }.joined(separator: "\n")
+        let user = """
+            Markierte Stelle: „\(passage)“
+
+            Umgebung im Dokument:
+            \"\"\"
+            \(String(context.prefix(3_000)))
+            \"\"\"
+
+            Kommentarfaden:
+            \(lines.isEmpty ? "(noch leer – schreib einen hilfreichen ersten Kommentar zur Stelle)" : lines)
+            """
+        return [ChatPayloadMessage(role: "system", content: system), ChatPayloadMessage(role: "user", content: user)]
     }
 
     struct Finding: Decodable {

@@ -40,7 +40,7 @@ enum BookmarkLocator {
         case .list(let items): items.map(\.text).joined(separator: " ")
         case .table(let header, let rows, _, _): (header + rows.flatMap { $0 }).joined(separator: " ")
         case .math(let latex, _): latex
-        case .rule, .pageBreak: ""
+        case .rule, .pageBreak, .columnBreak: ""
         }
     }
 }

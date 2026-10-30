@@ -107,7 +107,7 @@ struct MarkdownView: View {
         case .math(let latex, let complete):
             MathBlockView(latex: latex, isComplete: complete)
 
-        case .rule, .pageBreak:
+        case .rule, .pageBreak, .columnBreak:
             Rectangle().fill(Theme.border).frame(height: 1).padding(.vertical, 4)
         }
     }

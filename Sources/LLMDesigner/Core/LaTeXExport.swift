@@ -252,6 +252,10 @@ enum LaTeXWriter {
         \newcolumntype{R}{>{\raggedleft\arraybackslash}X}
         \newcommand{\llmdjustify}{\leftskip=0pt\rightskip=0pt\parfillskip=0pt plus 1fil\relax}
         \usepackage{float}
+        \usepackage{multicol}
+        \usepackage{wrapfig}
+        \usepackage{tcolorbox}
+        \tcbuselibrary{skins,breakable}
         \usepackage[font=small,labelfont=bf]{caption}
         \usepackage{enumitem}
         \usepackage[normalem]{ulem}
@@ -291,10 +295,35 @@ enum LaTeXWriter {
                                bibliography: [StyledText]? = nil, format: WriterPageFormat = .standard) -> String {
         var output: [String] = []
         let annotatedBlocks = MarkdownParser.parseAnnotated(markdown)
+        // Writer Studio's boxes and sections in columns, as they open and close around the blocks.
+        var openSection: Int?
+        var openBox: (serial: Int, floats: Bool)?
+        func closeBox() {
+            guard let box = openBox else { return }
+            output.append("\\end{tcolorbox}" + (box.floats ? "\n\\end{wrapfigure}" : ""))
+            openBox = nil
+        }
         for (index, annotated) in annotatedBlocks.enumerated() {
             let block = annotated.block
+            if structure != nil {
+                let sectionDiv = annotated.div(WriterColumnStyle.className)
+                let boxDiv = annotated.div(WriterBoxStyle.className)
+                if let box = openBox, box.serial != boxDiv?.serial { closeBox() }
+                if openSection != sectionDiv?.serial {
+                    closeBox()
+                    if openSection != nil { output.append("\\end{multicols}}") }
+                    openSection = sectionDiv?.serial
+                    if let sectionDiv { output.append(columnsOpening(WriterColumnStyle(attributes: sectionDiv.attributes))) }
+                }
+                if openBox == nil, let boxDiv {
+                    let style = WriterBoxStyle(attributes: boxDiv.attributes)
+                    let floats = style.floats && openSection == nil
+                    output.append(boxOpening(style, serial: boxDiv.serial, floats: floats, math: math))
+                    openBox = (boxDiv.serial, floats)
+                }
+            }
             // Writer Studio aligns and indents paragraphs with divs (`::: {.center indent=1cm}`); chats have none.
-            let paragraphFormat = structure == nil ? WriterParagraphFormat() : WriterParagraphFormat(classes: annotated.classes, attributes: annotated.attributes)
+            let paragraphFormat = structure == nil ? WriterParagraphFormat() : WriterParagraphFormat(classes: annotated.formatClasses, attributes: annotated.formatAttributes)
             let alignment = paragraphFormat.alignment
             let start = output.count
             defer {
@@ -365,7 +394,7 @@ enum LaTeXWriter {
             case .table(let header, let rows, let alignments, let widths):
                 // Writer Studio's tables may have merged cells, lines of their own and coloured cells.
                 let style = structure == nil ? nil
-                    : annotated.classes.contains(WriterTableStyle.className) ? WriterTableStyle(attributes: annotated.attributes) : WriterTableStyle()
+                    : annotated.div(WriterTableStyle.className).map { WriterTableStyle(attributes: $0.attributes) } ?? WriterTableStyle()
                 output.append(table(header: header, rows: rows, alignments: alignments, widths: widths, math: math, style: style))
             case .math(let latex, _):
                 output.append(displayMath(latex, math: math))
@@ -373,9 +402,50 @@ enum LaTeXWriter {
                 output.append("\\noindent\\rule{\\linewidth}{0.4pt}")
             case .pageBreak:
                 output.append(structure == nil ? "\\noindent\\rule{\\linewidth}{0.4pt}" : "\\clearpage")
+            case .columnBreak:
+                if openSection != nil { output.append("\\columnbreak") }
             }
         }
+        closeBox()
+        if openSection != nil { output.append("\\end{multicols}}") }
         return output.joined(separator: "\n\n")
+    }
+
+    /// The start of a section in columns: their gap and line, then `multicols`.
+    private static func columnsOpening(_ style: WriterColumnStyle) -> String {
+        "{\\setlength{\\columnsep}{\(WriterParagraphFormat.number(style.gap))cm}\\setlength{\\columnseprule}{\(style.rule ? "0.4pt" : "0pt")}"
+            + "\n\\begin{multicols}{\(style.count)}"
+    }
+
+    /// The start of a box: its colour, its frame, where it stands (a floating one in `wrapfigure`, so the text flows
+    /// around it), and its title as its first line.
+    private static func boxOpening(_ style: WriterBoxStyle, serial: Int, floats: Bool, math: MathMode) -> String {
+        let color = "llmdbox" + WriterTableCalc.columnName(serial)
+        var options = ["enhanced", "boxsep=0pt", "left=8pt", "right=8pt", "top=6pt", "bottom=6pt"]
+        switch style.frame {
+        case .bar: options += ["colback=\(color)!7!white", "frame hidden", "borderline west={3pt}{0pt}{\(color)}", "sharp corners"]
+        case .outline: options += ["colback=\(color)!4!white", "colframe=\(color)", "boxrule=0.6pt", "arc=2mm"]
+        case .filled: options += ["colback=\(color)!15!white", "frame hidden", "arc=2mm"]
+        }
+        var output = "\\definecolor{\(color)}{HTML}{\(style.printColor)}\n"
+        let share = String(format: "%.2f", Double(style.share))
+        if floats {
+            output += "\\begin{wrapfigure}{\(style.position == .left ? "l" : "r")}{\(share)\\linewidth}\n"
+            options += ["width=\\linewidth", "before skip=0pt", "after skip=0pt"]
+        } else {
+            options += ["breakable", "before skip=8pt", "after skip=10pt"]
+            switch style.position {
+            case .full: break
+            case .left: options += ["width=\(share)\\linewidth", "flush left"]
+            case .center: options += ["width=\(share)\\linewidth", "center"]
+            case .right: options += ["width=\(share)\\linewidth", "flush right"]
+            }
+        }
+        output += "\\begin{tcolorbox}[\(options.joined(separator: ", "))]"
+        if style.hasTitle {
+            output += "\n\\noindent\\textbf{\\textcolor{\(color)}{\(inline(style.effectiveTitle, math: math))}}\\par\\smallskip"
+        }
+        return output
     }
 
     /// A rule (a scene break) or a table of contents: the paragraph after it starts at the margin in a book.

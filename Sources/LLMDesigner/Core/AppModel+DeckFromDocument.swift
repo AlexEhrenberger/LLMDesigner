@@ -227,6 +227,7 @@ enum DeckBlockText {
         case .math(let latex, _): "$$\n\(latex)\n$$"
         case .rule: "---"
         case .pageBreak: "\\newpage"
+        case .columnBreak: ""
         }
     }
 }

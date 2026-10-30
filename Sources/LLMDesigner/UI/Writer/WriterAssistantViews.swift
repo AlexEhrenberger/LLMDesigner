@@ -166,6 +166,7 @@ private struct InstructionBar: View {
         case .rewriting: "formuliert …"
         case .answering: "antwortet …"
         case .checking(let done, let total): "prüft \(min(done + 1, total)) / \(total)"
+        case .commenting(let done, let total): "kommentiert \(min(done + 1, total)) / \(total)"
         case .idle: ""
         }
     }

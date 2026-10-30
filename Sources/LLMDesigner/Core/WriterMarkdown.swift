@@ -434,7 +434,10 @@ final class WriterPageBreakAttachment: WriterRuleAttachment {
 enum WriterMarkdown {
     static let lineSeparator: Character = "\u{2028}"
     /// The attributes that say what a paragraph is; text inserted into a paragraph takes these along.
-    static let paragraphKeys: Set<NSAttributedString.Key> = Set([.writerBlock, .writerListLevel, .writerTable, .writerTableRow, .writerTableColumn] + WriterParagraphFormat.keys)
+    static let paragraphKeys: Set<NSAttributedString.Key> = Set([.writerBlock, .writerListLevel, .writerTable, .writerTableRow, .writerTableColumn,
+                                                                 .writerBox, .writerColumns] + WriterParagraphFormat.keys)
+    /// What a paragraph stands in besides its format: a box, a section in columns.
+    static let containerKeys: [NSAttributedString.Key] = [.writerBox, .writerColumns]
     static let tableKeys: [NSAttributedString.Key] = [.writerTable, .writerTableRow, .writerTableColumn]
     /// What a passage carries besides the inline marks: its colour, font and size.
     static let passageKeys: [NSAttributedString.Key] = [.writerColor, .writerFont, .writerFontSize]
@@ -446,6 +449,11 @@ enum WriterMarkdown {
         var previous: [NSAttributedString.Key: Any]?
         /// The paragraph format of the div the current Markdown block stands in.
         var format = WriterParagraphFormat()
+        /// The box and the section in columns it stands in; each div becomes one object.
+        var box: WriterBox?
+        var section: WriterColumnSection?
+        var boxes: [Int: WriterBox] = [:]
+        var sections: [Int: WriterColumnSection] = [:]
 
         /// Appends a paragraph. Its newline comes with the next paragraph but carries this paragraph's
         /// attributes, so empty paragraphs keep their block too.
@@ -454,6 +462,8 @@ enum WriterMarkdown {
             var attributes: [NSAttributedString.Key: Any] = cell?.attributes ?? [.writerBlock: block.rawValue, .writerListLevel: level]
             if let language, !language.isEmpty { attributes[.writerCodeLanguage] = language }
             if cell == nil { attributes.merge(format.applying(to: block).attributes) { $1 } }
+            if cell == nil, let box, WriterBox.holds(block) { attributes[.writerBox] = box }
+            if cell == nil, let section, WriterColumnSection.holds(block) { attributes[.writerColumns] = section }
             let start = result.length
             result.append(paragraph)
             result.addAttributes(attributes, range: NSRange(location: start, length: result.length - start))
@@ -464,7 +474,19 @@ enum WriterMarkdown {
         var previousWasCode = false
         for annotated in MarkdownParser.parseAnnotated(markdown) {
             let block = annotated.block
-            format = WriterParagraphFormat(classes: annotated.classes, attributes: annotated.attributes)
+            format = WriterParagraphFormat(classes: annotated.formatClasses, attributes: annotated.formatAttributes)
+            box = annotated.div(WriterBoxStyle.className).map { div in
+                if let known = boxes[div.serial] { return known }
+                let made = WriterBox(style: WriterBoxStyle(attributes: div.attributes))
+                boxes[div.serial] = made
+                return made
+            }
+            section = annotated.div(WriterColumnStyle.className).map { div in
+                if let known = sections[div.serial] { return known }
+                let made = WriterColumnSection(style: WriterColumnStyle(attributes: div.attributes))
+                sections[div.serial] = made
+                return made
+            }
             endsWithTable = false
             let followsCode = previousWasCode
             previousWasCode = false
@@ -519,11 +541,13 @@ enum WriterMarkdown {
                 add(NSAttributedString(attachment: attachment), block: .rule)
             case .pageBreak:
                 add(NSAttributedString(attachment: WriterPageBreakAttachment()), block: .rule)
+            case .columnBreak:
+                add(NSAttributedString(attachment: WriterColumnBreakAttachment()), block: .rule)
             case .table(let header, let rows, let alignments, let widths):
                 let columns = max(header.count, rows.map(\.count).max() ?? 0, 1)
                 let all = [header] + rows
                 // Merged cells and the look come with the cells' marks and the div around the table.
-                let style = annotated.classes.contains(WriterTableStyle.className) ? WriterTableStyle(attributes: annotated.attributes) : WriterTableStyle()
+                let style = annotated.div(WriterTableStyle.className).map { WriterTableStyle(attributes: $0.attributes) } ?? WriterTableStyle()
                 let table = WriterTable(columns: columns, alignments: alignments, widths: widths?.map { CGFloat($0) },
                                         spans: WriterTableMerge.spans(in: all, columns: columns), style: style, rows: all.count)
                 for (index, cells) in all.enumerated() {
@@ -585,19 +609,19 @@ enum WriterMarkdown {
     /// Inline Markdown: `**bold**`, `*italic*`, `<u>underlined</u>`, `~~struck~~`, `` `code` `` and `[links](url)`.
     static func inline(_ text: String) -> NSAttributedString {
         let result = NSMutableAttributedString()
-        appendInline(Array(text), marks: [], link: nil, bookmark: nil, style: nil, to: result)
+        appendInline(Array(text), marks: [], link: nil, bookmark: nil, comment: nil, style: nil, to: result)
         return result
     }
 
     private static func appendInline(_ characters: [Character], marks initial: WriterInline, link: String?, bookmark: WriterBookmark?,
-                                     style: WriterSpanStyle?, to result: NSMutableAttributedString) {
+                                     comment: WriterComment?, style: WriterSpanStyle?, to result: NSMutableAttributedString) {
         var marks = initial
         var buffer = ""
         var index = 0
 
         func flush() {
             guard !buffer.isEmpty else { return }
-            result.append(NSAttributedString(string: buffer, attributes: attributes(marks, link: link, bookmark: bookmark, style: style)))
+            result.append(NSAttributedString(string: buffer, attributes: attributes(marks, link: link, bookmark: bookmark, comment: comment, style: style)))
             buffer = ""
         }
         /// An inline formula becomes a picture in the text that carries the marks around it.
@@ -606,7 +630,7 @@ enum WriterMarkdown {
             guard !latex.isEmpty else { return }
             flush()
             let formula = NSMutableAttributedString(attachment: WriterMathAttachment(latex: latex))
-            formula.addAttributes(attributes(marks, link: link, bookmark: bookmark, style: style), range: NSRange(location: 0, length: formula.length))
+            formula.addAttributes(attributes(marks, link: link, bookmark: bookmark, comment: comment, style: style), range: NSRange(location: 0, length: formula.length))
             result.append(formula)
         }
         func matches(_ token: String, at position: Int) -> Bool {
@@ -700,8 +724,9 @@ enum WriterMarkdown {
                 let tag = String(characters[index...tagEnd])
                 let inner = Array(characters[(tagEnd + 1)..<close])
                 let mark = bookmark ?? WriterBookmark.parseTag(tag)
+                let innerComment = WriterComment.parseTag(tag) ?? comment
                 let innerStyle = WriterSpanStyle(tag: tag).map { $0.over(style) } ?? style
-                appendInline(inner, marks: marks, link: link, bookmark: mark, style: innerStyle, to: result)
+                appendInline(inner, marks: marks, link: link, bookmark: mark, comment: innerComment, style: innerStyle, to: result)
                 index = close + 7
                 continue
             }
@@ -721,7 +746,7 @@ enum WriterMarkdown {
                     if fence > 1, code.hasPrefix(" "), code.hasSuffix(" "), code.count >= 2 {
                         code = String(code.dropFirst().dropLast())
                     }
-                    result.append(NSAttributedString(string: code, attributes: attributes(marks.union(.code), link: link, bookmark: bookmark, style: style)))
+                    result.append(NSAttributedString(string: code, attributes: attributes(marks.union(.code), link: link, bookmark: bookmark, comment: comment, style: style)))
                     index = end + fence
                     continue
                 }
@@ -756,14 +781,14 @@ enum WriterMarkdown {
                characters[(index + 1)..<close].contains("@"), let items = CitationMarkup.parse(String(characters[(index + 1)..<close])) {
                 flush()
                 let citation = NSMutableAttributedString(attachment: WriterCitationAttachment(items: items))
-                citation.addAttributes(attributes(marks, link: link, bookmark: bookmark, style: style), range: NSRange(location: 0, length: citation.length))
+                citation.addAttributes(attributes(marks, link: link, bookmark: bookmark, comment: comment, style: style), range: NSRange(location: 0, length: citation.length))
                 result.append(citation)
                 index = close + 1
                 continue
             }
             if character == "[", link == nil, let (text, url, end) = linkSyntax(in: characters, at: index) {
                 flush()
-                appendInline(text, marks: marks, link: url, bookmark: bookmark, style: style, to: result)
+                appendInline(text, marks: marks, link: url, bookmark: bookmark, comment: comment, style: style, to: result)
                 index = end
                 continue
             }
@@ -807,13 +832,15 @@ enum WriterMarkdown {
         return (Array(characters[(position + 1)..<closeBracket]), url, closeParen + 1)
     }
 
-    private static func attributes(_ marks: WriterInline, link: String?, bookmark: WriterBookmark?, style: WriterSpanStyle?) -> [NSAttributedString.Key: Any] {
+    private static func attributes(_ marks: WriterInline, link: String?, bookmark: WriterBookmark?, comment: WriterComment?,
+                                   style: WriterSpanStyle?) -> [NSAttributedString.Key: Any] {
         var attributes: [NSAttributedString.Key: Any] = style?.attributes ?? [:]
         for mark in [WriterInline.bold, .italic, .underline, .strikethrough, .code, .superscript, .subscript] where marks.contains(mark) {
             if let attribute = mark.attribute { attributes[attribute.key] = attribute.value }
         }
         if let link { attributes[.link] = link }
         if let bookmark { attributes[.writerBookmark] = bookmark }
+        if let comment { attributes[.writerComment] = comment }
         return attributes
     }
 
@@ -831,6 +858,9 @@ enum WriterMarkdown {
         let cell: WriterTableCell?
         /// Its own format (from its first character): what of it the block takes.
         let format: WriterParagraphFormat
+        /// The box and the section in columns it stands in (from its first character).
+        var box: WriterBox? = nil
+        var section: WriterColumnSection? = nil
 
         /// Its own alignment, for blocks that take one.
         var alignment: WriterAlignment? { format.alignment }
@@ -859,7 +889,9 @@ enum WriterMarkdown {
                 level: attributes[.writerListLevel] as? Int ?? 0,
                 language: attributes[.writerCodeLanguage] as? String,
                 cell: cell,
-                format: cell == nil ? WriterParagraphFormat(attributes).applying(to: block) : WriterParagraphFormat()
+                format: cell == nil ? WriterParagraphFormat(attributes).applying(to: block) : WriterParagraphFormat(),
+                box: cell == nil && WriterBox.holds(block) ? attributes[.writerBox] as? WriterBox : nil,
+                section: cell == nil && WriterColumnSection.holds(block) ? attributes[.writerColumns] as? WriterColumnSection : nil
             ))
             location = NSMaxRange(paragraph)
         } while location < end && location < string.length
@@ -867,11 +899,14 @@ enum WriterMarkdown {
     }
 
     static func markdown(from text: NSAttributedString) -> String {
-        // Each block with the opening line of the div around it (its format, or a table's look).
-        var blocks: [(text: String, div: String?)] = []
+        // Each block with the opening line of the div around it (its format, or a table's look), and the box and section
+        // in columns it stands in.
+        var blocks: [OutputBlock] = []
         var pending: [String] = []
         var pendingKind: WriterBlock?
         var pendingFormat = WriterParagraphFormat()
+        var pendingBox: WriterBox?
+        var pendingSection: WriterColumnSection?
         var listCounters: [Int] = []
         var currentLanguage: String?
         var currentTable: WriterTable?
@@ -882,21 +917,23 @@ enum WriterMarkdown {
                 pending = []
                 pendingKind = nil
                 pendingFormat = WriterParagraphFormat()
+                pendingBox = nil
+                pendingSection = nil
                 listCounters = []
                 currentTable = nil
                 tableCells = [:]
             }
             if pendingKind == .table, let table = currentTable {
-                blocks.append((tableMarkdown(table, cells: tableCells), table.style.divOpening))
+                blocks.append(OutputBlock(text: tableMarkdown(table, cells: tableCells), div: table.style.divOpening, section: pendingSection))
                 return
             }
             guard let kind = pendingKind, !pending.isEmpty else { return }
             switch kind {
             case .code:
                 let language = currentLanguage ?? ""
-                blocks.append(("```\(language)\n" + pending.joined(separator: "\n") + "\n```", nil))
+                blocks.append(OutputBlock(text: "```\(language)\n" + pending.joined(separator: "\n") + "\n```", div: nil, box: pendingBox, section: pendingSection))
             default:
-                blocks.append((pending.joined(separator: "\n"), pendingFormat.divOpening))
+                blocks.append(OutputBlock(text: pending.joined(separator: "\n"), div: pendingFormat.divOpening, box: pendingBox, section: pendingSection))
             }
         }
 
@@ -905,7 +942,7 @@ enum WriterMarkdown {
             let group: WriterBlock = paragraph.block.isList ? .bullet : paragraph.block
             let grouped: Set<WriterBlock> = [.bullet, .quote, .code, .raw, .table]
             if pendingKind != group || !grouped.contains(group) || (group == .table && paragraph.cell?.table !== currentTable)
-                || paragraph.format != pendingFormat { flush() }
+                || paragraph.format != pendingFormat || paragraph.box !== pendingBox || paragraph.section !== pendingSection { flush() }
 
             switch paragraph.block {
             case .table:
@@ -934,8 +971,8 @@ enum WriterMarkdown {
             case .raw:
                 pending.append(plainString(content))
             case .rule:
-                let isPageBreak = text.attribute(.attachment, at: paragraph.range.location, effectiveRange: nil) is WriterPageBreakAttachment
-                pending.append(isPageBreak ? "\\newpage" : "---")
+                let attachment = text.attribute(.attachment, at: paragraph.range.location, effectiveRange: nil)
+                pending.append(attachment is WriterPageBreakAttachment ? "\\newpage" : attachment is WriterColumnBreakAttachment ? MarkdownParser.columnBreakCommand : "---")
             case .bullet, .numbered:
                 let line = inlineMarkdown(content)
                 guard !line.isEmpty else { continue }
@@ -965,35 +1002,55 @@ enum WriterMarkdown {
             }
             pendingKind = group
             pendingFormat = paragraph.format
+            pendingBox = paragraph.box
+            pendingSection = paragraph.cell == nil ? paragraph.section : (text.attribute(.writerColumns, at: paragraph.range.location, effectiveRange: nil) as? WriterColumnSection)
             // A picture that ended up inside text (after joining paragraphs) is kept as a paragraph of its own.
             if !paragraph.block.isEmbed, paragraph.block != .table {
                 let inlineImages = images(in: content)
                 if !inlineImages.isEmpty {
+                    let box = paragraph.box, section = paragraph.section
                     flush()
-                    blocks += inlineImages.map { ($0.markdown, nil) }
+                    blocks += inlineImages.map { OutputBlock(text: $0.markdown, div: nil, box: box, section: section) }
                 }
             }
         }
         flush()
         // Drop quote lines that were only empty and trailing "> " noise.
         let kept = blocks.filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && $0.text != ">" }
-        // Paragraphs in a row that are set alike share one div.
-        var output: [String] = []
-        var index = 0
-        while index < kept.count {
-            let div = kept[index].div
-            var run: [String] = []
-            while index < kept.count, kept[index].div == div {
-                run.append(kept[index].text)
-                index += 1
+        // Blocks of one section in columns share its div, those of one box inside it the box's, and paragraphs in a row
+        // that are set alike one div inside that.
+        func wrap<Key>(_ items: ArraySlice<OutputBlock>, by key: (OutputBlock) -> Key?, same: (Key?, Key?) -> Bool, opening: (Key) -> String,
+                       inner: (ArraySlice<OutputBlock>) -> [String]) -> [String] {
+            var output: [String] = []
+            var index = items.startIndex
+            while index < items.endIndex {
+                let current = key(items[index])
+                var end = index
+                while end < items.endIndex, same(key(items[end]), current) { end += 1 }
+                let content = inner(items[index..<end])
+                if let current {
+                    output.append(opening(current) + "\n" + content.joined(separator: "\n\n") + "\n:::")
+                } else {
+                    output += content
+                }
+                index = end
             }
-            if let div {
-                output.append(div + "\n" + run.joined(separator: "\n\n") + "\n:::")
-            } else {
-                output += run
+            return output
+        }
+        let output = wrap(kept[...], by: \.section, same: { $0 === $1 }, opening: { $0.style.divOpening }) { sectionItems in
+            wrap(sectionItems, by: \.box, same: { $0 === $1 }, opening: { $0.style.divOpening }) { boxItems in
+                wrap(boxItems, by: \.div, same: { $0 == $1 }, opening: { $0 }) { divItems in divItems.map(\.text) }
             }
         }
         return output.joined(separator: "\n\n") + "\n"
+    }
+
+    /// A block of the Markdown being written, with what stands around it.
+    private struct OutputBlock {
+        let text: String
+        let div: String?
+        var box: WriterBox? = nil
+        var section: WriterColumnSection? = nil
     }
 
     private static func formulas(in text: NSAttributedString) -> [WriterMathAttachment] {
@@ -1047,6 +1104,7 @@ enum WriterMarkdown {
         var open: [WriterInline] = []
         var openLink: String?
         var openBookmark: WriterBookmark?
+        var openComment: WriterComment?
         var openStyle: WriterSpanStyle?
         var pendingSpace = ""
         let order: [WriterInline] = [.bold, .italic, .underline, .strikethrough, .superscript, .subscript]
@@ -1072,6 +1130,7 @@ enum WriterMarkdown {
             let marks = WriterInline(attributes)
             let link: String? = (attributes[.link] as? URL)?.absoluteString ?? attributes[.link] as? String
             let bookmark = attributes[.writerBookmark] as? WriterBookmark
+            let comment = attributes[.writerComment] as? WriterComment
             let spanStyle = WriterSpanStyle(attributes)
             let style: WriterSpanStyle? = spanStyle.isEmpty ? nil : spanStyle
 
@@ -1084,8 +1143,16 @@ enum WriterMarkdown {
                 return
             }
 
-            // Close what this stretch doesn't have, from the inside out: marks, link, colour and font, bookmark.
-            if openBookmark != bookmark {
+            // Close what this stretch doesn't have, from the inside out: marks, link, colour and font, bookmark, comment.
+            if openComment != comment {
+                closeMarks()
+                if openStyle != nil { output += "</span>" }
+                openStyle = nil
+                if openBookmark != nil { output += "</span>" }
+                openBookmark = nil
+                if openComment != nil { output += "</span>" }
+                openComment = nil
+            } else if openBookmark != bookmark {
                 closeMarks()
                 if openStyle != nil { output += "</span>" }
                 openStyle = nil
@@ -1103,6 +1170,10 @@ enum WriterMarkdown {
             }
             output += pendingSpace + leading
             pendingSpace = ""
+            if let comment, openComment == nil {
+                output += comment.openingTag
+                openComment = comment
+            }
             if let bookmark, openBookmark == nil {
                 output += bookmark.openingTag
                 openBookmark = bookmark
@@ -1132,6 +1203,7 @@ enum WriterMarkdown {
         closeMarks()
         if openStyle != nil { output += "</span>" }
         if openBookmark != nil { output += "</span>" }
+        if openComment != nil { output += "</span>" }
         output += pendingSpace
         return output.replacingOccurrences(of: String(lineSeparator), with: "\n")
     }

@@ -47,6 +47,32 @@ final class WriterTextView: NSTextView {
     /// Set while a table-safe or structural edit runs, so `shouldChangeText` lets it through.
     var isEditingStructure = false
 
+    // MARK: Calculating tables (see WriterTextView+TableCalc.swift)
+
+    /// Where text changed since the tables were last calculated.
+    var pendingCalcRange: NSRange?
+    var isRecalculating = false
+    /// The cell the caret was in, to see a formula typed into it when the caret leaves.
+    var lastTableCell: WriterTableCell?
+    /// Text was typed into that cell since the caret came there.
+    var lastTableCellEdited = false
+    /// The bar over the table with the caret: the cell's formula, sorting, sums, a chart.
+    var tableBarHost: NSView?
+
+    // MARK: Figures (see WriterTextView+Figures.swift)
+
+    /// A comment was made or its margin bubble clicked: the side panel shows it (see WriterTextView+Comments.swift).
+    var onCommentSelected: ((String) -> Void)?
+
+    /// Opens the editor of a chart, drawing or Mermaid diagram.
+    var onFigure: ((WriterFigureRequest) -> Void)?
+
+    /// Where boxes and sections in columns put their lines (see WriterTextView+Flow.swift).
+    let flow = WriterFlowLayout()
+    /// Tables whose charts are to be drawn anew, and which wait is the latest.
+    var pendingChartTables: Set<String> = []
+    var chartRefreshGeneration = 0
+
     // MARK: Outline state (see WriterTextView+Outline.swift)
 
     var outlineCache: OutlineCache?
@@ -117,6 +143,9 @@ final class WriterTextView: NSTextView {
             if let bookmark = attributes[.writerBookmark] as? WriterBookmark, textStorage == nil || !keepsBookmark(bookmark) {
                 attributes.removeValue(forKey: .writerBookmark)
             }
+            if let comment = attributes[.writerComment] as? WriterComment, textStorage == nil || !keepsComment(comment) {
+                attributes.removeValue(forKey: .writerComment)
+            }
             if attributes[.writerTable] != nil, textStorage != nil, tableCellAtCaret == nil {
                 attributes = WriterStyler.typingAttributes(block: .paragraph, level: 0, semantic: attributes, family: family, palette: palette)
             }
@@ -181,11 +210,12 @@ final class WriterTextView: NSTextView {
         let storage = NSTextStorage()
         let layoutManager = WriterLayoutManager()
         storage.addLayoutManager(layoutManager)
-        let container = NSTextContainer(size: NSSize(width: maxColumnWidth, height: .greatestFiniteMagnitude))
+        let container = WriterTextContainer(size: NSSize(width: maxColumnWidth, height: .greatestFiniteMagnitude))
         container.widthTracksTextView = false
         container.lineFragmentPadding = 0
         layoutManager.addTextContainer(container)
         let view = WriterTextView(frame: .zero, textContainer: container)
+        container.writerView = view
         layoutManager.writerView = view
         layoutManager.delegate = view
         view.restyler.view = view
@@ -326,6 +356,7 @@ final class WriterTextView: NSTextView {
 
     override func didChangeText() {
         super.didChangeText()
+        recalculateTablesIfNeeded()
         guard slideLayout != nil else { return }
         DispatchQueue.main.async { [weak self] in self?.updateSlideCentering() }
     }
@@ -386,6 +417,7 @@ final class WriterTextView: NSTextView {
             let glyphs = layoutManager.glyphRange(forBoundingRect: NSRect(x: 0, y: inContainer.minY - 40, width: container.size.width, height: inContainer.height + 80), in: container)
             let characters = layoutManager.characterRange(forGlyphRange: glyphs, actualGlyphRange: nil)
             drawOutlineMarks(in: characters, origin: origin)
+            drawCommentMarks(in: characters, origin: origin)
         }
     }
 
@@ -428,6 +460,7 @@ final class WriterTextView: NSTextView {
         aiPlacement = nil
         isAIWriting = false
         restyler.isLoading = true
+        flow.reset()
         storage.setAttributedString(text)
         layoutManager?.removeTemporaryAttribute(.foregroundColor, forCharacterRange: NSRange(location: 0, length: storage.length))
         WriterStyler.restyleAll(storage, family: family, palette: palette)
@@ -509,6 +542,9 @@ final class WriterTextView: NSTextView {
         /// The caret is in a code block: its language (nil: none known) and whether the document says it.
         var codeLanguage: CodeLanguage?
         var isCodeLanguageExplicit = false
+        /// The box and the section in columns with the caret.
+        var box: WriterBoxStyle?
+        var columns: WriterColumnStyle?
 
         struct ImageState: Equatable {
             var width: Int?
@@ -532,6 +568,9 @@ final class WriterTextView: NSTextView {
             var fill: String?
             var lines: WriterTableLines = .standard
             var lineWidth: Double?
+            /// The caret cell's formula (without "="), and its name ("B3").
+            var formula: String?
+            var cellName = ""
         }
     }
 
@@ -584,6 +623,8 @@ final class WriterTextView: NSTextView {
         state.isFormulaSelected = selectedFormula != nil
         state.bookmarkID = bookmarkAtCaret?.id
         state.table = tableState
+        state.box = boxAtCaret?.box.style
+        state.columns = sectionAtCaret?.section.style
         if state.block == .code, let code = codeLanguageAtCaret {
             state.codeLanguage = code.language
             state.isCodeLanguageExplicit = code.isExplicit
@@ -635,7 +676,10 @@ final class WriterTextView: NSTextView {
             if let frame = attachmentFrame(at: location) { setNeedsDisplay(frame.insetBy(dx: -6, dy: -6)) }
         }
         updateImageControls()
-        if !stillSelecting { onStateChange?() }
+        if !stillSelecting {
+            tableCaretMoved()
+            onStateChange?()
+        }
     }
 
     // MARK: Inline marks
@@ -893,6 +937,12 @@ final class WriterTextView: NSTextView {
         }
         // A click on the head or foot line opens their editor.
         let point = convert(event.locationInWindow, from: nil)
+        // A click on a comment's bubble in the margin shows it in the side panel.
+        if slideLayout == nil, let comment = commentMark(at: point) {
+            jumpToComment(comment)
+            onCommentSelected?(comment)
+            return
+        }
         let heads = runningHeadFrames()
         if let onEditRunningHeads, [heads.header, heads.footer].contains(where: { $0?.insetBy(dx: 0, dy: -4).contains(point) == true }) {
             return onEditRunningHeads()
@@ -948,6 +998,9 @@ final class WriterTextView: NSTextView {
         case [.command, .option] where event.keyCode == 5:    // G
             generateImageAtCaret()
             return true
+        case [.command, .option] where event.keyCode == 46:   // M
+            newComment()
+            return true
         case [.command, .option] where event.keyCode == 11:   // B
             if let bookmark = bookmarkAtCaret, selectedRange().length == 0 { removeBookmark(bookmark.id) } else { addBookmark() }
             return true
@@ -985,6 +1038,8 @@ final class WriterTextView: NSTextView {
             }
             return moveToCellBelow()
         }
+        // Return in an empty last paragraph of a box leaves the box.
+        if selectedRange().length == 0, leaveBoxIfEmptyEnd() { return }
         // A selected picture, formula or table of contents stays; the new paragraph comes below it.
         if let embed = selectedEmbed { setSelectedRange(NSRange(location: embed.location + 1, length: 0)) }
         guard selectedRange().length == 0 else { return super.insertNewline(sender) }
@@ -1299,6 +1354,7 @@ final class WriterRestyler: NSObject, NSTextStorageDelegate {
     func textStorage(_ textStorage: NSTextStorage, didProcessEditing editedMask: NSTextStorageEditActions, range editedRange: NSRange, changeInLength delta: Int) {
         guard !isLoading, let view else { return }
         if editedMask.contains(.editedCharacters) { view.shiftTrackedRanges(edited: editedRange, delta: delta) }
+        view.noteEdit(in: editedRange)
         WriterStyler.restyle(textStorage, around: editedRange, family: view.family, palette: view.palette)
         view.outlineMayHaveChanged()
         DispatchQueue.main.async { [weak view] in view?.updateImageControls() }
@@ -1310,6 +1366,41 @@ final class WriterRestyler: NSObject, NSTextStorageDelegate {
 final class WriterLayoutManager: NSLayoutManager {
     weak var writerView: WriterTextView?
 
+    // Lines can stand side by side (columns, text beside a floating box); TextKit's searches by position assume they
+    // come one below the other. These find every line in a rect and the line under a point.
+
+    override func glyphRange(forBoundingRect bounds: NSRect, in container: NSTextContainer) -> NSRange {
+        widened(super.glyphRange(forBoundingRect: bounds, in: container), bounds: bounds, container: container, layout: true)
+    }
+
+    override func glyphRange(forBoundingRectWithoutAdditionalLayout bounds: NSRect, in container: NSTextContainer) -> NSRange {
+        widened(super.glyphRange(forBoundingRectWithoutAdditionalLayout: bounds, in: container), bounds: bounds, container: container, layout: false)
+    }
+
+    private func widened(_ range: NSRange, bounds: NSRect, container: NSTextContainer, layout: Bool) -> NSRange {
+        guard let view = writerView, view.hasFlowLayout, !bounds.isEmpty else { return range }
+        let wideBounds = bounds.insetBy(dx: 0, dy: -1500)
+        let wide = layout ? super.glyphRange(forBoundingRect: wideBounds, in: container)
+            : super.glyphRange(forBoundingRectWithoutAdditionalLayout: wideBounds, in: container)
+        var result = range
+        enumerateLineFragments(forGlyphRange: wide) { rect, _, _, glyphs, _ in
+            if rect.intersects(bounds) { result = result.length == 0 ? glyphs : NSUnionRange(result, glyphs) }
+        }
+        return result
+    }
+
+    /// AppKit's primitive (its variant with the fraction asks this one): the glyph under a point, in the line whose box
+    /// holds it when lines stand side by side.
+    override func glyphIndex(for point: NSPoint, in container: NSTextContainer) -> Int {
+        guard let line = writerView?.lineFragment(at: point) else { return super.glyphIndex(for: point, in: container) }
+        var glyph = line.glyphs.location
+        while glyph < NSMaxRange(line.glyphs) - 1 {
+            if point.x < boundingRect(forGlyphRange: NSRange(location: glyph, length: 1), in: container).maxX { return glyph }
+            glyph += 1
+        }
+        return max(line.glyphs.location, NSMaxRange(line.glyphs) - 1)
+    }
+
     /// A picture selected on its own shows a frame of its own (see `WriterImageCell`) instead of the grey
     /// selection band, which would also cover its caption.
     override func fillBackgroundRectArray(_ rectArray: UnsafePointer<NSRect>, count rectCount: Int, forCharacterRange charRange: NSRange, color: NSColor) {
@@ -1318,6 +1409,10 @@ final class WriterLayoutManager: NSLayoutManager {
     }
 
     override func drawBackground(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
+        // Boxes lie under the selection and the text.
+        if let view = writerView, let storage = textStorage, storage.length > 0 {
+            view.drawBoxes(in: characterRange(forGlyphRange: glyphsToShow, actualGlyphRange: nil), layoutManager: self, origin: origin)
+        }
         super.drawBackground(forGlyphRange: glyphsToShow, at: origin)
         guard let storage = textStorage, let container = textContainers.first, let view = writerView, storage.length > 0 else { return }
         let palette = view.palette
@@ -1367,6 +1462,7 @@ final class WriterLayoutManager: NSLayoutManager {
             let baseline = (extra.height - lineHeight) / 2 + font.ascender
             drawMarker(marker, block: block, level: level, fragment: extra, baseline: baseline, origin: origin, view: view)
         }
+        view.drawFormulaMarks(in: characters, layoutManager: self, origin: origin)
         // Over code blocks and the selection, so every place found shows.
         view.drawFindMatches(in: characters, layoutManager: self, container: container, origin: origin)
     }

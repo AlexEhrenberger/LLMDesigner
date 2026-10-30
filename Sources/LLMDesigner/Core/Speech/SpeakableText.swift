@@ -22,7 +22,7 @@ enum SpeakableText {
                 }
             case .math(let latex, _):
                 parts.append(sentence(spokenMath(latex, german: german)))
-            case .code, .rule, .pageBreak:
+            case .code, .rule, .pageBreak, .columnBreak:
                 continue
             }
         }

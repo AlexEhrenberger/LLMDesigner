@@ -61,7 +61,7 @@ final class MermaidRenderer: NSObject, WKNavigationDelegate {
     private func draw(_ code: String, palette: MermaidPalette) async throws -> Result {
         guard let webView else { throw RenderError.missingLibrary }
         counter += 1
-        let config: [String: Any] = [
+        var config: [String: Any] = [
             "startOnLoad": false,
             "securityLevel": "strict",
             "theme": "base",
@@ -70,6 +70,12 @@ final class MermaidRenderer: NSObject, WKNavigationDelegate {
             "flowchart": ["htmlLabels": true, "curve": "basis", "padding": 14, "nodeSpacing": 26, "rankSpacing": 42, "wrappingWidth": 230],
             "mindmap": ["padding": 14, "maxNodeWidth": 230],
         ]
+        // A diagram with a theme of its own (Writer Studio's Mermaid editor) gets Mermaid's colours, not the app's.
+        if WriterMermaid.style(of: code).theme != nil {
+            config["theme"] = "default"
+            config["themeVariables"] = nil
+            config["fontFamily"] = "-apple-system, Helvetica Neue, sans-serif"
+        }
         let script = """
         mermaid.initialize(config);
         try {

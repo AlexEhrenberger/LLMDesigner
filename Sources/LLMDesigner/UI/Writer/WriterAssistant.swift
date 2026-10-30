@@ -13,6 +13,7 @@ final class WriterAssistant {
         case rewriting
         case answering
         case checking(done: Int, total: Int)
+        case commenting(done: Int, total: Int)
     }
 
     /// How the next instruction is used; `nil` decides by the instruction and the selection.
@@ -34,6 +35,8 @@ final class WriterAssistant {
     var check: CheckRun?
     var isPanelShown = false
     var error: String?
+    /// The comment the model is answering right now.
+    private(set) var commentReplyID: String?
     /// Asks the bar to take the keyboard focus.
     private(set) var focusRequest = 0
 
@@ -439,6 +442,93 @@ final class WriterAssistant {
             write("Schreib an dieser Stelle sinnvoll weiter.")
         case .focusBar:
             requestFocus()
+        case .comment:
+            commentDocument()
+        }
+    }
+
+    // MARK: Comments
+
+    /// The name comments by the model carry.
+    private var modelName: String {
+        LaTeXWriter.speakerName(forModel: app?.currentModelId)
+    }
+
+    /// The model reads the selection or the whole document like an editor and leaves comments on passages.
+    func commentDocument() {
+        guard let textView, let request = prepare() else { return }
+        error = nil
+        let pieces = textView.checkPieces(limit: 2_400)
+        guard !pieces.isEmpty else {
+            error = "Hier gibt es keinen Text zum Kommentieren."
+            return
+        }
+        activity = .commenting(done: 0, total: pieces.count)
+        let author = modelName
+        task = Task { [weak self] in
+            var added = 0
+            var firstID: String?
+            for (index, piece) in pieces.enumerated() {
+                guard !Task.isCancelled else { break }
+                do {
+                    let reply = try await request.client.complete(
+                        model: request.model, messages: WriterPrompts.comments(text: piece.text),
+                        temperature: 0.3, maxTokens: 1_800,
+                        jsonSchema: (WriterPrompts.commentSchemaName, WriterPrompts.commentSchema)
+                    )
+                    guard let self, !Task.isCancelled, let textView = self.textView else { break }
+                    for comment in WriterPrompts.parseComments(reply) {
+                        let quote = comment.zitat.trimmingCharacters(in: .whitespacesAndNewlines.union(CharacterSet(charactersIn: "„“\"")))
+                        let text = comment.kommentar.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard quote.count >= 3, !text.isEmpty, let range = textView.locate(quote, in: piece.range),
+                              textView.textStorage?.attribute(.writerComment, at: range.location, effectiveRange: nil) == nil else { continue }
+                        if let id = textView.addComment(text: text, author: author, isAI: true, range: range) {
+                            firstID = firstID ?? id
+                            added += 1
+                        }
+                    }
+                } catch {
+                    guard let self, !Task.isCancelled else { break }
+                    self.error = Self.describe(error)
+                }
+                self?.activity = .commenting(done: index + 1, total: pieces.count)
+            }
+            guard let self else { return }
+            self.activity = .idle
+            self.task = nil
+            if added == 0, self.error == nil, !Task.isCancelled {
+                self.error = "Die KI hatte zu diesem Text keine Anmerkungen."
+            } else if let firstID {
+                self.textView?.onCommentSelected?(firstID)
+            }
+        }
+    }
+
+    /// The model answers in a comment's thread (or writes its first entry).
+    func replyToComment(_ id: String) {
+        guard let textView, let request = prepare(), let context = textView.commentContext(id),
+              let comment = textView.comments.first(where: { $0.id == id })?.comment else { return }
+        error = nil
+        commentReplyID = id
+        activity = .thinking
+        let author = modelName
+        let messages = WriterPrompts.commentAnswer(passage: context.passage, context: context.paragraph, thread: comment.entries)
+        task = Task { [weak self] in
+            do {
+                let answer = try await request.client.complete(model: request.model, messages: messages, temperature: 0.4, maxTokens: 900)
+                let text = ThinkingSplitter.split(answer).content.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard let self, !Task.isCancelled else { return }
+                if text.isEmpty {
+                    self.error = "Das Modell hat nicht geantwortet."
+                } else {
+                    self.textView?.replyToComment(id, text: text, author: author, isAI: true)
+                }
+            } catch {
+                if !Task.isCancelled { self?.error = Self.describe(error) }
+            }
+            self?.commentReplyID = nil
+            self?.activity = .idle
+            self?.task = nil
         }
     }
 
@@ -463,7 +553,7 @@ final class WriterAssistant {
         return Request(client: client, model: model, limit: max(2_000, Int(Double(context) * 3 * 0.5)))
     }
 
-    private static func describe(_ error: Error) -> String {
+    static func describe(_ error: Error) -> String {
         if let error = error as? LocalizedError, let description = error.errorDescription { return description }
         return error.localizedDescription
     }

@@ -122,7 +122,7 @@ enum DocumentOutlineBuilder {
             case .table(let header, let rows, _, _): text = (header + rows.flatMap { $0 }).joined(separator: " | ")
             case .code: text = "[Code]"
             case .math(let latex, _): text = "[Formel: \(latex)]"
-            case .rule, .pageBreak: return nil
+            case .rule, .pageBreak, .columnBreak: return nil
             }
             let plain = text.trimmingCharacters(in: .whitespacesAndNewlines)
             return plain.isEmpty ? nil : Block(index: index, text: plain, isHeading: isHeading)

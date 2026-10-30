@@ -185,6 +185,25 @@ struct AppCommands: Commands {
             }
             .disabled(app.selectedDocument == nil || app.selectedDocument?.isPresentation == true)
         }
+        CommandMenu("Einfügen") {
+            Group {
+                Button("Kommentar") { app.formatText { $0.addComment() } }
+                    .keyboardShortcut("m", modifiers: [.command, .option])
+                Menu("Kasten") {
+                    ForEach(WriterBoxKind.allCases) { kind in
+                        Button(kind.label) { app.formatText { $0.insertBox(kind) } }
+                    }
+                }
+                Button("Zwei Spalten") { app.formatText { $0.setColumns(WriterColumnStyle()) } }
+                Button("Spaltenumbruch") { app.formatText { $0.insertColumnBreak() } }
+                Divider()
+                Button("Diagramm aus Zahlen …") { app.formatText { $0.newFigure(.chart) } }
+                Button("Diagramm aus der Tabelle …") { app.formatText { $0.chartFromTable() } }
+                Button("Mermaid-Diagramm …") { app.formatText { $0.newFigure(.mermaid) } }
+                Button("Zeichnung …") { app.formatText { $0.newFigure(.drawing) } }
+            }
+            .disabled(!app.canFormatText || app.selectedDocument?.isPresentation == true)
+        }
         CommandMenu("Chat") {
             Button("Generierung stoppen") { app.stop() }
                 .keyboardShortcut(".")

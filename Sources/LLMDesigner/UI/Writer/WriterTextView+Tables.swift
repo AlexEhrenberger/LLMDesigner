@@ -16,6 +16,10 @@ enum WriterTableAction: Hashable {
     /// The table's lines in print, and their weight (nil: thin).
     case lines(WriterTableLines)
     case lineWidth(Double?)
+    /// The rows below the header in the order of the caret's column (see WriterTextView+TableCalc.swift).
+    case sort(ascending: Bool)
+    /// A row at the end with the sums of the columns that hold numbers.
+    case sumRow
 }
 
 /// Tables in the editor. Every cell is a paragraph whose attributes name its `WriterTable`, row and column
@@ -152,6 +156,7 @@ extension WriterTextView {
             let row = action == .insertRowAbove ? cell.row : cell.row + span.rows
             contents.insert(Array(repeating: empty, count: model.table.columns), at: row)
             (spans, style.fills) = WriterTableMerge.inserting(at: row, isRow: true, spans: spans, fills: style.fills)
+            style.formulas = style.formulasShifted(at: row, isRow: true, delta: 1)
             caret = (row, action == .insertRowBelow && cell.column == model.table.columns - 1 && row == model.rows ? 0 : cell.column)
         case .insertColumnLeft, .insertColumnRight:
             let column = action == .insertColumnLeft ? cell.column : cell.column + span.columns
@@ -159,6 +164,7 @@ extension WriterTextView {
             alignments.insert(.leading, at: column)
             widths?.insert(1 / CGFloat(model.table.columns), at: column)
             (spans, style.fills) = WriterTableMerge.inserting(at: column, isRow: false, spans: spans, fills: style.fills)
+            style.formulas = style.formulasShifted(at: column, isRow: false, delta: 1)
             caret = (cell.row, column)
         case .deleteRow:
             guard model.rows > 1 else { return deleteTable(model) }
@@ -168,6 +174,7 @@ extension WriterTextView {
             }
             contents.remove(at: cell.row)
             (spans, style.fills) = WriterTableMerge.removing(at: cell.row, isRow: true, spans: spans, fills: style.fills)
+            style.formulas = style.formulasShifted(at: cell.row, isRow: true, delta: -1)
             caret = (min(cell.row, contents.count - 1), cell.column)
         case .deleteColumn:
             guard model.table.columns > 1 else { return deleteTable(model) }
@@ -178,6 +185,7 @@ extension WriterTextView {
             alignments.remove(at: cell.column)
             widths?.remove(at: cell.column)
             (spans, style.fills) = WriterTableMerge.removing(at: cell.column, isRow: false, spans: spans, fills: style.fills)
+            style.formulas = style.formulasShifted(at: cell.column, isRow: false, delta: -1)
             caret = (cell.row, min(cell.column, alignments.count - 1))
         case .deleteTable:
             return deleteTable(model)
@@ -221,6 +229,10 @@ extension WriterTextView {
             guard style.lineWidth != width else { return }
             style.lineWidth = width
             return setTableStyle(style, of: model)
+        case .sort(let ascending):
+            return sortTable(model, column: cell.column, ascending: ascending, contents: contents)
+        case .sumRow:
+            return addSumRow(model, contents: contents)
         }
         rebuild(model, contents: contents, alignments: alignments, widths: widths, spans: spans, style: style, caret: caret)
     }
@@ -276,7 +288,7 @@ extension WriterTextView {
 
     /// Replaces the cells of a table with these, in one undoable step, and puts the caret at the end of the text of
     /// the cell `caret`. Places that merged cells cover get no paragraph.
-    private func rebuild(_ model: TableModel, contents: [[NSAttributedString]], alignments: [MarkdownBlock.Alignment], widths: [CGFloat]?,
+    func rebuild(_ model: TableModel, contents: [[NSAttributedString]], alignments: [MarkdownBlock.Alignment], widths: [CGFloat]?,
                          spans: [WriterCellPosition: WriterCellSpan], style: WriterTableStyle, caret: (row: Int, column: Int)) {
         let table = WriterTable(columns: alignments.count, alignments: alignments, widths: widths, spans: spans, style: style, rows: contents.count)
         let text = NSMutableAttributedString()
@@ -312,7 +324,9 @@ extension WriterTextView {
                                 alignment: model.table.alignment(of: cell.column), hasOwnWidths: model.table.widths != nil,
                                 selectedCells: selectedCellPositions(in: model).count, isMerged: !span.isSingle,
                                 canMergeRight: cell.column + span.columns < model.table.columns, canMergeDown: cell.row + span.rows < model.rows,
-                                fill: style.fills[WriterCellPosition(row: cell.row, column: cell.column)], lines: style.lines, lineWidth: style.lineWidth)
+                                fill: style.fills[WriterCellPosition(row: cell.row, column: cell.column)], lines: style.lines, lineWidth: style.lineWidth,
+                                formula: style.formulas[WriterCellPosition(row: cell.row, column: cell.column)],
+                                cellName: WriterTableCalc.cellName(row: cell.row, column: cell.column))
     }
 
     /// An edit of the table's structure (or of text around it) that is already safe: undoable, one step, and
@@ -520,7 +534,7 @@ extension WriterTextView {
     }
 
     /// Puts another `WriterTable` (same cells, other widths or look) on every cell in one undoable step.
-    private func replaceTable(_ model: TableModel, with table: WriterTable) {
+    func replaceTable(_ model: TableModel, with table: WriterTable) {
         guard let storage = textStorage else { return }
         let selection = selectedRange()
         guard shouldChangeText(in: model.range, replacementString: nil) else { return }
@@ -555,6 +569,13 @@ extension WriterTextView {
         item("Spalte zentriert", "text.aligncenter", .align(.center), on: state.alignment == .center)
         item("Spalte rechtsbündig", "text.alignright", .align(.trailing), on: state.alignment == .trailing)
         item("Spalten gleich breit", "rectangle.split.3x1", .equalizeColumns, enabled: state.hasOwnWidths)
+        menu.addItem(.separator())
+        item("Nach dieser Spalte sortieren – aufsteigend", "arrow.up", .sort(ascending: true), enabled: state.rows > 2)
+        item("Nach dieser Spalte sortieren – absteigend", "arrow.down", .sort(ascending: false), enabled: state.rows > 2)
+        item("Summenzeile anfügen", "sum", .sumRow, enabled: state.rows > 1)
+        let chart = ClosureMenuItem(title: "Diagramm aus der Tabelle …") { [weak self] in self?.makeChartFromTable() }
+        chart.image = NSImage(systemSymbolName: "chart.bar.xaxis", accessibilityDescription: nil)
+        menu.addItem(chart)
         menu.addItem(.separator())
         if state.selectedCells > 1 {
             item("Zellen verbinden", "rectangle.compress.vertical", .mergeCells)

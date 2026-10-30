@@ -12,6 +12,8 @@ enum SidePanelTab: Hashable {
     case contents, bookmarks
     /// Writer Studio only: Citation Studio's sources and quotes, ready to insert.
     case sources
+    /// Writer Studio only: the comments on the document.
+    case comments
 }
 
 /// What the sidebar lists, and with it what the main area shows: chats, the skill library or the personas.

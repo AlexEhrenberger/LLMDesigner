@@ -189,6 +189,7 @@ extension WriterTextView {
     // MARK: The bar on a selected picture
 
     func updateImageControls() {
+        updateTableBar()
         guard let image = selectedImage, window != nil, let frame = imageFrame(at: image.location) else {
             imageControlsHost?.isHidden = true
             return
@@ -207,10 +208,12 @@ extension WriterTextView {
             width: image.reference.width,
             hasCaption: !image.reference.caption.isEmpty,
             isPlot: image.reference.plot != nil,
+            figure: image.reference.figure,
             generation: generation,
             onWidth: { [weak self] in self?.setImageWidth($0) },
             onCaption: { [weak self] in self?.editImageCaption() },
             onPlot: { [weak self] in self?.editPlot(at: location) },
+            onEditFigure: { [weak self] in self?.editFigure(at: location) },
             onEditGeneration: { [weak self] in self?.editGeneratedImage(at: location) },
             onRegenerate: { [weak self] in self?.regenerateImage(at: location) },
             onCancelGeneration: { [weak self] in self?.cancelImageGeneration(at: location) },
@@ -253,6 +256,11 @@ extension WriterTextView {
         }
         caption.image = NSImage(systemSymbolName: "text.below.photo", accessibilityDescription: nil)
         var plotItems: [NSMenuItem] = generationMenuItems(at: location)
+        if let figure = reference.figure {
+            let edit = ClosureMenuItem(title: "\(figure.label) bearbeiten …") { [weak self] in self?.editFigure(at: location) }
+            edit.image = NSImage(systemSymbolName: figure.symbol, accessibilityDescription: nil)
+            plotItems.append(edit)
+        }
         if reference.plot != nil {
             let plot = ClosureMenuItem(title: "Plot bearbeiten …") { [weak self] in self?.editPlot(at: location) }
             plot.image = NSImage(systemSymbolName: "chart.xyaxis.line", accessibilityDescription: nil)
@@ -295,10 +303,12 @@ struct WriterImageBar: View {
     let width: Int?
     let hasCaption: Bool
     var isPlot = false
+    var figure: WriterFigureKind?
     var generation: Generation?
     let onWidth: (Int?) -> Void
     let onCaption: () -> Void
     var onPlot: () -> Void = {}
+    var onEditFigure: () -> Void = {}
     var onEditGeneration: () -> Void = {}
     var onRegenerate: () -> Void = {}
     var onCancelGeneration: () -> Void = {}
@@ -322,6 +332,21 @@ struct WriterImageBar: View {
                 .buttonStyle(.plain)
                 .focusable(false)
                 .help("Formel und Plot bearbeiten")
+                Rectangle().fill(Color.white.opacity(0.14)).frame(width: 1, height: 16).padding(.horizontal, 4)
+            }
+            if let figure {
+                Button(action: onEditFigure) {
+                    Label("\(figure.label) bearbeiten", systemImage: figure.symbol)
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(Theme.accent)
+                        .padding(.horizontal, 9)
+                        .frame(height: 24)
+                        .background(Capsule().fill(Theme.accent.opacity(0.16)))
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .focusable(false)
+                .help("Im Editor öffnen (Doppelklick)")
                 Rectangle().fill(Color.white.opacity(0.14)).frame(width: 1, height: 16).padding(.horizontal, 4)
             }
             if let generation {
@@ -647,6 +672,8 @@ final class WriterImageCell: NSTextAttachmentCell {
         if theEvent.clickCount >= 2 {
             if reference.generated {
                 view.editGeneratedImage(at: charIndex)
+            } else if reference.figure != nil {
+                view.editFigure(at: charIndex)
             } else if reference.plot != nil {
                 view.editPlot(at: charIndex)
             } else {
