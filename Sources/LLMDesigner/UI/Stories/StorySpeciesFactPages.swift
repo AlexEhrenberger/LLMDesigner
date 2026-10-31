@@ -126,8 +126,7 @@ struct StoryFactPage: View {
                 }
                 VStack(alignment: .leading, spacing: 5) {
                     StoryLabel(title: "Quelle", hint: "Woher der Fakt stammt: eine Chronik der Welt, ein echtes Buch, ein Link.")
-                    TextField("Chronik von …, S. 12", text: field(\.source), axis: .vertical)
-                        .lineLimit(1...4)
+                    StoryTextEditor(placeholder: "Chronik von …, S. 12", text: field(\.source))
                         .storyField()
                 }
                 VStack(alignment: .leading, spacing: 6) {

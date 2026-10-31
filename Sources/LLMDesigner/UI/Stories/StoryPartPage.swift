@@ -5,10 +5,13 @@ private struct StoryPageHead<Leading: View>: View {
     let model: StoriesStudioModel
     let tabs: [StoriesStudioModel.PartTab]
     @ViewBuilder let leading: () -> Leading
+    @State private var width: CGFloat = .infinity
+    @State private var leadingWidth: CGFloat = 0
 
     var body: some View {
         HStack(spacing: 10) {
             leading()
+                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { leadingWidth = $0 }
             Spacer(minLength: 12)
             if tabs.count > 1 {
                 StoryTabBar(tabs: tabs.map { tab in
@@ -17,11 +20,13 @@ private struct StoryPageHead<Leading: View>: View {
                     case .timeline: (tab, "Timeline", "calendar.day.timeline.left")
                     case .gallery: (tab, "Galerie", "photo.on.rectangle.angled")
                     }
-                }, selection: Binding(get: { tabs.contains(model.partTab) ? model.partTab : .content }, set: { model.partTab = $0 }))
+                }, selection: Binding(get: { tabs.contains(model.partTab) ? model.partTab : .content }, set: { model.partTab = $0 }),
+                   room: width - 48 - leadingWidth - 32)
             }
         }
         .padding(.horizontal, 24)
         .frame(height: 44)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
     }
 }
 
@@ -32,7 +37,6 @@ struct StoryWorldPage: View {
     let world: StoryWorld
     let model: StoriesStudioModel
     let library: StoryLibrary
-    @FocusState private var titleFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -64,16 +68,10 @@ struct StoryWorldPage: View {
     private var content: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                TextField("Name der Romanwelt", text: library.binding(world.id, \.title), axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 24, weight: .semibold))
-                    .foregroundStyle(Theme.textPrimary)
-                    .lineLimit(1...3)
-                    .focused($titleFocused)
-                TextField("Genre – z. B. High Fantasy, Familiensaga, Space Opera", text: library.binding(world.id, \.genre))
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 14))
-                    .foregroundStyle(Theme.textSecondary)
+                StoryTextEditor(placeholder: "Name der Romanwelt", text: library.binding(world.id, \.title),
+                                font: .systemFont(ofSize: 24, weight: .semibold), singleLine: true, focusOnAppear: model.focusNameOf == world.id)
+                StoryTextEditor(placeholder: "Genre – z. B. High Fantasy, Familiensaga, Space Opera", text: library.binding(world.id, \.genre),
+                                font: .systemFont(ofSize: 14), color: NSColor(Theme.textSecondary), singleLine: true)
                 StoryTextArea(title: "Prämisse", hint: "Worum es im Kern geht, in ein, zwei Sätzen: wer will was, was steht dagegen, was steht auf dem Spiel.",
                               placeholder: "In einer Welt, in der …", text: library.binding(world.id, \.logline), lines: 2...5)
                 StoryTextArea(title: "Beschreibung der Welt", placeholder: "Wie sieht die Welt aus, wer lebt dort, was prägt sie?",
@@ -92,10 +90,7 @@ struct StoryWorldPage: View {
             .frame(maxWidth: .infinity)
         }
         .onAppear {
-            if model.focusNameOf == world.id {
-                model.focusNameOf = nil
-                DispatchQueue.main.async { titleFocused = true }
-            }
+            if model.focusNameOf == world.id { model.focusNameOf = nil }
         }
     }
 
@@ -106,11 +101,11 @@ struct StoryWorldPage: View {
             HStack(spacing: 10) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Einheit").font(.system(size: 11)).foregroundStyle(Theme.textTertiary)
-                    TextField("Jahr", text: library.binding(world.id, \.calendar.unit)).storyField()
+                    StoryTextEditor(placeholder: "Jahr", text: library.binding(world.id, \.calendar.unit), singleLine: true).storyField()
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Zusatz hinter der Zahl").font(.system(size: 11)).foregroundStyle(Theme.textTertiary)
-                    TextField("n. A. E.", text: library.binding(world.id, \.calendar.suffix)).storyField()
+                    StoryTextEditor(placeholder: "n. A. E.", text: library.binding(world.id, \.calendar.suffix), singleLine: true).storyField()
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     Text("So sieht es aus").font(.system(size: 11)).foregroundStyle(Theme.textTertiary)
@@ -190,7 +185,6 @@ struct StoryPartPage: View {
     let world: StoryWorld
     let model: StoriesStudioModel
     let library: StoryLibrary
-    @FocusState private var titleFocused: Bool
 
     var body: some View {
         if let part = world.part(partID) {
@@ -252,17 +246,11 @@ struct StoryPartPage: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 header(part)
-                TextField(world.number(of: partID), text: library.partBinding(world.id, partID, \.title), axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 24, weight: .semibold))
-                    .foregroundStyle(Theme.textPrimary)
-                    .lineLimit(1...3)
-                    .focused($titleFocused)
+                StoryTextEditor(placeholder: world.number(of: partID), text: library.partBinding(world.id, partID, \.title),
+                                font: .systemFont(ofSize: 24, weight: .semibold), singleLine: true, focusOnAppear: model.focusNameOf == partID)
                 if part.level == .book {
-                    TextField("Untertitel", text: library.partBinding(world.id, partID, \.subtitle))
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 14))
-                        .foregroundStyle(Theme.textSecondary)
+                    StoryTextEditor(placeholder: "Untertitel", text: library.partBinding(world.id, partID, \.subtitle),
+                                    font: .systemFont(ofSize: 14), color: NSColor(Theme.textSecondary), singleLine: true)
                 }
                 if part.level.hasPointOfView {
                     pointOfView(part)
@@ -284,10 +272,7 @@ struct StoryPartPage: View {
             .frame(maxWidth: .infinity)
         }
         .onAppear {
-            if model.focusNameOf == partID {
-                model.focusNameOf = nil
-                DispatchQueue.main.async { titleFocused = true }
-            }
+            if model.focusNameOf == partID { model.focusNameOf = nil }
         }
     }
 
@@ -474,15 +459,11 @@ private struct StoryFocusCard: View {
                     .foregroundStyle(Theme.textTertiary)
                 Spacer()
             }
-            TextField(kind.prompt, text: library.draftBinding(
+            StoryTextEditor(placeholder: kind.prompt, text: library.draftBinding(
                 world.id, field: [AnyHashable(part.id), AnyHashable(kind)], fallback: "",
                 get: { $0.part(part.id)?.focus.text(kind) },
                 set: { world, text in world.updatePart(part.id) { $0.focus.setText(text, for: kind) } }
-            ), axis: .vertical)
-            .textFieldStyle(.plain)
-            .font(.system(size: 13))
-            .foregroundStyle(Theme.textPrimary)
-            .lineLimit(1...12)
+            ))
             StoryLinkList(kind: kind, ids: part.focus.ids(kind), world: world, library: library, model: model,
                           addLabel: "\(kind.singular) verknüpfen") { ids in
                 library.update(world.id) { $0.updatePart(part.id) { $0.focus.links[kind] = ids.isEmpty ? nil : ids } }

@@ -80,7 +80,7 @@ struct StoriesStudioScreen: View {
                     StoryNavigator(world: world, model: model, library: library)
                         .frame(width: 236)
                     Rectangle().fill(Theme.border).frame(width: 1)
-                    page(world, library: library)
+                    StoryPageHost(world: world, model: model, library: library)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             } else {
@@ -94,24 +94,6 @@ struct StoriesStudioScreen: View {
             if let id = last.flatMap({ library.world($0)?.id }) ?? library.worlds.first?.id { model.open(id) }
         }
         .onChange(of: model.worldID) { _, id in app.settings.set(id?.uuidString, forKey: Self.lastWorldKey) }
-    }
-
-    @ViewBuilder
-    private func page(_ world: StoryWorld, library: StoryLibrary) -> some View {
-        switch model.page {
-        case .overview:
-            StoryWorldPage(world: world, model: model, library: library)
-        case .part(let id):
-            if world.part(id) != nil {
-                StoryPartPage(partID: id, world: world, model: model, library: library)
-                    .id(id)
-            } else {
-                StoryWorldPage(world: world, model: model, library: library)
-            }
-        case .elements(let kind):
-            StoryElementBrowser(kind: kind, world: world, model: model, library: library)
-                .id(kind)
-        }
     }
 
     private func emptyState(_ library: StoryLibrary) -> some View {
@@ -138,6 +120,31 @@ struct StoriesStudioScreen: View {
         }
         .padding(40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// The page on the right. It is the only part that reads which page is open, so opening another page doesn't make
+/// the rest of the studio (navigator, top bar) build itself again.
+private struct StoryPageHost: View {
+    let world: StoryWorld
+    let model: StoriesStudioModel
+    let library: StoryLibrary
+
+    var body: some View {
+        switch model.page {
+        case .overview:
+            StoryWorldPage(world: world, model: model, library: library)
+        case .part(let id):
+            if world.part(id) != nil {
+                StoryPartPage(partID: id, world: world, model: model, library: library)
+                    .id(id)
+            } else {
+                StoryWorldPage(world: world, model: model, library: library)
+            }
+        case .elements(let kind):
+            StoryElementBrowser(kind: kind, world: world, model: model, library: library)
+                .id(kind)
+        }
     }
 }
 

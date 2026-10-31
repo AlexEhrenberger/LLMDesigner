@@ -123,7 +123,8 @@ struct StoryEventPage: View {
                         }
                     }
                 }
-                TextField("Wann – in den Worten der Welt („im letzten Sommer vor dem langen Winter“)", text: field(\.when))
+                StoryTextEditor(placeholder: "Wann – in den Worten der Welt („im letzten Sommer vor dem langen Winter“)", text: field(\.when),
+                                singleLine: true)
                     .storyField()
                 HStack(alignment: .top, spacing: 14) {
                     VStack(alignment: .leading, spacing: 6) {
@@ -213,8 +214,7 @@ struct StoryEventPage: View {
                     followerList
                 }
             }
-            TextField("Auslöser und Ursachen in Worten", text: field(\.causes), axis: .vertical)
-                .lineLimit(1...10)
+            StoryTextEditor(placeholder: "Auslöser und Ursachen in Worten", text: field(\.causes))
                 .storyField()
         }
     }
@@ -297,14 +297,13 @@ private struct StoryConsequenceCard: View {
                 .buttonStyle(.plain)
                 .help("Auswirkung entfernen")
             }
-            TextField("Was ändert sich?", text: library.elementText(
+            StoryTextEditor(placeholder: "Was ändert sich?", text: library.elementText(
                 world.id, StoryEvent.self, eventID, field: consequence.id,
                 get: { $0.consequences.first { $0.id == consequence.id }?.text },
                 set: { event, text in
                     if let index = event.consequences.firstIndex(where: { $0.id == consequence.id }) { event.consequences[index].text = text }
                 }
-            ), axis: .vertical)
-            .lineLimit(1...12)
+            ))
             .storyField()
             VStack(alignment: .leading, spacing: 10) {
                 VStack(alignment: .leading, spacing: 5) {
@@ -374,11 +373,7 @@ struct StoryReasonPage: View {
                 arrow
                 VStack(alignment: .leading, spacing: 6) {
                     StoryLabel(title: "Konklusion", symbol: "arrow.down.to.line", color: StoryElementKind.reason.color)
-                    TextField("Also …", text: field(\.conclusion), axis: .vertical)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(Theme.textPrimary)
-                        .lineLimit(1...10)
+                    StoryTextEditor(placeholder: "Also …", text: field(\.conclusion), font: .systemFont(ofSize: 14, weight: .medium))
                         .padding(12)
                         .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(StoryElementKind.reason.color.opacity(0.14)))
                         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(StoryElementKind.reason.color.opacity(0.55)))
@@ -450,11 +445,7 @@ private struct StoryStatementColumn: View {
             }
             ForEach(statements) { statement in
                 HStack(alignment: .top, spacing: 8) {
-                    TextField(add, text: text(statement.id), axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 13))
-                    .foregroundStyle(Theme.textPrimary)
-                    .lineLimit(1...8)
+                    StoryTextEditor(placeholder: add, text: text(statement.id))
                     Menu {
                         ForEach(ReasonStatement.Validity.allCases) { validity in
                             Button(validity.label, systemImage: validity.symbol) { change(statement.id) { $0.validity = validity } }

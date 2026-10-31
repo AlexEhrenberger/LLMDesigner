@@ -125,7 +125,8 @@ struct StoryLabel: View {
     }
 }
 
-/// A titled text area that grows with its text.
+/// A titled text area that grows with its text (from `lines.lowerBound` lines; the upper bound is no longer a
+/// limit, the page scrolls instead).
 struct StoryTextArea: View {
     let title: String
     var hint: String?
@@ -136,8 +137,7 @@ struct StoryTextArea: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             StoryLabel(title: title, hint: hint)
-            TextField(placeholder, text: $text, axis: .vertical)
-                .lineLimit(lines)
+            StoryTextEditor(placeholder: placeholder, text: $text, minLines: lines.lowerBound)
                 .storyField()
         }
     }
@@ -179,17 +179,39 @@ struct StoryCard<Content: View>: View {
 }
 
 /// Tabs of a page as a row of capsules. Where the room is short, only the chosen tab keeps its title, then none.
+///
+/// The page measures the room (it only changes with the window) and the variant is worked out from the titles'
+/// widths. `ViewThatFits` did this by building and measuring all three variants in every layout pass, which made
+/// each keystroke and click in the studio noticeably slower. The bar keeps its own size: stretched to the room
+/// (to measure it from inside), or inside a scroll view, its tabs stopped taking clicks.
 struct StoryTabBar<Tab: Hashable>: View {
     let tabs: [(tab: Tab, title: String, symbol: String)]
     @Binding var selection: Tab
+    /// The width the bar may take.
+    let room: CGFloat
 
     var body: some View {
-        ViewThatFits(in: .horizontal) {
-            bar { _ in true }
-            bar { $0 == selection }
-            bar { _ in false }
-        }
+        bar(showsTitle: titleRule(selection: selection, room: room))
+            .fixedSize()
     }
+
+    /// The widest variant that fits: every title, the chosen one's, or none.
+    private func titleRule(selection: Tab, room: CGFloat) -> (Tab) -> Bool {
+        if width { _ in true } <= room { return { _ in true } }
+        if width({ $0 == selection }) <= room { return { $0 == selection } }
+        return { _ in false }
+    }
+
+    /// The bar's width for a variant: 10 pt padding each side of a tab, 16 pt for a symbol, 5 pt between symbol and
+    /// title, 4 pt between tabs and 3 pt around the bar.
+    private func width(_ showsTitle: (Tab) -> Bool) -> CGFloat {
+        let tabsWidth = tabs.reduce(CGFloat(0)) { sum, item in
+            sum + 20 + 16 + (showsTitle(item.tab) ? 5 + Self.titleWidth(item.title) : 0)
+        }
+        return tabsWidth + CGFloat(max(tabs.count - 1, 0)) * 4 + 6 + 4
+    }
+
+    private static func titleWidth(_ title: String) -> CGFloat { StoryTabTitleWidths.width(of: title) }
 
     private func bar(showsTitle: @escaping (Tab) -> Bool) -> some View {
         HStack(spacing: 4) {
@@ -201,7 +223,8 @@ struct StoryTabBar<Tab: Hashable>: View {
                         if showsTitle(item.tab) {
                             Label(item.title, systemImage: item.symbol)
                         } else {
-                            Image(systemName: item.symbol)
+                            Label(item.title, systemImage: item.symbol)
+                                .labelStyle(.iconOnly)
                         }
                     }
                     .font(.system(size: 12, weight: selection == item.tab ? .semibold : .regular))
@@ -219,7 +242,19 @@ struct StoryTabBar<Tab: Hashable>: View {
         .padding(3)
         .background(Capsule().fill(Color.white.opacity(0.03)))
         .overlay(Capsule().strokeBorder(Theme.border))
-        .fixedSize()
+    }
+}
+
+/// The widths of tab titles, measured once each.
+@MainActor
+private enum StoryTabTitleWidths {
+    static var known: [String: CGFloat] = [:]
+
+    static func width(of title: String) -> CGFloat {
+        if let width = known[title] { return width }
+        let width = ceil((title as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 12, weight: .semibold)]).width)
+        known[title] = width
+        return width
     }
 }
 
@@ -722,18 +757,13 @@ struct StoryImageGallery: View {
     private func tile(_ image: StoryImage) -> some View {
         let isPortrait = image == images.first
         return ZStack(alignment: .bottomLeading) {
-            if let thumbnail = library.thumbnail(image, in: worldID) {
-                Image(nsImage: thumbnail)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: 120, height: 120)
-                    .clipped()
-            } else {
+            StoryThumbnail(image: image, worldID: worldID, library: library, fill: true) {
                 Image(systemName: "photo")
                     .font(.system(size: 24))
                     .foregroundStyle(Theme.textTertiary)
-                    .frame(width: 120, height: 120)
             }
+            .frame(width: 120, height: 120)
+            .clipped()
             if isPortrait, images.count > 1 {
                 Text("Hauptbild")
                     .font(.system(size: 9.5, weight: .semibold))
@@ -790,19 +820,50 @@ struct StoryAvatar: View {
 
     var body: some View {
         Group {
-            if let image, let thumbnail = library.thumbnail(image, in: worldID) {
-                Image(nsImage: thumbnail)
-                    .resizable()
-                    .scaledToFill()
+            if let image {
+                StoryThumbnail(image: image, worldID: worldID, library: library, fill: true) { placeholder }
             } else {
-                Image(systemName: kind.symbol)
-                    .font(.system(size: size * 0.4, weight: .semibold))
-                    .foregroundStyle(kind.color)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(kind.color.opacity(0.14))
+                placeholder
             }
         }
         .frame(width: size, height: size)
         .clipShape(RoundedRectangle(cornerRadius: size * 0.3, style: .continuous))
+    }
+
+    private var placeholder: some View {
+        Image(systemName: kind.symbol)
+            .font(.system(size: size * 0.4, weight: .semibold))
+            .foregroundStyle(kind.color)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(kind.color.opacity(0.14))
+    }
+}
+
+/// A picture of the library, made small off the main thread; the placeholder shows until it is there.
+struct StoryThumbnail<Placeholder: View>: View {
+    let image: StoryImage
+    let worldID: UUID
+    let library: StoryLibrary
+    /// Fill the frame (cut off what doesn't fit) rather than fit into it.
+    var fill = false
+    @ViewBuilder let placeholder: () -> Placeholder
+    @State private var loaded: NSImage?
+
+    var body: some View {
+        Group {
+            if let shown = loaded ?? library.cachedThumbnail(image, in: worldID) {
+                if fill {
+                    Image(nsImage: shown).resizable().scaledToFill()
+                } else {
+                    Image(nsImage: shown).resizable().scaledToFit()
+                }
+            } else {
+                placeholder()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .task(id: image.fileName) {
+            loaded = await library.loadThumbnail(image, in: worldID)
+        }
     }
 }

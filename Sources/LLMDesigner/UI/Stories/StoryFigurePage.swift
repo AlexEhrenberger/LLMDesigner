@@ -11,6 +11,7 @@ struct StoryFigurePage: View {
     let world: StoryWorld
     let model: StoriesStudioModel
     let library: StoryLibrary
+    @State private var headWidth: CGFloat = .infinity
 
     private var tab: Binding<Tab> {
         Binding(get: { model.figureTab }, set: { model.figureTab = $0 })
@@ -22,44 +23,54 @@ struct StoryFigurePage: View {
 
     var body: some View {
         if let figure = world.element(StoryFigure.self, figureID) {
-            StoryPageScroll {
-                HStack(alignment: .top, spacing: 16) {
-                    StoryAvatar(kind: .figure, image: figure.images.first, worldID: world.id, library: library, size: 72)
-                    VStack(alignment: .leading, spacing: 6) {
-                        StoryElementHeader(ref: figure.ref, name: field(\.name), world: world, model: model, library: library) {
-                            StoryHeaderMenu(title: figure.role.label, symbol: "theatermask.and.paintbrush", help: "Rolle in der Geschichte") {
-                                ForEach(FigureRole.allCases) { role in
-                                    Button(role.label) { library.updateElement(world.id, StoryFigure.self, figureID) { $0.role = role } }
+            // Head and tabs stay put above the scrolling tab content (the tab bar takes no clicks inside a scroll view).
+            VStack(spacing: 0) {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(alignment: .top, spacing: 16) {
+                        StoryAvatar(kind: .figure, image: figure.images.first, worldID: world.id, library: library, size: 72)
+                        VStack(alignment: .leading, spacing: 6) {
+                            StoryElementHeader(ref: figure.ref, name: field(\.name), world: world, model: model, library: library) {
+                                StoryHeaderMenu(title: figure.role.label, symbol: "theatermask.and.paintbrush", help: "Rolle in der Geschichte") {
+                                    ForEach(FigureRole.allCases) { role in
+                                        Button(role.label) { library.updateElement(world.id, StoryFigure.self, figureID) { $0.role = role } }
+                                    }
+                                }
+                                speciesMenu(figure)
+                                if !figure.personality.code.isEmpty {
+                                    Text(figure.personality.code)
+                                        .font(.system(size: 11.5, weight: .semibold, design: .monospaced))
+                                        .foregroundStyle(Theme.accent)
+                                        .help("Psychologisches Profil (Myers-Briggs)")
                                 }
                             }
-                            speciesMenu(figure)
-                            if !figure.personality.code.isEmpty {
-                                Text(figure.personality.code)
-                                    .font(.system(size: 11.5, weight: .semibold, design: .monospaced))
-                                    .foregroundStyle(Theme.accent)
-                                    .help("Psychologisches Profil (Myers-Briggs)")
-                            }
+                            StoryTextEditor(placeholder: "Beiname oder Titel – „die Unverbrannte“", text: field(\.epithet),
+                                            font: .systemFont(ofSize: 14), color: NSColor(Theme.textSecondary), singleLine: true)
                         }
-                        TextField("Beiname oder Titel – „die Unverbrannte“", text: field(\.epithet))
-                            .textFieldStyle(.plain)
-                            .font(.system(size: 14))
-                            .foregroundStyle(Theme.textSecondary)
                     }
+                    StoryTabBar(tabs: [(Tab.life, "Lebenslauf", "person.text.rectangle"), (.character, "Charakter", "person.fill.questionmark"),
+                                       (.psyche, "Psyche", "brain.head.profile"), (.stance, "Haltung", "arrow.left.arrow.right"),
+                                       (.story, "Geschichte", "text.book.closed"), (.scenes, "Szenenbuch", "quote.bubble"),
+                                       (.videos, figure.videos.isEmpty ? "Videocards" : "Videocards \(figure.videos.count)", "play.rectangle.on.rectangle")],
+                                selection: tab, room: headWidth)
                 }
-                StoryTabBar(tabs: [(Tab.life, "Lebenslauf", "person.text.rectangle"), (.character, "Charakter", "person.fill.questionmark"),
-                                   (.psyche, "Psyche", "brain.head.profile"), (.stance, "Haltung", "arrow.left.arrow.right"),
-                                   (.story, "Geschichte", "text.book.closed"), (.scenes, "Szenenbuch", "quote.bubble"),
-                                   (.videos, figure.videos.isEmpty ? "Videocards" : "Videocards \(figure.videos.count)", "play.rectangle.on.rectangle")],
-                            selection: tab)
-                    .padding(.vertical, 4)
-                switch tab.wrappedValue {
-                case .life: life(figure)
-                case .character: character
-                case .psyche: StoryPsycheEditor(figureID: figureID, world: world, library: library)
-                case .stance: stance(figure)
-                case .story: story(figure)
-                case .scenes: StorySceneBook(figureID: figureID, world: world, model: model, library: library)
-                case .videos: videos(figure)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { headWidth = $0 }
+                .padding(.horizontal, 30)
+                .padding(.top, 22)
+                .padding(.bottom, 10)
+                .frame(maxWidth: 860, alignment: .leading)
+                .frame(maxWidth: .infinity)
+                Rectangle().fill(Theme.border).frame(height: 1)
+                StoryPageScroll {
+                    switch tab.wrappedValue {
+                    case .life: life(figure)
+                    case .character: character
+                    case .psyche: StoryPsycheEditor(figureID: figureID, world: world, library: library)
+                    case .stance: stance(figure)
+                    case .story: story(figure)
+                    case .scenes: StorySceneBook(figureID: figureID, world: world, model: model, library: library)
+                    case .videos: videos(figure)
+                    }
                 }
             }
         }
@@ -204,10 +215,9 @@ private struct StoryPsycheEditor: View {
             slider(value: profile.neuroticism, range: 0...1, poles: ("Gelassen", "Neurotisch")) { value in
                 update { $0.neuroticism = value }
             }
-            TextField("Wie verändert sie sich, wenn der Druck wächst?", text: library.elementText(
+            StoryTextEditor(placeholder: "Wie verändert sie sich, wenn der Druck wächst?", text: library.elementText(
                 world.id, StoryFigure.self, figureID, field: "stressNote", get: { $0.personality.stressNote }, set: { $0.personality.stressNote = $1 }
-            ), axis: .vertical)
-            .lineLimit(1...8)
+            ))
             .storyField()
         }
         StoryTextArea(title: "Persona im Ganzen", hint: "Das Bild, das sich aus allem ergibt: wie diese Psyche in der Geschichte wirkt.",
@@ -232,11 +242,10 @@ private struct StoryPsycheEditor: View {
             slider(value: profile.values[axis], range: -1...1, poles: axis.poles) { value in
                 update { $0.values[axis] = value }
             }
-            TextField("Wie zeigt sich das?", text: library.elementText(
+            StoryTextEditor(placeholder: "Wie zeigt sich das?", text: library.elementText(
                 world.id, StoryFigure.self, figureID, field: "axis-" + axis.rawValue,
                 get: { $0.personality.notes[axis] }, set: { $0.personality.notes[axis] = $1.isEmpty ? nil : $1 }
-            ), axis: .vertical)
-            .lineLimit(1...6)
+            ))
             .storyField()
         }
     }
@@ -318,10 +327,8 @@ private struct StoryRelationEditor: View {
         StoryCard(tint: relation.target.kind.color) {
             HStack(spacing: 10) {
                 StoryElementChip(kind: relation.target.kind, name: name, onOpen: { model.show(relation.target) })
-                TextField("Beziehung – Bruder, Rivalin, Lehnsherr …", text: binding(relation.id, \.label))
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 12.5))
-                    .foregroundStyle(Theme.textPrimary)
+                StoryTextEditor(placeholder: "Beziehung – Bruder, Rivalin, Lehnsherr …", text: binding(relation.id, \.label),
+                                font: .systemFont(ofSize: 12.5), singleLine: true)
                 Spacer()
                 Button {
                     library.updateElement(world.id, StoryFigure.self, figure.id) { $0.relations.removeAll { $0.id == relation.id } }
@@ -351,8 +358,7 @@ private struct StoryRelationEditor: View {
                     .buttonStyle(.plain)
                 }
             }
-            TextField("Warum – was ist zwischen ihnen geschehen?", text: binding(relation.id, \.note), axis: .vertical)
-                .lineLimit(1...8)
+            StoryTextEditor(placeholder: "Warum – was ist zwischen ihnen geschehen?", text: binding(relation.id, \.note))
                 .storyField()
         }
     }
@@ -473,7 +479,13 @@ private struct StorySceneCard: View {
     let model: StoriesStudioModel
     let library: StoryLibrary
     let focused: Bool
-    @FocusState private var textFocused: Bool
+
+    /// Quotes are set in an italic serif, like a voice.
+    private static let quoteFont: NSFont = {
+        let base = NSFont.systemFont(ofSize: 14)
+        let serif = base.fontDescriptor.withDesign(.serif)?.withSymbolicTraits(.italic)
+        return serif.flatMap { NSFont(descriptor: $0, size: 14) } ?? base
+    }()
 
     var body: some View {
         StoryCard {
@@ -510,21 +522,14 @@ private struct StorySceneCard: View {
                 .buttonStyle(.plain)
                 .help("Eintrag löschen")
             }
-            TextField(placeholder, text: library.elementText(
+            StoryTextEditor(placeholder: placeholder, text: library.elementText(
                 world.id, StoryFigure.self, figureID, field: note.id,
                 get: { $0.scenes.first { $0.id == note.id }?.text },
                 set: { figure, text in
                     if let index = figure.scenes.firstIndex(where: { $0.id == note.id }) { figure.scenes[index].text = text }
                 }
-            ), axis: .vertical)
-            .textFieldStyle(.plain)
-            .font(note.kind == .quote ? .system(size: 14, design: .serif).italic() : .system(size: 13))
-            .foregroundStyle(Theme.textPrimary)
-            .lineLimit(2...40)
-            .focused($textFocused)
-        }
-        .onAppear {
-            if focused { DispatchQueue.main.async { textFocused = true } }
+            ), minLines: 2, font: note.kind == .quote ? Self.quoteFont : .systemFont(ofSize: 13), focusOnAppear: focused)
+            .id(note.kind)
         }
     }
 

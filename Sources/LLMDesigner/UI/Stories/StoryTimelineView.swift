@@ -529,7 +529,7 @@ private struct StoryTimelineInspector: View {
     }
 
     private var note: some View {
-        TextField("Notiz – was hier geschieht", text: library.draftBinding(
+        StoryTextEditor(placeholder: "Notiz – was hier geschieht", text: library.draftBinding(
             world.id, field: [AnyHashable(entry.id), AnyHashable("note")], fallback: entry.note,
             get: { [owner, entry] in $0.timeline(of: owner)?.entries.first { $0.id == entry.id }?.note },
             set: { [owner, entry] world, text in
@@ -537,7 +537,7 @@ private struct StoryTimelineInspector: View {
                     if let index = timeline.entries.firstIndex(where: { $0.id == entry.id }) { timeline.entries[index].note = text }
                 }
             }
-        ))
+        ), singleLine: true)
             .storyField()
     }
 

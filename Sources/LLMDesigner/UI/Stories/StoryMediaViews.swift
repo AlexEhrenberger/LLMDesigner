@@ -149,11 +149,7 @@ private struct StoryVideoCard: View {
             .onTapGesture { if !playing { playing = true } }
             .onHover { hovering = $0 }
             .help(playing ? "" : "Klick spielt das Video ab")
-            TextField("Titel oder Beschreibung der Videocard", text: caption, axis: .vertical)
-                .textFieldStyle(.plain)
-                .font(.system(size: 12.5))
-                .foregroundStyle(Theme.textPrimary)
-                .lineLimit(1...4)
+            StoryTextEditor(placeholder: "Titel oder Beschreibung der Videocard", text: caption, font: .systemFont(ofSize: 12.5))
                 .padding(.horizontal, 4)
         }
         .padding(8)
@@ -300,11 +296,7 @@ struct StoryGalleryView: View {
         return VStack(alignment: .leading, spacing: 8) {
             ZStack {
                 Color.black.opacity(0.35)
-                if let thumbnail = library.thumbnail(image, in: worldID) {
-                    Image(nsImage: thumbnail)
-                        .resizable()
-                        .scaledToFit()
-                } else {
+                StoryThumbnail(image: image, worldID: worldID, library: library) {
                     Image(systemName: "photo")
                         .font(.system(size: 26))
                         .foregroundStyle(Theme.textTertiary)
@@ -317,11 +309,7 @@ struct StoryGalleryView: View {
             .onTapGesture(count: 2) { NSWorkspace.shared.open(url) }
             .onTapGesture { withAnimation(.easeOut(duration: 0.15)) { shown = image.fileName } }
             .help("Klick zeigt das Bild groß, Doppelklick öffnet es")
-            TextField("Kurze Beschreibung …", text: caption(image), axis: .vertical)
-                .textFieldStyle(.plain)
-                .font(.system(size: 12.5))
-                .foregroundStyle(Theme.textPrimary)
-                .lineLimit(1...5)
+            StoryTextEditor(placeholder: "Kurze Beschreibung …", text: caption(image), font: .systemFont(ofSize: 12.5))
                 .padding(.horizontal, 4)
         }
         .padding(8)

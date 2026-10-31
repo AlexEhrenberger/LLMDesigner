@@ -286,14 +286,23 @@ final class StoryLibrary {
         store.imageURL(image, in: worldID)
     }
 
-    /// A picture read once and kept small, for lists and galleries.
-    func thumbnail(_ image: StoryImage, in worldID: UUID) -> NSImage? {
+    /// A picture already made small, if it was loaded before; views show it at once and otherwise call
+    /// `loadThumbnail`, so reading pictures never holds up the main thread.
+    func cachedThumbnail(_ image: StoryImage, in worldID: UUID) -> NSImage? {
+        thumbnails.object(forKey: store.imageURL(image, in: worldID).path as NSString)
+    }
+
+    /// A picture read once and kept small, for lists and galleries; decoded off the main thread.
+    func loadThumbnail(_ image: StoryImage, in worldID: UUID) async -> NSImage? {
+        if let cached = cachedThumbnail(image, in: worldID) { return cached }
         let url = store.imageURL(image, in: worldID)
-        if let cached = thumbnails.object(forKey: url.path as NSString) { return cached }
-        let options = [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceThumbnailMaxPixelSize: 480,
-                       kCGImageSourceCreateThumbnailWithTransform: true] as CFDictionary
-        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-              let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options) else { return nil }
+        let cgImage = await Task.detached(priority: .userInitiated) { () -> CGImage? in
+            let options = [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceThumbnailMaxPixelSize: 480,
+                           kCGImageSourceCreateThumbnailWithTransform: true] as CFDictionary
+            guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+            return CGImageSourceCreateThumbnailAtIndex(source, 0, options)
+        }.value
+        guard let cgImage else { return nil }
         let small = NSImage(cgImage: cgImage, size: .zero)
         thumbnails.setObject(small, forKey: url.path as NSString)
         return small

@@ -49,7 +49,7 @@ flowchart TB
 
 - **`AppModel`** (`@Observable`, auf dem Main Actor) ist der zentrale Zustand: Chats, Dokumente, Auswahl, Verbindungen, laufende Aufgaben. Er ist in viele Dateien `AppModel+….swift` aufgeteilt – je eine pro Bereich (Writer, Presenter, Personas, Thalamus, Speech, Power …).
 - **`LibrarySession`** hält die geöffnete `AppLibrary` und baut beim Bibliothekswechsel einen neuen `AppModel`. Nichts Globales überlebt den Wechsel, außer der Liste der zuletzt geöffneten Bibliotheken.
-- Die **Studios** haben eigene Bibliotheken/Modelle: `CitationLibrary` (Quellen, Zitate, Ordner) und `StoryLibrary` (Romanwelten), beide `@Observable`, lazy geladen, mit verzögertem Speichern (500 ms). `StoryLibrary` hält getippten Text als Entwurf und übernimmt ihn nach 350 ms Pause; geschrieben wird auf einer eigenen Queue.
+- Die **Studios** haben eigene Bibliotheken/Modelle: `CitationLibrary` (Quellen, Zitate, Ordner) und `StoryLibrary` (Romanwelten), beide `@Observable`, lazy geladen, mit verzögertem Speichern (500 ms). `StoryLibrary` hält getippten Text als Entwurf und übernimmt ihn nach 350 ms Pause; geschrieben wird auf einer eigenen Queue. Die Formularfelder des Stories Studio sind `StoryTextEditor` (AppKit-`NSTextView`) statt `TextField(axis: .vertical)`: Sie melden SwiftUI nur eine neue Höhe, nicht jeden Tastendruck – sonst richtete SwiftUI bei jeder Taste das ganze Fenster neu aus. Tab-Leisten (`StoryTabBar`) wählen ihre Kurzform rechnerisch aus der gemessenen Breite statt mit `ViewThatFits` und liegen nie in einer ScrollView.
 - **UI-Ansichten** lesen den `AppModel` über die SwiftUI-Umgebung (`@Environment(AppModel.self)`).
 
 ## Darstellung: SwiftUI außen, AppKit innen

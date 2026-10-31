@@ -289,7 +289,6 @@ struct StoryElementHeader<Accessory: View>: View {
     let library: StoryLibrary
     var placeholder: String?
     @ViewBuilder let accessory: () -> Accessory
-    @FocusState private var focused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -311,18 +310,11 @@ struct StoryElementHeader<Accessory: View>: View {
                     library.removeElement(ref, in: world.id)
                 }
             }
-            TextField(placeholder ?? "Name", text: $name, axis: .vertical)
-                .textFieldStyle(.plain)
-                .font(.system(size: 24, weight: .semibold))
-                .foregroundStyle(Theme.textPrimary)
-                .lineLimit(1...3)
-                .focused($focused)
+            StoryTextEditor(placeholder: placeholder ?? "Name", text: $name, font: .systemFont(ofSize: 24, weight: .semibold),
+                            singleLine: true, focusOnAppear: model.focusNameOf == ref.id)
         }
         .onAppear {
-            if model.focusNameOf == ref.id {
-                model.focusNameOf = nil
-                DispatchQueue.main.async { focused = true }
-            }
+            if model.focusNameOf == ref.id { model.focusNameOf = nil }
         }
     }
 }

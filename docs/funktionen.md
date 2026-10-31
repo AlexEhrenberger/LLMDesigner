@@ -127,7 +127,7 @@ Romanwelten mit Büchern → Akten → Kapiteln → Abschnitten. Jeder Teil besc
 
 Dazu kommen **Spezies** (Wesen der Welt: Gestalt, Fähigkeiten und Schwächen, Lebensraum mit verknüpften Orten, Kultur; Figuren gehören einer Spezies an) und **Fakten** (einfache Notizen mit Schlagworten, Bildern, Quelle und Verknüpfungen zu Figuren, Spezies, Orten und Events; die Liste durchsucht Titel, Text und Quelle; Schlagworte werden in einem Dropdown mit Mehrfachauswahl angekreuzt – auf der Faktseite zum Vergeben und Anlegen, in der Liste zum Filtern). Figuren haben einen Tab **Videocards** für kurze Videos, die in der Karte abspielen. Die Romanwelt und jedes Buch haben eine **Galerie**: Bilder mit kurzer Beschreibung, groß ansehbar mit Pfeiltasten.
 
-Getippter Text geht zuerst in einen Entwurf und erst nach einer kurzen Pause (350 ms) in die Romanwelt; so muss das Studio nicht bei jedem Tastendruck neu gezeichnet werden. Gespeichert wird im Hintergrund.
+Getippter Text geht zuerst in einen Entwurf und erst nach einer kurzen Pause (350 ms) in die Romanwelt; so muss das Studio nicht bei jedem Tastendruck neu gezeichnet werden. Gespeichert wird im Hintergrund. Die Textfelder wachsen mit dem Text (ohne Obergrenze, die Seite scrollt); Return beginnt eine neue Zeile, in Namen und Titeln beendet es die Eingabe; Tab springt ins nächste Feld. Kopf und Tabs einer Figur bleiben beim Scrollen stehen.
 
 ## Power-Zugriff
 
