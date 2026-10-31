@@ -197,7 +197,7 @@ struct StoryTabBar<Tab: Hashable>: View {
 
     /// The widest variant that fits: every title, the chosen one's, or none.
     private func titleRule(selection: Tab, room: CGFloat) -> (Tab) -> Bool {
-        if width { _ in true } <= room { return { _ in true } }
+        if width({ _ in true }) <= room { return { _ in true } }
         if width({ $0 == selection }) <= room { return { $0 == selection } }
         return { _ in false }
     }
