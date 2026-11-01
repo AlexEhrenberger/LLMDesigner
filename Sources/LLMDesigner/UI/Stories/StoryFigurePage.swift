@@ -352,7 +352,7 @@ private struct StoryRelationEditor: View {
                             .foregroundStyle(relation.attitude == attitude.value ? Theme.textPrimary : Theme.textTertiary)
                             .padding(.horizontal, 9)
                             .frame(height: 22)
-                            .background(Capsule().fill(relation.attitude == attitude.value ? StoryAttitudeBadge.color(attitude.value).opacity(0.3) : Color.white.opacity(0.03)))
+                            .background(Capsule().fill(relation.attitude == attitude.value ? StoryAttitudeBadge.color(attitude.value).opacity(0.3) : Theme.ink.opacity(0.03)))
                             .contentShape(Capsule())
                     }
                     .buttonStyle(.plain)
@@ -378,9 +378,9 @@ struct StoryAttitudeBadge: View {
     static func color(_ attitude: Int) -> Color {
         switch attitude {
         case ..<(-1): Theme.danger
-        case -1: Color(hex: 0xF2884C)
+        case -1: Theme.dynamic(dark: 0xF2884C, light: 0xD0641F)
         case 0: Theme.textTertiary
-        case 1: Color(hex: 0x8BD67A)
+        case 1: Theme.dynamic(dark: 0x8BD67A, light: 0x3D9A2B)
         default: Theme.success
         }
     }
@@ -457,7 +457,7 @@ private struct StorySceneBook: View {
             .fixedSize()
             .padding(.horizontal, 10)
             .frame(height: 26)
-            .background(Capsule().fill(filter == kind ? Theme.selection : Color.white.opacity(0.03)))
+            .background(Capsule().fill(filter == kind ? Theme.selection : Theme.ink.opacity(0.03)))
             .overlay(Capsule().strokeBorder(Theme.border))
             .contentShape(Capsule())
         }

@@ -79,7 +79,7 @@ private struct SidebarModePicker: View {
             segment("Personas", symbol: Persona.symbol, mode: .personas, count: nil, shortcut: "⌘3")
         }
         .padding(2)
-        .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Color.white.opacity(0.04)))
+        .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Theme.ink.opacity(0.04)))
         .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(Theme.border))
     }
 
@@ -837,7 +837,7 @@ struct SearchField: View {
         }
         .padding(.horizontal, 10)
         .frame(height: 32)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white.opacity(0.04)))
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.ink.opacity(0.04)))
         .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Theme.border))
     }
 }
@@ -899,7 +899,7 @@ private struct LibraryMenu: View {
             }
             .padding(.horizontal, 8)
             .frame(height: 30)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(hovering ? Theme.hover : Color.white.opacity(0.03)))
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(hovering ? Theme.hover : Theme.ink.opacity(0.03)))
             .contentShape(Rectangle())
         }
         .menuStyle(.button)

@@ -150,7 +150,7 @@ private struct ModelRow: View {
                     .font(.system(size: 13))
                     .foregroundStyle(model.isLoaded ? Theme.textPrimary : Theme.textTertiary)
                     .frame(width: 30, height: 30)
-                    .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color.white.opacity(0.05)))
+                    .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Theme.ink.opacity(0.05)))
                 VStack(alignment: .leading, spacing: 4) {
                     Text(model.displayName)
                         .font(.system(size: 13.5, weight: .medium))

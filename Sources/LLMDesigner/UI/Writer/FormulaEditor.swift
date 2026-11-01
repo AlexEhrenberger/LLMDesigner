@@ -478,7 +478,6 @@ struct FormulaEditorSheet: View {
         .padding(20)
         .frame(width: 720)
         .background(Theme.surface)
-        .environment(\.colorScheme, .dark)
     }
 
     private var header: some View {
@@ -517,7 +516,7 @@ struct FormulaEditorSheet: View {
             .frame(minHeight: 96, alignment: .top)
         }
         .padding(10)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.white.opacity(0.035)))
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.ink.opacity(0.035)))
         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Theme.border))
     }
 
@@ -568,7 +567,7 @@ struct FormulaEditorSheet: View {
                     .font(.system(size: 12.5, design: .monospaced))
                     .lineLimit(1...4)
                     .padding(8)
-                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.black.opacity(0.25)))
+                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.shade.opacity(0.25)))
                     .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(sourceFocused ? Theme.accent.opacity(0.6) : Theme.border))
                     .focused($sourceFocused)
                     .onChange(of: sourceFocused) { _, focused in model.isEditingSource = focused }
@@ -601,7 +600,7 @@ struct FormulaEditorSheet: View {
                             .padding(10)
                     }
                     .frame(maxHeight: 150)
-                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.black.opacity(0.25)))
+                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.shade.opacity(0.25)))
                 } else {
                     Label(model.pythonError ?? "Die Formel ist noch leer.", systemImage: "exclamationmark.triangle")
                         .font(.system(size: 11.5))
@@ -610,14 +609,14 @@ struct FormulaEditorSheet: View {
             }
         }
         .padding(12)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.white.opacity(0.035)))
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.ink.opacity(0.035)))
         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Theme.border))
     }
 
     private static func highlighted(_ code: String) -> AttributedString {
-        let text = NSMutableAttributedString(string: code, attributes: [.foregroundColor: NSColor(hex: 0xE8E8EC)])
+        let text = NSMutableAttributedString(string: code, attributes: [.foregroundColor: NSColor(Theme.textPrimary)])
         for token in CodeHighlighter.tokens(in: code, language: .python) {
-            if let color = CodeTheme.color(token.kind, light: false) { text.addAttribute(.foregroundColor, value: color, range: token.range) }
+            if let color = CodeTheme.dynamicColor(token.kind) { text.addAttribute(.foregroundColor, value: color, range: token.range) }
         }
         return AttributedString(text)
     }
@@ -645,7 +644,7 @@ struct FormulaEditorSheet: View {
             }
         }
         .padding(12)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.white.opacity(0.035)))
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.ink.opacity(0.035)))
         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Theme.border))
     }
 
@@ -787,7 +786,7 @@ struct FormulaEditorSheet: View {
 
     private var plotPreview: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color(hex: 0x141417))
+            RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.well)
             if let image = model.plotPreview {
                 Image(nsImage: image)
                     .resizable()
@@ -807,7 +806,7 @@ struct FormulaEditorSheet: View {
                 }
                 .padding(12)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(hex: 0x141417).opacity(model.plotPreview == nil ? 0 : 0.85))
+                .background(Theme.well.opacity(model.plotPreview == nil ? 0 : 0.85))
             } else if model.plotPreview == nil {
                 Text("Vorschau erscheint gleich …")
                     .font(.system(size: 11.5))
@@ -819,7 +818,7 @@ struct FormulaEditorSheet: View {
                     .foregroundStyle(Theme.textTertiary)
                     .padding(.horizontal, 7)
                     .padding(.vertical, 3)
-                    .background(Capsule().fill(Color.black.opacity(0.45)))
+                    .background(Capsule().fill(Theme.shade.opacity(0.45)))
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                     .padding(8)
                     .allowsHitTesting(false)
@@ -933,7 +932,7 @@ private struct PaletteButton: View {
                 }
             }
             .frame(width: 52, height: 40)
-            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(hovering ? Theme.hover : Color.white.opacity(0.03)))
+            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(hovering ? Theme.hover : Theme.ink.opacity(0.03)))
             .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(hovering ? Theme.strongBorder : .clear))
             .contentShape(Rectangle())
         }
@@ -1047,7 +1046,9 @@ final class MathCanvasView: NSView, NSTextInputClient {
     func render(_ latex: String) {
         guard latex != renderedLaTeX else { return }
         renderedLaTeX = latex
-        if let rendered = MathRenderer.render(latex, fontSize: FormulaEditorModel.canvasFontSize, display: true, color: NSColor(hex: 0xEDEDEF)) {
+        // The formula is a picture in the text colour of the design; a change of design draws it again.
+        let color = Theme.isLight(effectiveAppearance) ? NSColor(hex: 0x1C1C1F) : NSColor(hex: 0xEDEDEF)
+        if let rendered = MathRenderer.render(latex, fontSize: FormulaEditorModel.canvasFontSize, display: true, color: color) {
             image = rendered.image
             failedSource = nil
         } else {
@@ -1055,6 +1056,13 @@ final class MathCanvasView: NSView, NSTextInputClient {
             failedSource = model?.latex
         }
         needsDisplay = true
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        let latex = renderedLaTeX
+        renderedLaTeX = ""
+        render(latex)
     }
 
     private var imageRect: NSRect? {
@@ -1070,10 +1078,10 @@ final class MathCanvasView: NSView, NSTextInputClient {
 
     override func draw(_ dirtyRect: NSRect) {
         let box = NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), xRadius: 12, yRadius: 12)
-        NSColor(hex: 0x111114).setFill()
+        NSColor(Theme.well).setFill()
         box.fill()
         let focused = window?.firstResponder === self
-        (focused ? NSColor(hex: 0xA996FF).withAlphaComponent(0.7) : NSColor.white.withAlphaComponent(0.1)).setStroke()
+        NSColor(focused ? Theme.accent.opacity(0.7) : Theme.border).setStroke()
         box.lineWidth = focused ? 1.5 : 1
         box.stroke()
 
@@ -1081,21 +1089,21 @@ final class MathCanvasView: NSView, NSTextInputClient {
             image.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: [.interpolation: NSImageInterpolation.high.rawValue])
         } else {
             let text = failedSource.map { "Die Formel lässt sich so nicht darstellen:\n" + $0 } ?? ""
-            let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.monospacedSystemFont(ofSize: 12, weight: .regular), .foregroundColor: NSColor(hex: 0xF2B14C)]
+            let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.monospacedSystemFont(ofSize: 12, weight: .regular), .foregroundColor: NSColor(Theme.warning)]
             (text as NSString).draw(in: bounds.insetBy(dx: 18, dy: 16), withAttributes: attributes)
         }
         if let model, model.editing.formula.isEmpty, model.commandBuffer == nil {
             let hint = "Formel eingeben – z. B. f(x) = x^2/2 oder über die Palette"
-            let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 13), .foregroundColor: NSColor(hex: 0x6E6E77)]
+            let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 13), .foregroundColor: NSColor(Theme.textTertiary)]
             let size = (hint as NSString).size(withAttributes: attributes)
             (hint as NSString).draw(at: NSPoint(x: bounds.midX - size.width / 2, y: bounds.maxY - size.height - 14), withAttributes: attributes)
         }
         if let command = model?.commandBuffer {
             let text = "\\" + command + markedText
-            let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.monospacedSystemFont(ofSize: 13, weight: .medium), .foregroundColor: NSColor(hex: 0xA996FF)]
+            let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.monospacedSystemFont(ofSize: 13, weight: .medium), .foregroundColor: NSColor(Theme.accent)]
             let size = (text as NSString).size(withAttributes: attributes)
             let pill = NSRect(x: 12, y: bounds.maxY - size.height - 18, width: size.width + 16, height: size.height + 8)
-            NSColor(hex: 0xA996FF).withAlphaComponent(0.14).setFill()
+            NSColor(Theme.accent.opacity(0.14)).setFill()
             NSBezierPath(roundedRect: pill, xRadius: 6, yRadius: 6).fill()
             (text as NSString).draw(at: NSPoint(x: pill.minX + 8, y: pill.minY + 4), withAttributes: attributes)
         }

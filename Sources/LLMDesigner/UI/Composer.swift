@@ -69,7 +69,7 @@ struct ComposerView: View {
         .padding(.bottom, 10)
         .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Theme.surface))
         .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(Theme.strongBorder))
-        .shadow(color: .black.opacity(0.45), radius: 24, y: 10)
+        .shadow(color: Theme.shade.opacity(0.45), radius: 24, y: 10)
     }
 }
 
@@ -332,7 +332,7 @@ struct SendButton: View {
         Button(action: isGenerating ? onStop : onSend) {
             Image(systemName: isGenerating ? "stop.fill" : "arrow.up")
                 .font(.system(size: isGenerating ? 11 : 14, weight: .bold))
-                .foregroundStyle(active ? Color.black : Theme.textTertiary)
+                .foregroundStyle(active ? Theme.background : Theme.textTertiary)
                 .frame(width: 32, height: 32)
                 .background(Circle().fill(active ? Theme.textPrimary : Theme.elevated))
                 .contentShape(Circle())

@@ -101,7 +101,7 @@ private struct PowerModulePicker: View {
                     .foregroundStyle(isSelected ? Theme.textPrimary : Theme.textTertiary)
                     .frame(maxWidth: .infinity)
                     .frame(height: 38)
-                    .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(isSelected ? Color.white.opacity(0.08) : .clear))
+                    .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(isSelected ? Theme.ink.opacity(0.08) : .clear))
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -109,7 +109,7 @@ private struct PowerModulePicker: View {
             }
         }
         .padding(3)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.white.opacity(0.03)))
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.ink.opacity(0.03)))
         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Theme.border))
     }
 }
@@ -305,7 +305,7 @@ struct PowerDropZone: View {
         .foregroundStyle(targeted ? Theme.textPrimary : Theme.textTertiary)
         .frame(maxWidth: .infinity)
         .frame(height: 34)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(targeted ? Theme.accent.opacity(0.18) : Color.white.opacity(0.02)))
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(targeted ? Theme.accent.opacity(0.18) : Theme.ink.opacity(0.02)))
         .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(targeted ? Theme.accent : Theme.border, style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
         .onDrop(of: PowerDrag.accepted, isTargeted: $targeted) { providers in
             PowerDrag.load(providers, onDrop)
@@ -411,7 +411,7 @@ struct PowerBlockRow: View {
                 .foregroundStyle(Theme.textSecondary)
                 .padding(6)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: 5, style: .continuous).fill(Color.white.opacity(0.04)))
+                .background(RoundedRectangle(cornerRadius: 5, style: .continuous).fill(Theme.ink.opacity(0.04)))
                 .textSelection(.enabled)
         case .quote, .box:
             base.font(.system(size: 12.5))
@@ -437,7 +437,7 @@ struct PowerBlockRow: View {
                 .scrollContentBackground(.hidden)
                 .frame(minHeight: 60, maxHeight: 220)
                 .padding(4)
-                .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Color.white.opacity(0.05)))
+                .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Theme.ink.opacity(0.05)))
             HStack(spacing: 10) {
                 Button("Abbrechen") { editing = nil }
                     .buttonStyle(.plain)

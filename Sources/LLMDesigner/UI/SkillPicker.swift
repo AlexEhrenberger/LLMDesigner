@@ -192,7 +192,7 @@ private struct SkillPickerPanel: View {
         }
         .padding(.horizontal, 10)
         .frame(height: 30)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white.opacity(0.05)))
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.ink.opacity(0.05)))
         .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Theme.border))
     }
 
@@ -315,7 +315,7 @@ private struct SkillPickerPanel: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(10)
             }
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.black.opacity(0.25)))
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.shade.opacity(0.25)))
         }
         .padding(12)
     }
@@ -339,7 +339,7 @@ private struct SkillPickerRow: View {
                 if isOn {
                     Image(systemName: "checkmark")
                         .font(.system(size: 9, weight: .heavy))
-                        .foregroundStyle(Color.black)
+                        .foregroundStyle(Theme.background)
                 }
             }
             .frame(width: 16, height: 16)

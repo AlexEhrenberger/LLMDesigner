@@ -332,7 +332,7 @@ struct WriterImageBar: View {
                 .buttonStyle(.plain)
                 .focusable(false)
                 .help("Formel und Plot bearbeiten")
-                Rectangle().fill(Color.white.opacity(0.14)).frame(width: 1, height: 16).padding(.horizontal, 4)
+                Rectangle().fill(Theme.ink.opacity(0.14)).frame(width: 1, height: 16).padding(.horizontal, 4)
             }
             if let figure {
                 Button(action: onEditFigure) {
@@ -347,7 +347,7 @@ struct WriterImageBar: View {
                 .buttonStyle(.plain)
                 .focusable(false)
                 .help("Im Editor öffnen (Doppelklick)")
-                Rectangle().fill(Color.white.opacity(0.14)).frame(width: 1, height: 16).padding(.horizontal, 4)
+                Rectangle().fill(Theme.ink.opacity(0.14)).frame(width: 1, height: 16).padding(.horizontal, 4)
             }
             if let generation {
                 Button(action: onEditGeneration) {
@@ -370,21 +370,20 @@ struct WriterImageBar: View {
                 case .finished:
                     icon("arrow.clockwise", help: "Neu generieren – gleicher Prompt, anderer Seed", action: onRegenerate)
                 }
-                Rectangle().fill(Color.white.opacity(0.14)).frame(width: 1, height: 16).padding(.horizontal, 4)
+                Rectangle().fill(Theme.ink.opacity(0.14)).frame(width: 1, height: 16).padding(.horizontal, 4)
             }
             ForEach(Self.sizes, id: \.0) { title, value in
                 chip(title, isActive: width == value) { onWidth(value) }
                     .help(value.map { "\($0) % der Spaltenbreite" } ?? "Eigene Größe des Bildes, höchstens die Spaltenbreite")
             }
-            Rectangle().fill(Color.white.opacity(0.14)).frame(width: 1, height: 16).padding(.horizontal, 4)
+            Rectangle().fill(Theme.ink.opacity(0.14)).frame(width: 1, height: 16).padding(.horizontal, 4)
             icon("text.below.photo", help: hasCaption ? "Bildunterschrift bearbeiten" : "Bildunterschrift hinzufügen", action: onCaption)
             icon("trash", help: "Bild entfernen", action: onDelete)
         }
         .padding(4)
-        .background(Capsule().fill(Color(hex: 0x1C1C20).opacity(0.96)))
-        .overlay(Capsule().strokeBorder(Color.white.opacity(0.12)))
-        .shadow(color: .black.opacity(0.35), radius: 10, y: 3)
-        .environment(\.colorScheme, .dark)
+        .background(Capsule().fill(Theme.elevated.opacity(0.96)))
+        .overlay(Capsule().strokeBorder(Theme.ink.opacity(0.12)))
+        .shadow(color: Theme.shade.opacity(0.35), radius: 10, y: 3)
         .fixedSize()
     }
 

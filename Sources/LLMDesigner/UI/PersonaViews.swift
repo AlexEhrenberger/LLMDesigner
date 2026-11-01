@@ -51,7 +51,7 @@ struct PersonaAvatar: View {
         }
         .frame(width: size, height: size)
         .clipShape(Circle())
-        .overlay(Circle().strokeBorder(Color.white.opacity(0.1)))
+        .overlay(Circle().strokeBorder(Theme.ink.opacity(0.1)))
     }
 }
 
@@ -268,7 +268,7 @@ private struct PersonaPickerPanel: View {
         }
         .padding(.horizontal, 10)
         .frame(height: 30)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white.opacity(0.05)))
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.ink.opacity(0.05)))
         .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Theme.border))
     }
 

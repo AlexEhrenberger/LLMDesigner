@@ -162,7 +162,7 @@ private struct CommentThreadCard: View {
                     .lineLimit(1...6)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 6)
-                    .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color.white.opacity(0.05)))
+                    .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Theme.ink.opacity(0.05)))
                     .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(replyFocused ? Theme.accent.opacity(0.5) : Theme.border))
                     .focused($replyFocused)
                     .onSubmit(send)
@@ -198,7 +198,7 @@ private struct CommentThreadCard: View {
             }
         }
         .padding(10)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(isActive ? Color(hex: 0xF2C14C).opacity(0.1) : Color.white.opacity(hovering ? 0.05 : 0.03)))
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(isActive ? Color(hex: 0xF2C14C).opacity(0.1) : Theme.ink.opacity(hovering ? 0.05 : 0.03)))
         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(isActive ? Color(hex: 0xF2C14C).opacity(0.45) : Theme.border))
         .onHover { hovering = $0 }
         .onAppear { if isFocused { replyFocused = true } }

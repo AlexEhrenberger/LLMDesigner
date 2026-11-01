@@ -59,7 +59,7 @@ struct FigureChip: View {
             .padding(.horizontal, 9)
             .frame(maxWidth: .infinity)
             .frame(height: 26)
-            .background(Capsule().fill(isSelected ? Theme.accent.opacity(0.18) : Color.white.opacity(hovering ? 0.08 : 0.04)))
+            .background(Capsule().fill(isSelected ? Theme.accent.opacity(0.18) : Theme.ink.opacity(hovering ? 0.08 : 0.04)))
             .overlay(Capsule().strokeBorder(isSelected ? Theme.accent.opacity(0.5) : Color.clear))
             .contentShape(Capsule())
         }
@@ -85,7 +85,7 @@ struct FigureSwatch: View {
                     if hex == nil { Image(systemName: "slash.circle").font(.system(size: 11)).foregroundStyle(Theme.textTertiary) }
                 }
                 .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous)
-                    .strokeBorder(isSelected ? Theme.accent : Color.white.opacity(0.18), lineWidth: isSelected ? 2 : 1))
+                    .strokeBorder(isSelected ? Theme.accent : Theme.ink.opacity(0.18), lineWidth: isSelected ? 2 : 1))
                 .frame(width: 20, height: 20)
         }
         .buttonStyle(.plain)
@@ -105,7 +105,7 @@ struct FigureField: View {
             .font(.system(size: 12.5, design: monospaced ? .monospaced : .default))
             .padding(.horizontal, 9)
             .frame(height: 28)
-            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color.white.opacity(0.05)))
+            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Theme.ink.opacity(0.05)))
             .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(Theme.border))
     }
 }

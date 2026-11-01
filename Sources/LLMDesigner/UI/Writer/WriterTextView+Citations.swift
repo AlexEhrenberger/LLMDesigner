@@ -538,7 +538,6 @@ private struct CitationItemsEditor: View {
         }
         .padding(16)
         .frame(width: 460)
-        .environment(\.colorScheme, .dark)
     }
 
     /// "436" becomes "S. 436".

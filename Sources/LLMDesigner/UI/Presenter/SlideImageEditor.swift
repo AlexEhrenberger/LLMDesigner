@@ -283,7 +283,7 @@ struct SlideImageEditor: View {
         .padding(.horizontal, 4)
         .background(Capsule().fill(Theme.elevated))
         .overlay(Capsule().strokeBorder(Theme.strongBorder))
-        .shadow(color: .black.opacity(0.35), radius: 8, y: 3)
+        .shadow(color: Theme.shade.opacity(0.35), radius: 8, y: 3)
         .fixedSize()
         .position(x: x, y: y)
     }
@@ -528,7 +528,7 @@ struct SlideImageEditor: View {
             .padding(.horizontal, 4)
             .background(Capsule().fill(Theme.elevated))
             .overlay(Capsule().strokeBorder(Theme.strongBorder))
-            .shadow(color: .black.opacity(0.35), radius: 8, y: 3)
+            .shadow(color: Theme.shade.opacity(0.35), radius: 8, y: 3)
             .fixedSize()
             .position(
                 x: min(max(frame.midX * scale, 150), size.width - 150),

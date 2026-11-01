@@ -211,7 +211,7 @@ private struct PillButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 12.5, weight: .medium))
-            .foregroundStyle(prominent ? Color.black : Theme.textPrimary)
+            .foregroundStyle(prominent ? Theme.background : Theme.textPrimary)
             .padding(.horizontal, 13)
             .padding(.vertical, 6)
             .background(Capsule().fill(prominent ? Theme.textPrimary : Theme.elevated))

@@ -226,7 +226,7 @@ struct StoryTagMenuButton: View {
             .foregroundStyle(!allowsNew && !selected.isEmpty ? Theme.textPrimary : Theme.textSecondary)
             .padding(.horizontal, 9)
             .frame(height: 24)
-            .background(Capsule().fill(!allowsNew && !selected.isEmpty ? color.opacity(0.25) : Color.white.opacity(0.04)))
+            .background(Capsule().fill(!allowsNew && !selected.isEmpty ? color.opacity(0.25) : Theme.ink.opacity(0.04)))
             .overlay(Capsule().strokeBorder(Theme.border, style: StrokeStyle(lineWidth: 1, dash: allowsNew ? [3, 2] : [])))
             .contentShape(Capsule())
         }

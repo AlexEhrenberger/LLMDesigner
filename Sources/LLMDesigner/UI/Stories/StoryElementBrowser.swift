@@ -169,7 +169,7 @@ private struct StoryElementList: View {
             }
             .padding(.horizontal, 9)
             .frame(height: 28)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white.opacity(0.045)))
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.ink.opacity(0.045)))
             .padding(.horizontal, 10)
             .padding(.bottom, 8)
             if kind == .fact {

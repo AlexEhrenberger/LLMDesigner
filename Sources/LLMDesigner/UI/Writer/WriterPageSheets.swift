@@ -258,7 +258,7 @@ private struct PagePreview: View {
             }
             context.stroke(Path(text), with: .color(Theme.accent.opacity(0.7)), style: StrokeStyle(lineWidth: 0.8, dash: [3, 2]))
         }
-        .shadow(color: .black.opacity(0.35), radius: 6, y: 2)
+        .shadow(color: Theme.shade.opacity(0.35), radius: 6, y: 2)
     }
 }
 

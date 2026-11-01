@@ -131,7 +131,7 @@ struct SlideBackgroundPicker: View {
                         Circle()
                             .fill(Color(hex: hex))
                             .frame(width: 22, height: 22)
-                            .overlay(Circle().strokeBorder(Color.white.opacity(0.2)))
+                            .overlay(Circle().strokeBorder(Theme.ink.opacity(0.2)))
                             .overlay(Circle().strokeBorder(Theme.accent, lineWidth: selected == hex ? 2 : 0).padding(-3))
                     }
                     .buttonStyle(.plain)
@@ -219,7 +219,7 @@ struct SlideBackgroundPicker: View {
             }
         }
         .padding(10)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white.opacity(0.04)))
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.ink.opacity(0.04)))
     }
 
     private func pictures(current: SlideBackground, slide: PresentationSlide, scope: Scope) -> some View {
@@ -278,7 +278,7 @@ struct SlideBackgroundPicker: View {
             }
         }
         .padding(10)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white.opacity(0.04)))
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.ink.opacity(0.04)))
     }
 
     private func footer(slide: PresentationSlide) -> some View {
@@ -323,7 +323,7 @@ struct SlideBackgroundPicker: View {
 
     private func selectionRing(_ isSelected: Bool) -> some View {
         RoundedRectangle(cornerRadius: 6, style: .continuous)
-            .strokeBorder(isSelected ? Theme.accent : Color.white.opacity(0.12), lineWidth: isSelected ? 2 : 1)
+            .strokeBorder(isSelected ? Theme.accent : Theme.ink.opacity(0.12), lineWidth: isSelected ? 2 : 1)
     }
 
     private func wideButton(_ title: String, symbol: String, action: @escaping () -> Void) -> some View {
@@ -482,7 +482,6 @@ struct SlideBackgroundGeneratorSheet: View {
         .padding(20)
         .frame(width: 520)
         .background(Theme.surface)
-        .environment(\.colorScheme, .dark)
         .task {
             // Checked again every few seconds while Draw Things isn't there, so starting it is noticed.
             while !Task.isCancelled {

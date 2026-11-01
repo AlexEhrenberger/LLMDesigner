@@ -34,6 +34,20 @@ struct SettingsView: View {
             }
 
             Section {
+                Picker("Design", selection: $app.appearance) {
+                    ForEach(AppAppearance.allCases) { appearance in
+                        Text(appearance.label).tag(appearance)
+                    }
+                }
+                .pickerStyle(.segmented)
+            } header: {
+                Text("Darstellung")
+            } footer: {
+                Text("„Wie das System“ folgt dem Erscheinungsbild in den Systemeinstellungen und wechselt mit ihm, auch beim automatischen Wechsel am Abend. Im dunklen Design kann Writer Studio weiter zwischen hellem und dunklem Blatt wechseln, im hellen ist das Blatt immer hell.")
+                    .foregroundStyle(Theme.textTertiary)
+            }
+
+            Section {
                 Picker("Quelle", selection: $app.provider) {
                     ForEach(LLMProvider.allCases) { provider in
                         Text(provider.label).tag(provider)
@@ -167,7 +181,7 @@ struct SettingsView: View {
                         .frame(minHeight: 90)
                         .scrollContentBackground(.hidden)
                         .padding(6)
-                        .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.04)))
+                        .background(RoundedRectangle(cornerRadius: 8).fill(Theme.ink.opacity(0.04)))
                         .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.border))
                     Text("Wird jedem Chat vorangestellt. Leer lassen, um die Vorgabe des Modells zu nutzen.")
                         .font(.system(size: 11.5))
@@ -185,7 +199,6 @@ struct SettingsView: View {
             qwenReachable = await client.isReachable()
             if let voices = try? await client.voices(), !voices.isEmpty { qwenVoices = voices }
         }
-        .preferredColorScheme(.dark)
     }
 
     private var statusText: String {

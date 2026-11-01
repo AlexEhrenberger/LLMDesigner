@@ -18,7 +18,6 @@ struct RootView: View {
         .background(Theme.background)
         .ignoresSafeArea()
         .background(WindowConfigurator())
-        .preferredColorScheme(.dark)
         .tint(Theme.accent)
         .onAppear { MessageContextMenu.install(app: app) }
         .alert("Diktat nicht möglich", isPresented: dictationErrorBinding) {

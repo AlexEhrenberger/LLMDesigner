@@ -19,7 +19,7 @@ struct ChatSetupBar: View {
                 .padding(.leading, hasPersona ? 0 : 2)
         }
         .frame(height: 26)
-        .background(Capsule().fill(Color.white.opacity(0.035)))
+        .background(Capsule().fill(Theme.ink.opacity(0.035)))
         .overlay(Capsule().strokeBorder(Theme.border))
     }
 }
@@ -191,7 +191,7 @@ struct ApplicationMenu: View {
         .menuIndicator(.hidden)
         .fixedSize()
         .onHover { hovering = $0 }
-        .background(Capsule().fill(Color.white.opacity(0.035)))
+        .background(Capsule().fill(Theme.ink.opacity(0.035)))
         .overlay(Capsule().strokeBorder(Theme.border))
         .help("Applikation öffnen, in der dir die KI hilft")
     }
@@ -274,7 +274,7 @@ private struct ContextCard: View {
         .frame(width: 300)
         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.elevated))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Theme.strongBorder))
-        .shadow(color: .black.opacity(0.5), radius: 18, y: 8)
+        .shadow(color: Theme.shade.opacity(0.5), radius: 18, y: 8)
     }
 
     private func row(color: Color?, label: String, tokens: Int) -> some View {
@@ -336,7 +336,7 @@ private struct ContextBar: View {
             .clipped()
         }
         .frame(height: height)
-        .background(Color.white.opacity(0.08))
+        .background(Theme.ink.opacity(0.08))
         .clipShape(Capsule())
     }
 }
@@ -358,11 +358,11 @@ private enum ContextNumbers {
     static func color(of kind: ContextUsage.Kind) -> Color {
         switch kind {
         case .system: Theme.accent
-        case .memory: Color(hex: 0xD9D0FF)
-        case .tools: Color(hex: 0x6FD3FF)
-        case .questions: Color(hex: 0x3FD68F)
-        case .answers: Color(hex: 0xFF8FD6)
-        case .images: Color(hex: 0xF2B14C)
+        case .memory: Theme.dynamic(dark: 0xD9D0FF, light: 0x8B7BE0)
+        case .tools: Theme.dynamic(dark: 0x6FD3FF, light: 0x0A8BC7)
+        case .questions: Theme.success
+        case .answers: Theme.dynamic(dark: 0xFF8FD6, light: 0xC9409A)
+        case .images: Theme.warning
         }
     }
 }

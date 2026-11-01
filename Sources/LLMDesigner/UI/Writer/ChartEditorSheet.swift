@@ -118,6 +118,7 @@ final class ChartEditorModel {
 /// Makes or edits a chart: its kind, title, axes, colours, legend and numbers, with a preview on the dark sheet or on
 /// white paper. A chart of a table takes the table's numbers and follows them.
 struct ChartEditorSheet: View {
+    @Environment(\.colorScheme) private var colorScheme
     @State private var model: ChartEditorModel
     let onCommit: (_ images: WriterFigureImages, _ recipe: Data, _ caption: String, _ linkedTable: String?) -> Void
     let onCancel: () -> Void
@@ -163,7 +164,8 @@ struct ChartEditorSheet: View {
         .padding(20)
         .frame(width: 940, height: 680)
         .background(Theme.surface)
-        .environment(\.colorScheme, .dark)
+        // In the light design the sheet is always white.
+        .onAppear { if colorScheme == .light { model.previewDark = false } }
     }
 
     private var preview: some View {
@@ -202,7 +204,7 @@ struct ChartEditorSheet: View {
                 .font(.system(size: 12))
             }
             .padding(12)
-            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.white.opacity(0.03)))
+            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.ink.opacity(0.03)))
         } else {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
@@ -226,7 +228,7 @@ struct ChartEditorSheet: View {
                                             .multilineTextAlignment(column == 0 ? .leading : .trailing)
                                             .padding(.horizontal, 6)
                                             .frame(width: column == 0 ? 110 : 76, height: 24)
-                                            .background(RoundedRectangle(cornerRadius: 5).fill(Color.white.opacity(row == 0 || column == 0 ? 0.07 : 0.035)))
+                                            .background(RoundedRectangle(cornerRadius: 5).fill(Theme.ink.opacity(row == 0 || column == 0 ? 0.07 : 0.035)))
                                             .contextMenu {
                                                 if row > 0 { Button("Zeile löschen") { model.removeRow(row) } }
                                                 if column > 0 { Button("Reihe löschen") { model.removeSeries(column) } }
@@ -296,7 +298,7 @@ struct ChartEditorSheet: View {
                             }
                             .padding(.horizontal, 7)
                             .frame(height: 26)
-                            .background(RoundedRectangle(cornerRadius: 7).fill(Color.white.opacity(model.chart.palette == palette ? 0.1 : 0.03)))
+                            .background(RoundedRectangle(cornerRadius: 7).fill(Theme.ink.opacity(model.chart.palette == palette ? 0.1 : 0.03)))
                             .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(model.chart.palette == palette ? Theme.accent.opacity(0.6) : .clear))
                         }
                         .buttonStyle(.plain)

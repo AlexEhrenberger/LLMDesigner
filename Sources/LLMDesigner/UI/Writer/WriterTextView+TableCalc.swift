@@ -411,16 +411,15 @@ struct WriterTableBar: View {
             icon("chart.bar.xaxis", help: "Diagramm aus der Tabelle – folgt ihr, wenn sich die Zahlen ändern", action: onChart)
         }
         .padding(3)
-        .background(Capsule().fill(Color(hex: 0x1C1C20).opacity(0.97)))
-        .overlay(Capsule().strokeBorder(Color.white.opacity(0.12)))
-        .shadow(color: .black.opacity(0.3), radius: 8, y: 2)
-        .environment(\.colorScheme, .dark)
+        .background(Capsule().fill(Theme.elevated.opacity(0.97)))
+        .overlay(Capsule().strokeBorder(Theme.ink.opacity(0.12)))
+        .shadow(color: Theme.shade.opacity(0.3), radius: 8, y: 2)
         .fixedSize()
         .onAppear { text = formula.map { "=" + $0 } ?? "" }
     }
 
     private var divider: some View {
-        Rectangle().fill(Color.white.opacity(0.14)).frame(width: 1, height: 16).padding(.horizontal, 2)
+        Rectangle().fill(Theme.ink.opacity(0.14)).frame(width: 1, height: 16).padding(.horizontal, 2)
     }
 
     private func icon(_ symbol: String, help: String, action: @escaping () -> Void) -> some View {

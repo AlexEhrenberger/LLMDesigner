@@ -1,6 +1,7 @@
 import AppKit
 
-/// Colours of Writer Studio: a dark sheet that matches the app, or white paper.
+/// Colours of Writer Studio: a dark sheet that matches the dark design, or white paper. Around the sheet lies the
+/// app's desk (`Theme.desk`), which follows the design.
 struct WriterPalette: Equatable {
     let isLight: Bool
     let windowBackground: NSColor
@@ -41,7 +42,7 @@ struct WriterPalette: Equatable {
 
     static let dark = WriterPalette(
         isLight: false,
-        windowBackground: NSColor(hex: 0x0C0C0E),
+        windowBackground: NSColor(Theme.desk),
         page: NSColor(hex: 0x141417),
         pageBorder: NSColor.white.withAlphaComponent(0.07),
         text: NSColor(hex: 0xE8E8EC),
@@ -60,7 +61,7 @@ struct WriterPalette: Equatable {
 
     static let light = WriterPalette(
         isLight: true,
-        windowBackground: NSColor(hex: 0x0C0C0E),
+        windowBackground: NSColor(Theme.desk),
         page: NSColor(hex: 0xFFFFFF),
         pageBorder: NSColor.black.withAlphaComponent(0.08),
         text: NSColor(hex: 0x1C1C1F),

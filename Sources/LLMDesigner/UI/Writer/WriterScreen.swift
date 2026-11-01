@@ -4,6 +4,7 @@ import SwiftUI
 /// glowing frame from where the composer was to the size of the sheet; the toolbar drops in button by button.
 struct WriterScreen: View {
     @Environment(AppModel.self) private var app
+    @Environment(\.colorScheme) private var colorScheme
     @State private var controller = WriterEditorController()
     @State private var assistant = WriterAssistant()
     @State private var unfold: CGFloat = 0
@@ -139,7 +140,7 @@ struct WriterScreen: View {
                         WriterEditor(
                             app: app,
                             document: document,
-                            palette: (app.writerLightPaper ? WriterPalette.light : .dark).with(format: document.pageFormat, setup: document.pageSetup),
+                            palette: (lightPaper ? WriterPalette.light : .dark).with(format: document.pageFormat, setup: document.pageSetup),
                             controller: controller,
                             assistant: assistant,
                             isReadingAloud: app.speakingDocumentID != nil,
@@ -151,7 +152,7 @@ struct WriterScreen: View {
                         if showsAnalysis {
                             ContentAnalysisView(
                                 document: document,
-                                colors: .make(lightPaper: app.writerLightPaper),
+                                colors: .make(lightPaper: lightPaper),
                                 scrollTarget: $analysisScrollTarget
                             ) { anchor in
                                 jump(to: anchor, in: document)
@@ -176,7 +177,7 @@ struct WriterScreen: View {
                                 .transition(.move(edge: .top).combined(with: .opacity))
                         }
                         if showsGlow {
-                            UnfoldingFrame(progress: unfold, lightPaper: app.writerLightPaper,
+                            UnfoldingFrame(progress: unfold, lightPaper: lightPaper,
                                            columnWidth: WriterStyler.columnWidth(document.pageFormat, family: document.textFont, setup: document.pageSetup)
                                                ?? WriterTextView.maxColumnWidth)
                                 .allowsHitTesting(false)
@@ -197,6 +198,8 @@ struct WriterScreen: View {
                 if isShown { NSApp.keyWindow?.makeFirstResponder(nil) } else { controller.focus() }
             }
     }
+
+    private var lightPaper: Bool { app.writerUsesLightPaper(colorScheme) }
 
     /// From the analysis to the passage it is about: back to the document, then scroll there.
     private func jump(to anchor: DocumentAnchor, in document: WriterDocument) {
@@ -247,7 +250,7 @@ private struct UnfoldingFrame: View {
 
             ZStack {
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .fill((lightPaper ? Color.white : Color(hex: 0x141417)).opacity(Double(progress)))
+                    .fill(Color(nsColor: (lightPaper ? WriterPalette.light : .dark).page).opacity(Double(progress)))
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
                     .strokeBorder(
                         AngularGradient(
@@ -342,7 +345,7 @@ struct WriterAudioStatus: View {
             .frame(height: 38)
             .background(Capsule().fill(Theme.elevated))
             .overlay(Capsule().strokeBorder(Theme.strongBorder))
-            .shadow(color: .black.opacity(0.4), radius: 16, y: 6)
+            .shadow(color: Theme.shade.opacity(0.4), radius: 16, y: 6)
     }
 
     private func stopButton(_ help: String, action: @escaping () -> Void) -> some View {
@@ -351,7 +354,7 @@ struct WriterAudioStatus: View {
                 .font(.system(size: 10, weight: .bold))
                 .foregroundStyle(Theme.textPrimary)
                 .frame(width: 26, height: 26)
-                .background(Circle().fill(Color.white.opacity(0.1)))
+                .background(Circle().fill(Theme.ink.opacity(0.1)))
         }
         .buttonStyle(.plain)
         .help(help)
@@ -381,6 +384,7 @@ private struct MicrophoneLevel: View {
 
 private struct WriterTopBar: View {
     @Environment(AppModel.self) private var app
+    @Environment(\.colorScheme) private var colorScheme
     let document: WriterDocument
     /// The pages of a paperback or a Normseite, as the editor counts them.
     let pageCount: WriterTextView.PageCount?
@@ -423,7 +427,8 @@ private struct WriterTopBar: View {
                     .fixedSize()
                     .help(countsHelp)
             }
-            PaperSwitch()
+            // In the light design the sheet is always white.
+            if colorScheme == .dark { PaperSwitch() }
             if app.writerTab == .document { PowerButton() }
             if !app.isPanelDocked, app.writerTab == .document {
                 IconButton(systemName: "sidebar.right", help: "Inhaltsverzeichnis und Lesezeichen einblenden (⌥⌘I)", frameSize: Theme.titleBarControlSize) {
@@ -781,7 +786,7 @@ private struct WriterToolbar: View {
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 5)
-        .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(Color.white.opacity(0.035)))
+        .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(Theme.ink.opacity(0.035)))
         .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(Theme.border))
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 16)
@@ -1196,8 +1201,8 @@ private struct TableSizePicker: View {
                         ForEach(0..<maxColumns, id: \.self) { column in
                             let isOn = row < rows && column < columns
                             RoundedRectangle(cornerRadius: 3, style: .continuous)
-                                .fill(isOn ? Theme.accent.opacity(row == 0 ? 0.95 : 0.6) : Color.white.opacity(0.07))
-                                .overlay(RoundedRectangle(cornerRadius: 3, style: .continuous).strokeBorder(Color.white.opacity(isOn ? 0 : 0.08)))
+                                .fill(isOn ? Theme.accent.opacity(row == 0 ? 0.95 : 0.6) : Theme.ink.opacity(0.07))
+                                .overlay(RoundedRectangle(cornerRadius: 3, style: .continuous).strokeBorder(Theme.ink.opacity(isOn ? 0 : 0.08)))
                                 .frame(width: 24, height: 18)
                                 .contentShape(Rectangle())
                                 .onHover { inside in

@@ -27,7 +27,7 @@ struct DocumentSourcesPanel: View {
             }
             .padding(.horizontal, 9)
             .frame(height: 28)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white.opacity(0.05)))
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.ink.opacity(0.05)))
             .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Theme.border))
             .padding(.horizontal, 12)
             .padding(.bottom, 10)
@@ -145,7 +145,7 @@ struct DocumentSourcesPanel: View {
             }
         }
         .padding(8)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white.opacity(0.03)))
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.ink.opacity(0.03)))
     }
 
     private func quoteRow(_ quote: CitationQuote, source: CitationSource) -> some View {
@@ -186,7 +186,7 @@ struct DocumentSourcesPanel: View {
             Image(systemName: symbol)
                 .font(.system(size: 10.5))
                 .frame(width: 22, height: 19)
-                .background(RoundedRectangle(cornerRadius: 5).fill(Color.white.opacity(0.06)))
+                .background(RoundedRectangle(cornerRadius: 5).fill(Theme.ink.opacity(0.06)))
         }
         .buttonStyle(.plain)
         .foregroundStyle(Theme.textSecondary)

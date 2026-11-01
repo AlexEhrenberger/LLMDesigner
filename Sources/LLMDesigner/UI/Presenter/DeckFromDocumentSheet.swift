@@ -96,7 +96,6 @@ struct DeckFromDocumentSheet: View {
         .padding(22)
         .frame(width: 520)
         .background(Theme.surface)
-        .preferredColorScheme(.dark)
     }
 
     // MARK: Source
@@ -134,7 +133,7 @@ struct DeckFromDocumentSheet: View {
             .fixedSize()
         }
         .padding(10)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.white.opacity(0.04)))
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.ink.opacity(0.04)))
         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Theme.border))
     }
 

@@ -14,7 +14,7 @@ struct WriterTabSwitch: View {
             }
         }
         .padding(2)
-        .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Color.white.opacity(0.035)))
+        .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Theme.ink.opacity(0.035)))
         .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(Theme.border))
         .background {
             Button("") {
@@ -135,7 +135,7 @@ struct ContentAnalysisToolbar: View {
         }
         .padding(.horizontal, 6)
         .frame(height: 38)
-        .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(Color.white.opacity(0.035)))
+        .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(Theme.ink.opacity(0.035)))
         .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(Theme.border))
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 16)
@@ -215,7 +215,7 @@ struct ContentAnalysisToolbar: View {
                     .foregroundStyle(isProminent ? .white : (hovering ? Theme.textPrimary : Theme.textSecondary))
                     .padding(.horizontal, 10)
                     .frame(height: 26)
-                    .background(Capsule().fill(isProminent ? Theme.accent.opacity(hovering ? 1 : 0.85) : (hovering ? Theme.hover : Color.white.opacity(0.05))))
+                    .background(Capsule().fill(isProminent ? Theme.accent.opacity(hovering ? 1 : 0.85) : (hovering ? Theme.hover : Theme.ink.opacity(0.05))))
                     .contentShape(Capsule())
             }
             .buttonStyle(.plain)

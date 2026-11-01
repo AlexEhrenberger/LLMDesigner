@@ -12,8 +12,8 @@ struct PresentationPlayView: View {
             VStack(spacing: 14) {
                 PresentationStage(player: player, family: document.font)
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color.white.opacity(0.1)))
-                    .shadow(color: .black.opacity(0.5), radius: 24, y: 10)
+                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Theme.ink.opacity(0.1)))
+                    .shadow(color: Theme.shade.opacity(0.5), radius: 24, y: 10)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 PresentationControls(player: player, isFullScreen: false)
             }
@@ -44,11 +44,11 @@ struct PresentationPlayView: View {
             if let deck = player.deck, player.index + 1 < deck.slides.count {
                 SlideThumbnail(slide: deck.slides[player.index + 1], deck: deck, family: document.font)
                     .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(Color.white.opacity(0.1)))
+                    .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(Theme.ink.opacity(0.1)))
                     .onTapGesture { player.next() }
             } else {
                 RoundedRectangle(cornerRadius: 5, style: .continuous)
-                    .fill(Color.white.opacity(0.04))
+                    .fill(Theme.ink.opacity(0.04))
                     .aspectRatio(16 / 9, contentMode: .fit)
                     .overlay(Text("Ende der Präsentation").font(.system(size: 12)).foregroundStyle(Theme.textTertiary))
             }
@@ -137,10 +137,10 @@ struct PresentationControls: View {
                     Text(player.isPresenting ? "Pause" : (player.phase == .finished ? "KI präsentiert erneut" : "KI präsentiert"))
                         .font(.system(size: 12.5, weight: .semibold))
                 }
-                .foregroundStyle(player.isPresenting ? Theme.textPrimary : Color.black.opacity(0.85))
+                .foregroundStyle(player.isPresenting ? Theme.textPrimary : Theme.background.opacity(0.9))
                 .padding(.horizontal, 12)
                 .frame(height: 28)
-                .background(Capsule().fill(player.isPresenting ? Color.white.opacity(0.12) : Theme.accent))
+                .background(Capsule().fill(player.isPresenting ? Theme.ink.opacity(0.12) : Theme.accent))
                 .contentShape(Capsule())
             }
             .buttonStyle(.plain)
@@ -176,7 +176,7 @@ struct PresentationControls: View {
         }
         .padding(.horizontal, 10)
         .frame(height: 42)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(isFullScreen ? Color.black.opacity(0.72) : Color.white.opacity(0.035)))
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(isFullScreen ? Color.black.opacity(0.72) : Theme.ink.opacity(0.035)))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Theme.border))
         .frame(maxWidth: 760)
     }

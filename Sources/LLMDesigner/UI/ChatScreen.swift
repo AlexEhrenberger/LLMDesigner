@@ -196,7 +196,7 @@ private struct ChatExportControls: View {
                 .foregroundStyle(hovering ? Theme.textPrimary : Theme.textSecondary)
                 .padding(.horizontal, 10)
                 .frame(height: Theme.titleBarControlSize)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(hovering ? Theme.hover : Color.white.opacity(0.04)))
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(hovering ? Theme.hover : Theme.ink.opacity(0.04)))
                 .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Theme.border))
                 .contentShape(Rectangle())
             }
@@ -321,7 +321,7 @@ struct MessageList: View {
                         .frame(width: 34, height: 34)
                         .background(Circle().fill(Theme.elevated))
                         .overlay(Circle().strokeBorder(Theme.strongBorder))
-                        .shadow(color: .black.opacity(0.5), radius: 10, y: 4)
+                        .shadow(color: Theme.shade.opacity(0.5), radius: 10, y: 4)
                 }
                 .buttonStyle(.plain)
                 .padding(.bottom, 12)

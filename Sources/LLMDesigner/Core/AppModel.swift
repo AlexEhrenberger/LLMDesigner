@@ -82,6 +82,7 @@ struct FolderSection<Item>: Identifiable {
 final class AppModel {
     private enum Keys {
         static let provider = "provider"
+        static let appearance = "appearance"
         static let systemPrompt = "systemPrompt"
         static let temperature = "temperature"
         static let useCustomTemperature = "useCustomTemperature"
@@ -125,6 +126,14 @@ final class AppModel {
 
     /// The settings live in the open library (`Einstellungen.plist`), not in the system preferences.
     @ObservationIgnored let settings: LibrarySettings = AppLibrary.current.settings
+
+    /// Light, dark or like the system.
+    var appearance: AppAppearance {
+        didSet {
+            settings.set(appearance.rawValue, forKey: Keys.appearance)
+            appearance.apply()
+        }
+    }
 
     /// Where the models run. Switching loads that source's address, token and chosen model.
     var provider: LLMProvider {
@@ -409,9 +418,14 @@ final class AppModel {
     var citationStudioRequest: UUID?
     /// Stories Studio is shown in the main area.
     var storiesStudioOpen = false
-    /// Writer Studio shows a white sheet instead of the dark one.
+    /// Writer Studio shows a white sheet instead of the dark one (the user's choice in the dark design).
     var writerLightPaper: Bool {
         didSet { settings.set(writerLightPaper, forKey: Keys.writerLightPaper) }
+    }
+
+    /// The sheet is always white in the light design; in the dark one it is the user's choice.
+    func writerUsesLightPaper(_ colorScheme: ColorScheme) -> Bool {
+        writerLightPaper || colorScheme == .light
     }
     /// The sheet for the open document's pages (its own format, or its head and foot lines).
     var writerPageSheet: WriterPageSheet?
@@ -508,6 +522,10 @@ final class AppModel {
 
     init() {
         let defaults = settings
+        // Before there was a choice the app was always dark.
+        let appearance = defaults.string(forKey: Keys.appearance).flatMap(AppAppearance.init(rawValue:)) ?? .dark
+        self.appearance = appearance
+        appearance.apply()
         let provider = defaults.string(forKey: Keys.provider).flatMap(LLMProvider.init(rawValue:)) ?? .lmStudio
         self.provider = provider
         endpoint = defaults.string(forKey: Keys.endpoint(of: provider)) ?? provider.defaultEndpoint

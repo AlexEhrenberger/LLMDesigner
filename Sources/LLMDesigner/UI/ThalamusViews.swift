@@ -2,8 +2,8 @@ import SwiftUI
 
 /// Colours of the two sides of an entry: the user's feelings and the AI's.
 enum ThalamusColors {
-    static let user = Color(hex: 0x6FD3FF)
-    static let ai = Color(hex: 0xFF8FD6)
+    static let user = Theme.dynamic(dark: 0x6FD3FF, light: 0x0A8BC7)
+    static let ai = Theme.dynamic(dark: 0xFF8FD6, light: 0xC9409A)
 }
 
 /// A feeling with its strength: the stronger, the more the chip glows.
@@ -37,7 +37,7 @@ private struct KeywordChip: View {
             .foregroundStyle(Theme.textSecondary)
             .padding(.horizontal, 7)
             .frame(height: 19)
-            .background(RoundedRectangle(cornerRadius: 5, style: .continuous).fill(Color.white.opacity(0.06)))
+            .background(RoundedRectangle(cornerRadius: 5, style: .continuous).fill(Theme.ink.opacity(0.06)))
     }
 }
 
@@ -609,7 +609,7 @@ private struct ImportanceMeter: View {
         HStack(spacing: 2) {
             ForEach(0..<5, id: \.self) { index in
                 Capsule()
-                    .fill(index < filled ? Theme.accent.opacity(0.8) : Color.white.opacity(0.1))
+                    .fill(index < filled ? Theme.accent.opacity(0.8) : Theme.ink.opacity(0.1))
                     .frame(width: 3, height: 9)
             }
         }
@@ -699,7 +699,7 @@ private struct FilterChip: View {
             .foregroundStyle(isOn ? Theme.accent : (hovering ? Theme.textPrimary : Theme.textSecondary))
             .padding(.horizontal, 9)
             .frame(height: 22)
-            .background(Capsule().fill(isOn ? Theme.accent.opacity(0.16) : (hovering ? Theme.hover : Color.white.opacity(0.04))))
+            .background(Capsule().fill(isOn ? Theme.accent.opacity(0.16) : (hovering ? Theme.hover : Theme.ink.opacity(0.04))))
             .overlay(Capsule().strokeBorder(isOn ? Theme.accent.opacity(0.35) : Theme.border))
             .contentShape(Capsule())
         }
@@ -733,7 +733,7 @@ struct SmallSearchField: View {
         }
         .padding(.horizontal, 9)
         .frame(height: 26)
-        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color.white.opacity(0.04)))
+        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Theme.ink.opacity(0.04)))
         .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(Theme.border))
     }
 }

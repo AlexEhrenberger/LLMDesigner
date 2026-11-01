@@ -316,7 +316,7 @@ private struct ThinkingSummary: View {
             .padding(.leading, 9)
             .padding(.trailing, 11)
             .padding(.vertical, 6)
-            .background(Capsule().fill(hovering || showsDetails ? Theme.hover : Color.white.opacity(0.03)))
+            .background(Capsule().fill(hovering || showsDetails ? Theme.hover : Theme.ink.opacity(0.03)))
             .overlay(Capsule().strokeBorder(Theme.border))
             .contentShape(Capsule())
             .animation(.snappy(duration: 0.2), value: showsDetails)
@@ -360,7 +360,6 @@ private struct PopoverAnchor<Content: View>: NSViewRepresentable {
             let popover = NSPopover()
             popover.behavior = .transient
             popover.animates = true
-            popover.appearance = NSAppearance(named: .darkAqua)
             let host = NSHostingController(rootView: content())
             host.sizingOptions = .preferredContentSize
             popover.contentViewController = host

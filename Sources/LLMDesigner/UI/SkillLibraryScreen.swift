@@ -216,7 +216,7 @@ private struct FolderMenu: View {
             .foregroundStyle(hovering ? Theme.textPrimary : Theme.textSecondary)
             .padding(.horizontal, 10)
             .frame(height: 26)
-            .background(Capsule().fill(hovering ? Theme.hover : Color.white.opacity(0.04)))
+            .background(Capsule().fill(hovering ? Theme.hover : Theme.ink.opacity(0.04)))
             .overlay(Capsule().strokeBorder(Theme.border))
             .contentShape(Capsule())
         }
@@ -249,7 +249,7 @@ struct ActionPill: View {
             .foregroundStyle(isProminent ? Theme.accent : (hovering ? Theme.textPrimary : Theme.textSecondary))
             .padding(.horizontal, 12)
             .frame(height: 30)
-            .background(Capsule().fill(isProminent ? Theme.accent.opacity(hovering ? 0.24 : 0.16) : (hovering ? Theme.hover : Color.white.opacity(0.04))))
+            .background(Capsule().fill(isProminent ? Theme.accent.opacity(hovering ? 0.24 : 0.16) : (hovering ? Theme.hover : Theme.ink.opacity(0.04))))
             .overlay(Capsule().strokeBorder(isProminent ? Theme.accent.opacity(0.35) : Theme.border))
             .contentShape(Capsule())
         }

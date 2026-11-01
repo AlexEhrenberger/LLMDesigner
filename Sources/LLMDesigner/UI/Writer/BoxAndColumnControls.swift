@@ -180,7 +180,7 @@ private struct BoxPopover: View {
             .foregroundStyle(isSelected ? Theme.accent : Theme.textSecondary)
             .padding(.horizontal, 7)
             .frame(height: 28)
-            .background(RoundedRectangle(cornerRadius: 7).fill(isSelected ? Theme.accent.opacity(0.16) : Color.white.opacity(0.04)))
+            .background(RoundedRectangle(cornerRadius: 7).fill(isSelected ? Theme.accent.opacity(0.16) : Theme.ink.opacity(0.04)))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

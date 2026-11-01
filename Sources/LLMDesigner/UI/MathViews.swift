@@ -46,6 +46,8 @@ enum RichText {
 
 /// Display formula (`$$…$$`, `\[…\]`, `\begin{equation}`…) rendered centered, scrollable when too wide.
 struct MathBlockView: View {
+    /// The formula is a picture in the design's text colour: a change of design draws it again.
+    @Environment(\.colorScheme) private var colorScheme
     let latex: String
     let isComplete: Bool
 

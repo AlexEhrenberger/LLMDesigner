@@ -118,6 +118,7 @@ final class MermaidEditorModel {
 /// the loaded model writing the code from a description (or from the selected text).
 struct MermaidEditorSheet: View {
     @Environment(AppModel.self) private var app
+    @Environment(\.colorScheme) private var colorScheme
     @State private var model: MermaidEditorModel
     let onCommit: (_ images: WriterFigureImages, _ code: String, _ caption: String, _ width: Int?) -> Void
     let onCancel: () -> Void
@@ -154,7 +155,7 @@ struct MermaidEditorSheet: View {
                             .font(.system(size: 12, design: .monospaced))
                             .scrollContentBackground(.hidden)
                             .padding(6)
-                            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.black.opacity(0.25)))
+                            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.shade.opacity(0.25)))
                             .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(model.renderError == nil ? Theme.border : Theme.danger.opacity(0.6)))
                         if let error = model.renderError {
                             Label(error, systemImage: "exclamationmark.triangle.fill")
@@ -189,8 +190,11 @@ struct MermaidEditorSheet: View {
         .padding(20)
         .frame(width: 940, height: 660)
         .background(Theme.surface)
-        .environment(\.colorScheme, .dark)
-        .onAppear { model.scheduleRender() }
+        .onAppear {
+            // In the light design the sheet is always white.
+            if colorScheme == .light { model.previewDark = false }
+            model.scheduleRender()
+        }
         .onChange(of: model.code) { _, _ in model.scheduleRender() }
         .onChange(of: model.previewDark) { _, _ in model.scheduleRender() }
     }

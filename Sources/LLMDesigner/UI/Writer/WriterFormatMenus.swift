@@ -189,7 +189,7 @@ private struct ColorPickerPanel: View {
                         Circle()
                             .fill(Color(hex: entry.dark))
                             .frame(width: 26, height: 26)
-                            .overlay(Circle().strokeBorder(Color.white.opacity(0.18)))
+                            .overlay(Circle().strokeBorder(Theme.ink.opacity(0.18)))
                             .overlay {
                                 if current == entry.printHex {
                                     Image(systemName: "checkmark")
@@ -423,7 +423,7 @@ private struct SizeChip: View {
                 .font(.system(size: 12, weight: isCurrent ? .semibold : .regular).monospacedDigit())
                 .foregroundStyle(isCurrent ? Theme.accent : (hovering ? Theme.textPrimary : Theme.textSecondary))
                 .frame(width: 44, height: 26)
-                .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(isCurrent ? Theme.accent.opacity(0.16) : (hovering ? Theme.hover : Color.white.opacity(0.04))))
+                .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(isCurrent ? Theme.accent.opacity(0.16) : (hovering ? Theme.hover : Theme.ink.opacity(0.04))))
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -595,6 +595,6 @@ private struct ChipStyle: ButtonStyle {
             .foregroundStyle(isActive ? Theme.textPrimary : Theme.textSecondary)
             .padding(.horizontal, 8)
             .frame(height: 24)
-            .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(isActive ? Theme.accent.opacity(0.28) : Color.white.opacity(configuration.isPressed ? 0.12 : 0.06)))
+            .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(isActive ? Theme.accent.opacity(0.28) : Theme.ink.opacity(configuration.isPressed ? 0.12 : 0.06)))
     }
 }

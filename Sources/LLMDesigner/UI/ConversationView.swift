@@ -230,7 +230,7 @@ private struct RoundControl: View {
                 .foregroundStyle(foreground)
                 .frame(width: 54, height: 54)
                 .background(Circle().fill(fill))
-                .overlay(Circle().fill(Color.white.opacity(hovering ? 0.07 : 0)))
+                .overlay(Circle().fill(Theme.ink.opacity(hovering ? 0.07 : 0)))
                 .overlay(Circle().strokeBorder(Theme.border))
                 .contentShape(Circle())
         }

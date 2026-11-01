@@ -178,7 +178,7 @@ struct Tag: View {
             .foregroundStyle(color)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
-            .background(Capsule().fill(Color.white.opacity(0.06)))
+            .background(Capsule().fill(Theme.ink.opacity(0.06)))
     }
 }
 
@@ -258,7 +258,7 @@ struct FloatingPanel<Content: View>: View {
     var body: some View {
         ZStack(alignment: edge == .leading ? .leading : .trailing) {
             if isShown {
-                Color.black.opacity(0.3)
+                Theme.shade.opacity(0.3)
                     .contentShape(Rectangle())
                     .onTapGesture { app.closeOverlays() }
                     .transition(.opacity)
@@ -267,7 +267,7 @@ struct FloatingPanel<Content: View>: View {
                 content()
                     .frame(width: width)
                     .frame(maxHeight: .infinity)
-                    .shadow(color: .black.opacity(0.55), radius: 26, x: edge == .leading ? 6 : -6)
+                    .shadow(color: Theme.shade.opacity(0.55), radius: 26, x: edge == .leading ? 6 : -6)
                     .transition(.move(edge: edge == .leading ? .leading : .trailing))
             }
         }

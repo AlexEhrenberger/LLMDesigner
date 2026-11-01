@@ -43,7 +43,7 @@ struct StoryVideoCards: View {
                 .foregroundStyle(targeted ? Theme.accent : Theme.textSecondary)
                 .frame(maxWidth: .infinity)
                 .frame(height: 150)
-                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.white.opacity(0.03)))
+                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.ink.opacity(0.03)))
                 .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .strokeBorder(targeted ? Theme.accent : Theme.border, style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
                 .contentShape(Rectangle())
@@ -284,7 +284,7 @@ struct StoryGalleryView: View {
             .foregroundStyle(Theme.textSecondary)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 44)
-            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.white.opacity(0.03)))
+            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.ink.opacity(0.03)))
             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.border, style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
             .contentShape(Rectangle())
         }

@@ -389,7 +389,7 @@ struct CitationSourceDetail: View {
                 }
                 .padding(.horizontal, 10)
                 .frame(height: 30)
-                .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color.white.opacity(0.04)))
+                .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Theme.ink.opacity(0.04)))
             }
         }
     }
@@ -463,7 +463,7 @@ struct TagField: View {
         }
         .padding(.horizontal, 9)
         .frame(height: 28)
-        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color.white.opacity(0.045)))
+        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Theme.ink.opacity(0.045)))
         .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(Theme.border))
         .onAppear {
             text = tags.joined(separator: ", ")
@@ -479,7 +479,7 @@ private extension View {
             .font(.system(size: 12.5))
             .padding(.horizontal, 9)
             .padding(.vertical, 6)
-            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color.white.opacity(0.045)))
+            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Theme.ink.opacity(0.045)))
             .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(Theme.border))
     }
 }
@@ -625,7 +625,7 @@ struct QuoteCard: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.white.opacity(hovering ? 0.05 : 0.03)))
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.ink.opacity(hovering ? 0.05 : 0.03)))
         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Theme.border))
         .onHover { hovering = $0 }
     }
@@ -638,7 +638,7 @@ struct QuoteCard: View {
                     .foregroundStyle(Theme.textSecondary)
                     .padding(.horizontal, 6)
                     .frame(height: 19)
-                    .background(Capsule().fill(Color.white.opacity(0.07)))
+                    .background(Capsule().fill(Theme.ink.opacity(0.07)))
             }
             ForEach(quote.tags, id: \.self) { tag in
                 Text("#" + tag)

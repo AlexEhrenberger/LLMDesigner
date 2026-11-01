@@ -246,19 +246,19 @@ struct StoryTimelineView: View {
                 var path = Path()
                 path.move(to: CGPoint(x: position, y: 4))
                 path.addLine(to: CGPoint(x: position, y: size.height))
-                context.stroke(path, with: .color(.white.opacity(abs(tick) < step / 1000 ? 0.16 : 0.06)), lineWidth: 1)
+                context.stroke(path, with: .color(Theme.ink.opacity(abs(tick) < step / 1000 ? 0.16 : 0.06)), lineWidth: 1)
             }
             var base = Path()
             base.move(to: CGPoint(x: 0, y: axisHeight))
             base.addLine(to: CGPoint(x: size.width, y: axisHeight))
-            context.stroke(base, with: .color(.white.opacity(0.1)), lineWidth: 1)
+            context.stroke(base, with: .color(Theme.ink.opacity(0.1)), lineWidth: 1)
         }
     }
 
     private func row(_ ref: StoryRef) -> some View {
         ZStack(alignment: .leading) {
             Rectangle()
-                .fill(Color.white.opacity(0.015))
+                .fill(Theme.ink.opacity(0.015))
                 .frame(height: rowHeight - 4)
                 .contentShape(Rectangle())
                 .onTapGesture(count: 2, coordinateSpace: .local) { location in
@@ -334,7 +334,7 @@ struct StoryTimelineView: View {
                     .fill(color)
                     .frame(width: 11, height: 11)
                     .rotationEffect(.degrees(45))
-                    .overlay(Rectangle().strokeBorder(.white.opacity(selected ? 0.9 : 0), lineWidth: 1.5).rotationEffect(.degrees(45)))
+                    .overlay(Rectangle().strokeBorder(Theme.ink.opacity(selected ? 0.9 : 0), lineWidth: 1.5).rotationEffect(.degrees(45)))
                     .frame(width: 16, height: 16)
                 if !entry.note.isEmpty {
                     Text(entry.note)

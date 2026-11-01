@@ -101,7 +101,6 @@ struct CitationPicker: View {
         }
         .frame(width: 520)
         .background(Theme.surface)
-        .environment(\.colorScheme, .dark)
         .onAppear { focused = true }
     }
 

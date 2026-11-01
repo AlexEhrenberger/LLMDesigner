@@ -20,6 +20,12 @@ enum CodeTheme {
         return NSColor(hex: value)
     }
 
+    /// The colour for the app's own views, which follows the design.
+    static func dynamicColor(_ kind: CodeTokenKind) -> NSColor? {
+        guard let dark = color(kind, light: false), let light = color(kind, light: true) else { return nil }
+        return NSColor(name: nil) { Theme.isLight($0) ? light : dark }
+    }
+
     static func hex(_ kind: CodeTokenKind, light: Bool) -> UInt32? {
         switch (kind, light) {
         case (.plain, _): nil

@@ -80,7 +80,7 @@ private struct InstructionBar: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .strokeBorder(focused || assistant.isBusy ? Theme.accent.opacity(0.55) : Theme.strongBorder, lineWidth: 1)
         )
-        .shadow(color: .black.opacity(0.45), radius: 18, y: 6)
+        .shadow(color: Theme.shade.opacity(0.45), radius: 18, y: 6)
         .onChange(of: assistant.focusRequest) { _, _ in focused = true }
         .onChange(of: focused) { _, isFocused in app.isWriterInstructionFocused = isFocused }
     }
@@ -151,7 +151,7 @@ private struct InstructionBar: View {
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(canSend ? Theme.background : Theme.textTertiary)
                     .frame(width: 30, height: 30)
-                    .background(Circle().fill(canSend ? Theme.accent : Color.white.opacity(0.08)))
+                    .background(Circle().fill(canSend ? Theme.accent : Theme.ink.opacity(0.08)))
             }
             .buttonStyle(.plain)
             .disabled(!canSend)
@@ -213,7 +213,7 @@ private struct ModeMenu: View {
             .foregroundStyle(assistant.forcedMode == nil && assistant.forcedPresentationIntent == nil ? (hovering ? Theme.textPrimary : Theme.textSecondary) : Theme.accent)
             .padding(.horizontal, 8)
             .frame(height: 24)
-            .background(Capsule().fill(Color.white.opacity(hovering ? 0.08 : 0.04)))
+            .background(Capsule().fill(Theme.ink.opacity(hovering ? 0.08 : 0.04)))
             .contentShape(Capsule())
         }
         .menuStyle(.button)
@@ -532,7 +532,7 @@ private struct Card<Header: View, Content: View, Actions: View>: View {
         .padding(14)
         .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.elevated))
         .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.accent.opacity(0.35)))
-        .shadow(color: .black.opacity(0.5), radius: 20, y: 8)
+        .shadow(color: Theme.shade.opacity(0.5), radius: 20, y: 8)
     }
 }
 
@@ -554,7 +554,7 @@ private struct CardButton: View {
             .foregroundStyle(primary ? Theme.background : (hovering ? Theme.textPrimary : Theme.textSecondary))
             .padding(.horizontal, 10)
             .frame(height: 28)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(primary ? Theme.accent : Color.white.opacity(hovering ? 0.1 : 0.05)))
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(primary ? Theme.accent : Theme.ink.opacity(hovering ? 0.1 : 0.05)))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -742,7 +742,7 @@ private struct FindingRow: View {
                     .foregroundStyle(Theme.textSecondary)
                     .padding(.horizontal, 9)
                     .frame(height: 24)
-                    .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Color.white.opacity(0.06)))
+                    .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Theme.ink.opacity(0.06)))
             }
         }
         .padding(11)
@@ -760,9 +760,9 @@ private struct FindingRow: View {
     private var color: Color {
         switch finding.kind {
         case "Rechtschreibung": Theme.danger
-        case "Grammatik": Color(hex: 0xFF9F5A)
+        case "Grammatik": Theme.dynamic(dark: 0xFF9F5A, light: 0xD86A1E)
         case "Zeichensetzung": Theme.warning
-        case "Satzbau": Color(hex: 0x6FD3FF)
+        case "Satzbau": Theme.dynamic(dark: 0x6FD3FF, light: 0x0A8BC7)
         default: Theme.accent
         }
     }

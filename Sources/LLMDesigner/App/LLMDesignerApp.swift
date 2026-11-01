@@ -44,8 +44,8 @@ struct LLMDesignerApp: App {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillFinishLaunching(_ notification: Notification) {
-        // LLM Designer is always dark, regardless of the system appearance.
-        NSApp.appearance = NSAppearance(named: .darkAqua)
+        // Light, dark or like the system, as the open library's settings say.
+        MainActor.assumeIsolated { LibrarySession.shared?.app.appearance.apply() }
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {

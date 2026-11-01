@@ -243,7 +243,7 @@ final class DrawingCanvasView: NSView, NSTextFieldDelegate {
         let page = CGRect(origin: offset, size: CGSize(width: drawing.size.width * scale, height: drawing.size.height * scale))
         (dark ? WriterPalette.dark.page : NSColor.white).setFill()
         NSBezierPath(roundedRect: page, xRadius: 4, yRadius: 4).fill()
-        NSColor.white.withAlphaComponent(0.12).setStroke()
+        NSColor(Theme.border).setStroke()
         NSBezierPath(roundedRect: page.insetBy(dx: -0.5, dy: -0.5), xRadius: 4, yRadius: 4).stroke()
         context.saveGState()
         context.clip(to: page)
@@ -550,7 +550,7 @@ struct DrawingEditorSheet: View {
                 VStack(spacing: 10) {
                     DrawingCanvas(model: model)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.black.opacity(0.25)))
+                        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.shade.opacity(0.25)))
                     properties
                 }
             }
@@ -565,7 +565,6 @@ struct DrawingEditorSheet: View {
         .padding(20)
         .frame(width: 980, height: 700)
         .background(Theme.surface)
-        .environment(\.colorScheme, .dark)
     }
 
     private var tools: some View {
@@ -584,7 +583,7 @@ struct DrawingEditorSheet: View {
                 .disabled(model.selection.isEmpty)
         }
         .padding(4)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.white.opacity(0.04)))
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.ink.opacity(0.04)))
     }
 
     private var properties: some View {
@@ -611,7 +610,7 @@ struct DrawingEditorSheet: View {
                         Button { model.setWidth(width) } label: {
                             Capsule().fill(Theme.textPrimary).frame(width: 18, height: min(10, max(1.5, width * 0.7)))
                                 .frame(width: 30, height: 24)
-                                .background(RoundedRectangle(cornerRadius: 6).fill(model.width == width ? Theme.accent.opacity(0.22) : Color.white.opacity(0.04)))
+                                .background(RoundedRectangle(cornerRadius: 6).fill(model.width == width ? Theme.accent.opacity(0.22) : Theme.ink.opacity(0.04)))
                         }
                         .buttonStyle(.plain)
                     }
@@ -653,7 +652,7 @@ struct DrawingEditorSheet: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.white.opacity(0.03)))
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.ink.opacity(0.03)))
     }
 
     private func commit() {

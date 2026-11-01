@@ -129,7 +129,6 @@ struct ImageGeneratorSheet: View {
         .padding(20)
         .frame(width: 750)
         .background(Theme.surface)
-        .environment(\.colorScheme, .dark)
         .task {
             // Checked again every few seconds while Draw Things isn't there, so starting it is noticed.
             while !Task.isCancelled {
@@ -168,7 +167,7 @@ struct ImageGeneratorSheet: View {
         }
         .padding(.horizontal, 9)
         .padding(.vertical, 4)
-        .background(Capsule().fill(Color.white.opacity(0.05)))
+        .background(Capsule().fill(Theme.ink.opacity(0.05)))
         .help(help)
     }
 
@@ -232,7 +231,7 @@ struct ImageGeneratorSheet: View {
     private var preview: some View {
         let aspect = model.info.format.aspect
         return ZStack {
-            RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color(hex: 0x141417))
+            RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.well)
             if let source = model.source, let image = WriterImageStore.displayImage(for: source) {
                 Image(nsImage: image)
                     .resizable()
@@ -344,7 +343,7 @@ struct ImageGeneratorSheet: View {
             }
         }
         .frame(height: height)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.black.opacity(0.25)))
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.shade.opacity(0.25)))
         .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(focus == field ? Theme.accent.opacity(0.6) : Theme.border))
     }
 
@@ -376,7 +375,7 @@ private struct Chip: View {
                 .lineLimit(1)
                 .frame(maxWidth: .infinity)
                 .frame(height: 24)
-                .background(Capsule().fill(isSelected ? Theme.accent.opacity(0.18) : Color.white.opacity(hovering ? 0.08 : 0.04)))
+                .background(Capsule().fill(isSelected ? Theme.accent.opacity(0.18) : Theme.ink.opacity(hovering ? 0.08 : 0.04)))
                 .overlay(Capsule().strokeBorder(isSelected ? Theme.accent.opacity(0.5) : Color.clear))
                 .contentShape(Capsule())
         }

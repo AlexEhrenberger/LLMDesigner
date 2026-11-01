@@ -431,7 +431,7 @@ struct DocumentFindBar: View {
         .frame(height: 38)
         .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(Theme.elevated))
         .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(Theme.strongBorder))
-        .shadow(color: .black.opacity(0.45), radius: 16, y: 6)
+        .shadow(color: Theme.shade.opacity(0.45), radius: 16, y: 6)
     }
 
     private var hasOptions: Bool {

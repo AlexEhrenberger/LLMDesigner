@@ -287,7 +287,7 @@ private struct VoiceSettings: View {
                     .foregroundStyle(hovering ? Theme.textPrimary : Theme.textSecondary)
                     .padding(.horizontal, 12)
                     .frame(height: 30)
-                    .background(Capsule().fill(hovering ? Theme.hover : Color.white.opacity(0.04)))
+                    .background(Capsule().fill(hovering ? Theme.hover : Theme.ink.opacity(0.04)))
                     .overlay(Capsule().strokeBorder(Theme.border))
                     .contentShape(Capsule())
                 }

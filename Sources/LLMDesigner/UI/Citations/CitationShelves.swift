@@ -53,7 +53,7 @@ struct CitationSourceList: View {
         }
         .padding(.horizontal, 9)
         .frame(height: 28)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white.opacity(0.05)))
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.ink.opacity(0.05)))
         .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(searchFocused ? Theme.accent.opacity(0.5) : Theme.border))
         .padding(.horizontal, 12)
     }
@@ -74,7 +74,7 @@ struct CitationSourceList: View {
                                 .foregroundStyle(active ? Theme.accent : Theme.textSecondary)
                                 .padding(.horizontal, 8)
                                 .frame(height: 21)
-                                .background(Capsule().fill(active ? Theme.accent.opacity(0.18) : Color.white.opacity(0.05)))
+                                .background(Capsule().fill(active ? Theme.accent.opacity(0.18) : Theme.ink.opacity(0.05)))
                         }
                         .buttonStyle(.plain)
                         .help("\(item.count)× verwendet")
@@ -254,7 +254,7 @@ struct SourceRow: View {
                         .foregroundStyle(Theme.textSecondary)
                         .padding(.horizontal, 6)
                         .frame(height: 17)
-                        .background(Capsule().fill(Color.white.opacity(0.07)))
+                        .background(Capsule().fill(Theme.ink.opacity(0.07)))
                         .help("\(quoteCount) Zitat\(quoteCount == 1 ? "" : "e")")
                 }
             }

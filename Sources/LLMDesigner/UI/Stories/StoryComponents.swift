@@ -10,11 +10,11 @@ extension StoryElementKind {
         switch self {
         case .event: Theme.warning
         case .figure: Theme.accent
-        case .place: Color(hex: 0x4FD1A5)
-        case .reason: Color(hex: 0x6CB4FF)
-        case .purpose: Color(hex: 0xFF8FB8)
-        case .species: Color(hex: 0xC5E063)
-        case .fact: Color(hex: 0xE3C08D)
+        case .place: Theme.dynamic(dark: 0x4FD1A5, light: 0x14946C)
+        case .reason: Theme.dynamic(dark: 0x6CB4FF, light: 0x2B78D0)
+        case .purpose: Theme.dynamic(dark: 0xFF8FB8, light: 0xD0457A)
+        case .species: Theme.dynamic(dark: 0xC5E063, light: 0x6E8C14)
+        case .fact: Theme.dynamic(dark: 0xE3C08D, light: 0x9C7434)
         }
     }
 
@@ -93,7 +93,7 @@ extension View {
             .foregroundStyle(Theme.textPrimary)
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white.opacity(0.045)))
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.ink.opacity(0.045)))
             .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Theme.border))
     }
 }
@@ -174,7 +174,7 @@ struct StoryCard<Content: View>: View {
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.surface))
-            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder((tint ?? .white).opacity(tint == nil ? 0.07 : 0.22)))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder((tint ?? Theme.ink).opacity(tint == nil ? 0.07 : 0.22)))
     }
 }
 
@@ -240,7 +240,7 @@ struct StoryTabBar<Tab: Hashable>: View {
             }
         }
         .padding(3)
-        .background(Capsule().fill(Color.white.opacity(0.03)))
+        .background(Capsule().fill(Theme.ink.opacity(0.03)))
         .overlay(Capsule().strokeBorder(Theme.border))
     }
 }
@@ -384,7 +384,7 @@ struct StoryElementPickerButton: View {
             .foregroundStyle(Theme.textSecondary)
             .padding(.horizontal, compact ? 7 : 9)
             .frame(height: 24)
-            .background(Capsule().fill(Color.white.opacity(0.04)))
+            .background(Capsule().fill(Theme.ink.opacity(0.04)))
             .overlay(Capsule().strokeBorder(Theme.border, style: StrokeStyle(lineWidth: 1, dash: [3, 2])))
             .contentShape(Capsule())
         }
@@ -594,7 +594,7 @@ struct StoryPartChip: View {
             }
             .padding(.horizontal, 8)
             .frame(height: 24)
-            .background(Capsule().fill(Color.white.opacity(hovering ? 0.09 : 0.055)))
+            .background(Capsule().fill(Theme.ink.opacity(hovering ? 0.09 : 0.055)))
             .overlay(Capsule().strokeBorder(Theme.border))
             .contentShape(Capsule())
             .onTapGesture { model.showPart(partID, in: world) }
@@ -732,7 +732,7 @@ struct StoryImageGallery: View {
                     }
                     .foregroundStyle(targeted ? Theme.accent : Theme.textTertiary)
                     .frame(width: 120, height: 120)
-                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.white.opacity(0.03)))
+                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.ink.opacity(0.03)))
                     .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .strokeBorder(targeted ? Theme.accent : Theme.border, style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
                     .contentShape(Rectangle())

@@ -141,6 +141,9 @@ enum MathRenderer {
     }()
 
     static func render(_ latex: String, fontSize: CGFloat, display: Bool, color: NSColor) -> Rendered? {
+        // A colour of the design is fixed as it looks in the app now; views that show formulas draw them again
+        // when the design changes (they read the colour scheme).
+        let color = color.resolved(in: NSApp?.effectiveAppearance)
         let key = "\(display ? "D" : "T")|\(fontSize)|\(color.hashValue)|\(latex)" as NSString
         if let cached = cache.object(forKey: key) { return cached.value }
 

@@ -308,7 +308,7 @@ private struct CitationTopBar: View {
             }
             .padding(.horizontal, 10)
             .frame(height: 28)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white.opacity(0.05)))
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.ink.opacity(0.05)))
             .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(importFocused ? Theme.accent.opacity(0.55) : Theme.border))
             .help("Die Kennung wird bei Crossref (DOI), der Deutschen Nationalbibliothek, Open Library oder Google Books (ISBN) bzw. arXiv nachgeschlagen; eine Web-Adresse wird gelesen.")
         }
@@ -454,7 +454,6 @@ private struct QuickQuoteSheet: View {
         .padding(20)
         .frame(width: 560)
         .background(Theme.surface)
-        .environment(\.colorScheme, .dark)
         .onAppear {
             sourceID = preselected
             focus = preselected == nil ? .search : .exact

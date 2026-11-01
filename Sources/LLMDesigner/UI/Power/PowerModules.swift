@@ -216,7 +216,7 @@ private struct PowerSlideCard: View {
                 SlideThumbnail(slide: slide, deck: deck, family: document.textFont)
                     .frame(width: 150)
                     .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(targeted ? Theme.accent : Color.white.opacity(0.1), lineWidth: targeted ? 2 : 1))
+                    .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(targeted ? Theme.accent : Theme.ink.opacity(0.1), lineWidth: targeted ? 2 : 1))
                     .powerDrag(markdown: slide.fullMarkdown, plain: PowerText.plain(slide.fullMarkdown))
                     .help("Ziehen: der ganze Text der Folie")
                 VStack(alignment: .leading, spacing: 3) {
@@ -251,7 +251,7 @@ private struct PowerSlideCard: View {
             }
         }
         .padding(8)
-        .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(targeted ? Theme.accent.opacity(0.1) : Color.white.opacity(0.03)))
+        .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(targeted ? Theme.accent.opacity(0.1) : Theme.ink.opacity(0.03)))
         .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(isMatch ? Theme.accent.opacity(0.5) : Theme.border))
         .onDrop(of: PowerDrag.accepted, isTargeted: $targeted) { providers in
             PowerDrag.load(providers) { dropped in
@@ -394,7 +394,7 @@ struct PowerCitations: View {
             }
             .padding(.horizontal, 10)
             .frame(height: 30)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white.opacity(0.04)))
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.ink.opacity(0.04)))
             .padding(.horizontal, 10)
             .padding(.bottom, 4)
             if let importMessage {
@@ -510,7 +510,7 @@ private struct PowerSourceView: View {
                 .scrollContentBackground(.hidden)
                 .frame(height: 54)
                 .padding(4)
-                .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color.white.opacity(0.05)))
+                .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Theme.ink.opacity(0.05)))
                 .overlay(alignment: .topLeading) {
                     if newQuote.isEmpty {
                         Text("Neues Zitat – oder Text auf die Quelle ziehen")
@@ -528,7 +528,7 @@ private struct PowerSourceView: View {
                     .frame(width: 70)
                     .padding(.horizontal, 6)
                     .frame(height: 24)
-                    .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Color.white.opacity(0.05)))
+                    .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Theme.ink.opacity(0.05)))
                 Spacer(minLength: 0)
                 Button("Zitat anlegen") {
                     if app.powerAddQuote(newQuote, to: source.id, page: page) != nil {
@@ -588,7 +588,7 @@ private struct PowerQuoteCard: View {
             Spacer(minLength: 0)
         }
         .padding(8)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(hovering ? Color.white.opacity(0.05) : Color.white.opacity(0.03)))
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(hovering ? Theme.ink.opacity(0.05) : Theme.ink.opacity(0.03)))
         .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Theme.border))
         .onHover { hovering = $0 }
         .contextMenu {
@@ -671,7 +671,7 @@ private struct PowerWorldView: View {
                         .foregroundStyle(option == kind ? Theme.textPrimary : (matching ? Theme.accent : Theme.textTertiary))
                         .frame(maxWidth: .infinity)
                         .frame(height: 34)
-                        .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(option == kind ? Color.white.opacity(0.08) : .clear))
+                        .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(option == kind ? Theme.ink.opacity(0.08) : .clear))
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -709,7 +709,7 @@ private struct PowerWorldView: View {
             }
             .padding(.horizontal, 10)
             .frame(height: 30)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white.opacity(0.04)))
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.ink.opacity(0.04)))
             .padding(10)
             .overlay(alignment: .top) { Rectangle().fill(Theme.border).frame(height: 1) }
         }
@@ -785,7 +785,7 @@ private struct PowerStoryCard: View {
                         .scrollContentBackground(.hidden)
                         .frame(minHeight: 70, maxHeight: 200)
                         .padding(4)
-                        .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Color.white.opacity(0.05)))
+                        .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Theme.ink.opacity(0.05)))
                         .onAppear { draft = text }
                         .onChange(of: draft) { _, value in
                             guard value != text else { return }
@@ -802,7 +802,7 @@ private struct PowerStoryCard: View {
             }
         }
         .padding(8)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(hovering ? Color.white.opacity(0.05) : Color.white.opacity(0.03)))
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(hovering ? Theme.ink.opacity(0.05) : Theme.ink.opacity(0.03)))
         .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Theme.border))
         .onHover { hovering = $0 }
         .contextMenu {

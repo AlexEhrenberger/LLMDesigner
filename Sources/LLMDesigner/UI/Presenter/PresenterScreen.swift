@@ -5,6 +5,7 @@ import SwiftUI
 /// right the contents, bookmarks and sources. The tab "Abspielen" plays the presentation, "Inhaltsanalyse" analyses it.
 struct PresenterScreen: View {
     @Environment(AppModel.self) private var app
+    @Environment(\.colorScheme) private var colorScheme
     @State private var controller = WriterEditorController()
     @State private var assistant = WriterAssistant()
     @State private var analysisScrollTarget: ContentAnalysisModule?
@@ -271,8 +272,8 @@ struct PresenterScreen: View {
         .environment(\.slideTextLook, fieldLook)
         .aspectRatio(16 / 9, contentMode: .fit)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color.white.opacity(0.1)))
-        .shadow(color: .black.opacity(0.5), radius: 24, y: 10)
+        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Theme.ink.opacity(0.1)))
+        .shadow(color: Theme.shade.opacity(0.5), radius: 24, y: 10)
         .overlay(alignment: .bottomTrailing) {
             if controller.slideOverflows {
                 Label("Der Text ist länger als die Folie", systemImage: "arrow.down.to.line.compact")
@@ -309,7 +310,7 @@ struct PresenterScreen: View {
                 .padding(.bottom, 6)
             ContentAnalysisView(
                 document: document,
-                colors: .make(lightPaper: app.writerLightPaper),
+                colors: .make(lightPaper: app.writerUsesLightPaper(colorScheme)),
                 scrollTarget: $analysisScrollTarget
             ) { anchor in
                 jump(to: anchor, in: deck)
@@ -415,7 +416,7 @@ private struct PresentButton: View {
                     Text("Vorführen")
                         .font(.system(size: 12, weight: .semibold))
                 }
-                .foregroundStyle(Color.black.opacity(0.85))
+                .foregroundStyle(Theme.background.opacity(0.9))
                 .padding(.leading, 11)
                 .padding(.trailing, 8)
                 .frame(height: 24)
@@ -435,7 +436,7 @@ private struct PresentButton: View {
             } label: {
                 Image(systemName: "chevron.down")
                     .font(.system(size: 8.5, weight: .bold))
-                    .foregroundStyle(Color.black.opacity(0.8))
+                    .foregroundStyle(Theme.background.opacity(0.85))
                     .frame(width: 20, height: 24)
                     .background(UnevenRoundedRectangle(bottomTrailingRadius: 12, topTrailingRadius: 12, style: .continuous).fill(hoveringMenu ? Theme.accent.opacity(0.85) : Theme.accent))
                     .contentShape(Rectangle())
@@ -562,7 +563,7 @@ private struct PresenterToolbar: View {
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 5)
-        .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(Color.white.opacity(0.035)))
+        .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(Theme.ink.opacity(0.035)))
         .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(Theme.border))
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 16)
@@ -782,7 +783,7 @@ private struct BackgroundButton: View {
                 SlideBackgroundView(background: deck.background(of: slide), role: slide.role)
                     .frame(width: 26, height: 15)
                     .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 3, style: .continuous).strokeBorder(Color.white.opacity(0.25)))
+                    .overlay(RoundedRectangle(cornerRadius: 3, style: .continuous).strokeBorder(Theme.ink.opacity(0.25)))
                 Text("Hintergrund")
                     .font(.system(size: 12.5, weight: .medium))
             }
@@ -895,7 +896,7 @@ private struct SlideStrip: View {
             .padding(10)
             .help("Neue Folie nach der geöffneten (⇧⌘↩)")
         }
-        .background(Color.black.opacity(0.18))
+        .background(Theme.shade.opacity(0.18))
         .overlay(alignment: .trailing) { Rectangle().fill(Theme.border).frame(width: 1) }
     }
 }
@@ -938,7 +939,7 @@ private struct SlideStripRow: View {
                 .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 5, style: .continuous)
-                        .strokeBorder(isSelected ? Theme.accent : Color.white.opacity(hovering ? 0.25 : 0.1), lineWidth: isSelected ? 2 : 1)
+                        .strokeBorder(isSelected ? Theme.accent : Theme.ink.opacity(hovering ? 0.25 : 0.1), lineWidth: isSelected ? 2 : 1)
                         .padding(isSelected ? -2 : 0)
                 )
                 .overlay(alignment: .topTrailing) {
@@ -1105,7 +1106,7 @@ private struct DeletedSlideToast: View {
         .frame(height: 36)
         .background(Capsule().fill(Theme.elevated))
         .overlay(Capsule().strokeBorder(Theme.strongBorder))
-        .shadow(color: .black.opacity(0.4), radius: 14, y: 5)
+        .shadow(color: Theme.shade.opacity(0.4), radius: 14, y: 5)
     }
 }
 
@@ -1306,7 +1307,7 @@ struct SmallActionButton: View {
                 .foregroundStyle(isEnabled ? (hovering ? Theme.textPrimary : Theme.textSecondary) : Theme.textTertiary)
                 .padding(.horizontal, 8)
                 .frame(height: 22)
-                .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(hovering && isEnabled ? Theme.hover : Color.white.opacity(0.04)))
+                .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(hovering && isEnabled ? Theme.hover : Theme.ink.opacity(0.04)))
                 .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Theme.border))
                 .contentShape(Rectangle())
         }

@@ -60,7 +60,6 @@ struct MiniChatView: View {
         .background(Theme.background)
         .ignoresSafeArea()
         .background(MiniChatWindowConfigurator(floats: mini.floats) { mini.isKey = $0 })
-        .preferredColorScheme(.dark)
         .tint(Theme.accent)
         .onAppear { mini.isOpen = true }
         .onDisappear {
@@ -287,7 +286,7 @@ private struct ScreenGlanceButton: View {
             .foregroundStyle(hovering ? Theme.textPrimary : Theme.textSecondary)
             .padding(.horizontal, showsTitle ? 11 : 0)
             .frame(minWidth: 32, minHeight: 32)
-            .background(Capsule().fill(hovering ? Theme.hover : Color.white.opacity(0.04)))
+            .background(Capsule().fill(hovering ? Theme.hover : Theme.ink.opacity(0.04)))
             .overlay(Capsule().strokeBorder(Theme.border))
             .contentShape(Capsule())
         }

@@ -145,7 +145,6 @@ private struct HandoutSheet: View {
         .padding(22)
         .frame(width: 480)
         .background(Theme.surface)
-        .preferredColorScheme(.dark)
     }
 }
 
@@ -192,7 +191,7 @@ struct HandoutActivityCard: View {
             .padding(.vertical, 10)
             .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.surface))
             .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Theme.accent.opacity(generation.isRunning ? 0.45 : 0.2)))
-            .shadow(color: .black.opacity(0.35), radius: 14, y: 5)
+            .shadow(color: Theme.shade.opacity(0.35), radius: 14, y: 5)
             .frame(maxWidth: 680)
             .padding(.horizontal, 20)
             .transition(.move(edge: .bottom).combined(with: .opacity))

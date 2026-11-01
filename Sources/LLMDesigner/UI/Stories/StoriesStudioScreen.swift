@@ -243,7 +243,7 @@ private struct StoriesTopBar: View {
             .foregroundStyle(Theme.textPrimary)
             .padding(.horizontal, 10)
             .frame(height: 26)
-            .background(Capsule().fill(Color.white.opacity(0.05)))
+            .background(Capsule().fill(Theme.ink.opacity(0.05)))
             .overlay(Capsule().strokeBorder(Theme.border))
             .contentShape(Capsule())
         }

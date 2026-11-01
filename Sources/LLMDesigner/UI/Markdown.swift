@@ -24,6 +24,8 @@ enum InlineMarkdown {
 }
 
 struct MarkdownView: View {
+    /// Formulas are pictures in the design's text colour: a change of design draws them again.
+    @Environment(\.colorScheme) private var colorScheme
     let text: String
     /// When set, every block gets a scroll identifier so the table of contents can jump to it.
     var anchorMessageID: UUID?
@@ -182,7 +184,7 @@ private struct TableBlockView: View {
                         cellView(cell, isHeader: true)
                     }
                 }
-                .background(Color.white.opacity(0.04))
+                .background(Theme.ink.opacity(0.04))
                 ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                     Rectangle().fill(Theme.border).frame(height: 1).gridCellUnsizedAxes(.horizontal)
                     GridRow {
