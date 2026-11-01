@@ -54,7 +54,7 @@ struct ComposerView: View {
                 if app.isDictationAvailable {
                     DictationButton()
                 }
-                if app.dictationStatus != .idle {
+                if app.dictationStatus != .idle && !app.miniChat.receivesDictation {
                     DictationPreview()
                 }
                 Spacer(minLength: 0)
@@ -184,7 +184,7 @@ private struct WikipediaButton: View {
 }
 
 /// Composer switch such as thinking or a lookup source. Off: just the icon, like the microphone; on: a tinted pill with the name.
-private struct ComposerToggle<Icon: View>: View {
+struct ComposerToggle<Icon: View>: View {
     let title: String
     let isOn: Bool
     let isAvailable: Bool
@@ -225,14 +225,17 @@ private struct ComposerToggle<Icon: View>: View {
     }
 }
 
-private struct DictationButton: View {
+/// The microphone; `intoMiniChat` for the mini chat's composer. It shows the dictation only where the words go.
+struct DictationButton: View {
     @Environment(AppModel.self) private var app
+    var intoMiniChat = false
     @State private var hovering = false
 
     var body: some View {
-        Button { app.toggleDictation() } label: {
+        let status = app.miniChat.receivesDictation == intoMiniChat ? app.dictationStatus : .idle
+        Button { app.toggleDictation(intoMiniChat: intoMiniChat) } label: {
             ZStack {
-                switch app.dictationStatus {
+                switch status {
                 case .listening:
                     // The halo follows the microphone level.
                     Circle()
@@ -257,12 +260,12 @@ private struct DictationButton: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
-        .help(app.dictationStatus == .listening ? "Diktat beenden (⌘D)" : "Diktieren (⌘D)")
+        .help(status == .listening ? "Diktat beenden (⌘D)" : "Diktieren (⌘D)")
     }
 }
 
 /// Grey line next to the microphone: what the recogniser hears right now, or what it is doing.
-private struct DictationPreview: View {
+struct DictationPreview: View {
     @Environment(AppModel.self) private var app
 
     var body: some View {
@@ -318,7 +321,7 @@ private struct ConversationButton: View {
     }
 }
 
-private struct SendButton: View {
+struct SendButton: View {
     let isGenerating: Bool
     let canSend: Bool
     let onSend: () -> Void

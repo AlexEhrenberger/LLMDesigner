@@ -133,6 +133,7 @@ private struct ModeSegment: View {
 
 private struct ChatList: View {
     @Environment(AppModel.self) private var app
+    @Environment(\.openWindow) private var openWindow
     @State private var pendingDelete: Chat?
     @State private var pendingDocumentDelete: WriterDocument?
     @State private var pendingFolderDelete: Folder?
@@ -309,6 +310,8 @@ private struct ChatList: View {
                 }
             },
             menu: {
+                Button("Im Mini-Chat öffnen", systemImage: "pip.enter") { OpenInMiniChat(app: app, openWindow: openWindow)(chat.id) }
+                Divider()
                 Button("Umbenennen", systemImage: "pencil") { app.renamingID = chat.id }
                 if chat.isTitleCustom {
                     Button("Automatischen Titel verwenden", systemImage: "wand.and.sparkles") { app.useAutomaticTitle(chat.id) }

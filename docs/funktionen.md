@@ -68,6 +68,27 @@ sequenceDiagram
     A-->>N: Antwort, Kontextanzeige
 ```
 
+## Mini-Chat und „Bildschirm betrachten“
+
+Ein Chat lässt sich in einem eigenen, schmalen Fenster öffnen (400 pt wie der Power-Zugriff): über das Bild-im-Bild-Symbol in der Titelleiste des Chats, „Im Mini-Chat öffnen“ im Kontextmenü der Seitenleiste, **Neuer Mini-Chat** im Neu-Menü oder ⇧⌘M. Das Fenster ist unabhängig vom Hauptfenster: eigener Chat, eigenes Eingabefeld, eigenes Senden – im Hauptfenster kann man derweil weiterarbeiten. Die Stecknadel hält es vor allen Fenstern, auch vor anderen Apps. Oben steht der Titel des Chats (daran lässt sich das Fenster ziehen); daneben startet man einen neuen Chat oder öffnet ihn im Hauptfenster. Andere Chats holt man über die Seitenleiste ins Mini-Fenster. Solange das Mini-Fenster vorne ist, wirken Stoppen (⌘.), Neu generieren, Denkmodus, Bilder anhängen und Diktieren auf seinen Chat.
+
+**Bildschirm betrachten** (⇧⌘B oder der Knopf im Mini-Chat) nimmt den Bildschirm auf, auf dem der Mini-Chat steht – ohne das Mini-Fenster und ohne Mauszeiger – und hängt das Bild an die nächste Nachricht (höchstens 1600 Pixel, wie alle Bilder). Modelle mit Bildverständnis (Gemma 4, Qwen 3.5) sehen dann, woran man arbeitet. Bei mehreren Bildschirmen wählt ein Rechtsklick den Bildschirm. Die Aufnahme läuft über ScreenCaptureKit und braucht die Erlaubnis „Bildschirm- & Systemaudioaufnahme“ in den Systemeinstellungen; die App ist ad hoc signiert, darum vergisst macOS diese Erlaubnis nach jedem Neubau.
+
+```mermaid
+sequenceDiagram
+    participant N as Nutzer
+    participant M as Mini-Chat
+    participant S as ScreenCaptureKit
+    participant L as LM Studio / Kapitsa
+    N->>M: Bildschirm betrachten
+    M->>S: Bildschirm ohne Mini-Fenster
+    S-->>M: Bild (≤ 1600 px)
+    M->>M: als Anhang an die Nachricht
+    N->>M: Frage dazu, senden
+    M->>L: Verlauf + Bild (image_url)
+    L-->>M: Antwort (gestreamt)
+```
+
 ## Personas und Gedächtnis (Thalamus)
 
 Eine Persona hat Profilbild, Beschreibung und eigene Dateien. Mit eingeschaltetem **Thalamus** ordnet ein neutraler Modellaufruf jede Nachricht ein (Kategorie, bis zu drei Gefühle je Seite mit Stärke, Merkwürdigkeit). Wenn der Chat ruht, werden die Eindrücke pro Kategorie zu **Erinnerungen** und einem **Profil** verdichtet; passende Erinnerungen fließen in spätere Antworten ein.

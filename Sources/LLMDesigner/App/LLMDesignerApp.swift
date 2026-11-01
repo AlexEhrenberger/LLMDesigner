@@ -22,6 +22,18 @@ struct LLMDesignerApp: App {
             LibraryCommands(session: session)
         }
 
+        // A chat of its own in a narrow window, beside the main window (see `MiniChat`).
+        Window("Mini-Chat", id: MiniChatWindow.id) {
+            MiniChatView()
+                .environment(session.app)
+                .environment(session)
+                .id(ObjectIdentifier(session.app))
+        }
+        .windowStyle(.hiddenTitleBar)
+        .defaultSize(width: Theme.powerWidth, height: 640)
+        .defaultPosition(.topTrailing)
+        .restorationBehavior(.disabled)
+
         Settings {
             SettingsView()
                 .environment(session.app)
@@ -204,23 +216,26 @@ struct AppCommands: Commands {
             }
             .disabled(!app.canFormatText || app.selectedDocument?.isPresentation == true)
         }
+        // Stop, regenerate, dictation, pictures and thinking act on the mini chat while its window is in front.
         CommandMenu("Chat") {
-            Button("Generierung stoppen") { app.stop() }
+            Button("Generierung stoppen") { app.commandChatID.map(app.stopGeneration(in:)) }
                 .keyboardShortcut(".")
-                .disabled(!app.isGenerating)
-            Button("Antwort neu generieren") { app.regenerate() }
+                .disabled(!(app.commandChatID.map(app.isGenerating) ?? false))
+            Button("Antwort neu generieren") { if let id = app.commandChatID { app.regenerate(id) } }
                 .keyboardShortcut("r", modifiers: [.command, .shift])
-                .disabled(app.isGenerating || app.selectedChat == nil)
-            Button(app.isDictating ? "Diktat beenden" : "Diktieren") { app.toggleDictation() }
+                .disabled(app.commandChatID.map { app.isGenerating($0) || app.chat($0) == nil } ?? true)
+            Button(app.isDictating ? "Diktat beenden" : "Diktieren") { app.toggleDictation(intoMiniChat: app.miniChat.isKey) }
                 .keyboardShortcut("d")
                 .disabled(!app.isDictationAvailable || app.conversation != nil)
             Button(app.conversation == nil ? "Gesprächsmodus" : "Gesprächsmodus beenden") { app.toggleConversation() }
                 .keyboardShortcut("d", modifiers: [.command, .shift])
                 .disabled(app.conversation == nil && !app.canStartConversation)
-            Button("Bilder anhängen …") { app.chooseImages() }
+            Button("Bilder anhängen …") { app.chooseImages(forMiniChat: app.miniChat.isKey) }
                 .keyboardShortcut("a", modifiers: [.command, .shift])
-            Button(app.isThinkingOn ? "Denkmodus ausschalten" : "Denkmodus einschalten") { app.toggleThinking() }
-                .keyboardShortcut("t", modifiers: [.command, .shift])
+            Button((app.miniChat.isKey ? app.isMiniChatThinkingOn : app.isThinkingOn) ? "Denkmodus ausschalten" : "Denkmodus einschalten") {
+                if app.miniChat.isKey { app.toggleMiniChatThinking() } else { app.toggleThinking() }
+            }
+            .keyboardShortcut("t", modifiers: [.command, .shift])
             Button("Persona wählen …") {
                 app.showChats()
                 app.isPersonaPickerShown = true
@@ -244,8 +259,27 @@ struct AppCommands: Commands {
             Button(app.power.isOn ? "Power-Zugriff ausschalten" : "Power-Zugriff einschalten") { app.togglePower() }
                 .keyboardShortcut("j", modifiers: [.command, .option])
             Divider()
+            MiniChatCommands(app: app)
+            Divider()
             Button("Modelle aktualisieren") { Task { await app.refreshModels() } }
                 .keyboardShortcut("r")
         }
+    }
+}
+
+/// Chat menu: the mini chat. A view, so it can open the window.
+private struct MiniChatCommands: View {
+    let app: AppModel
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        // The chat the main window shows goes into the mini chat; otherwise the mini chat keeps its own.
+        Button("Im Mini-Chat öffnen") {
+            OpenInMiniChat(app: app, openWindow: openWindow)(app.mainWindowChatID ?? app.miniChat.chatID)
+        }
+        .keyboardShortcut("m", modifiers: [.command, .shift])
+        Button("Bildschirm betrachten") { app.glanceAtScreen() }
+            .keyboardShortcut("b", modifiers: [.command, .shift])
+            .disabled(!app.miniChat.isOpen || app.miniChat.isGlancing)
     }
 }

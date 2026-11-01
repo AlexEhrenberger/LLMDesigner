@@ -393,6 +393,11 @@ final class AppModel {
     @ObservationIgnored private var refreshDebounce: Task<Void, Never>?
     @ObservationIgnored private let store = ChatStore()
 
+    // MARK: Mini chat (see AppModel+MiniChat.swift)
+
+    /// The narrow window with a chat of its own, beside the main window.
+    let miniChat = MiniChat()
+
     // MARK: Writer Studio (see AppModel+Writer.swift)
 
     var documents: [WriterDocument] = []
@@ -666,6 +671,12 @@ final class AppModel {
         toggleChatFlag(\.wikipediaSearch)
     }
 
+    /// The thinking switch new chats start with: the last choice, in the main window or the mini chat.
+    var thinkingDefault: Bool {
+        get { settings.bool(forKey: Keys.thinkingDefault) }
+        set { settings.set(newValue, forKey: Keys.thinkingDefault) }
+    }
+
     /// Switches thinking for this chat; new chats start with the last choice.
     func toggleThinking() {
         settings.set(!isThinkingOn, forKey: Keys.thinkingDefault)
@@ -862,6 +873,7 @@ final class AppModel {
         draftImageLists[id] = nil
         store.delete(id)
         if selectedChatID == id { selectedChatID = nil }
+        if miniChat.chatID == id { miniChat.chatID = nil }
         removeUnusedAttachments()
     }
 
@@ -924,7 +936,14 @@ final class AppModel {
             chatID = chat.id
         }
 
-        guard let index = index(of: chatID) else { return nil }
+        guard index(of: chatID) != nil else { return nil }
+        ask(text, images: images, in: chatID, model: modelId, spoken: spoken)
+        return chatID
+    }
+
+    /// Adds the question to a chat (the main window's or the mini chat's) and lets the model answer it.
+    func ask(_ text: String, images: [ImageAttachment], in chatID: Chat.ID, model modelId: String, spoken: Bool = false) {
+        guard let index = index(of: chatID) else { return }
         // The chat model has priority; outline and suggestions are rebuilt once the answer is complete.
         outlineTasks[chatID]?.cancel()
         followUpTasks[chatID]?.cancel()
@@ -935,7 +954,11 @@ final class AppModel {
         if let index = self.index(of: chatID) { store.save(chats[index]) }
 
         generate(in: chatID, spoken: spoken)
-        return chatID
+    }
+
+    /// Puts a chat that was started outside the main window (in the mini chat) at the top of the list.
+    func insert(_ chat: Chat) {
+        chats.insert(chat, at: 0)
     }
 
     func stop() {
@@ -948,7 +971,12 @@ final class AppModel {
     }
 
     func regenerate() {
-        guard let id = selectedChatID, !isGenerating(id), let index = index(of: id) else { return }
+        guard let id = selectedChatID else { return }
+        regenerate(id)
+    }
+
+    func regenerate(_ id: Chat.ID) {
+        guard !isGenerating(id), let index = index(of: id) else { return }
         if chats[index].messages.last?.role == .assistant {
             let removed = chats[index].messages.removeLast()
             chats[index].bookmarks?.removeAll { $0.target.messageID == removed.id }
@@ -1229,10 +1257,15 @@ final class AppModel {
     // MARK: Branches & editing
 
     /// Copies the chat up to and including this message into a new chat and opens it. The original stays as it is.
-    func branchChat(at messageID: ChatMessage.ID) {
-        guard let source = selectedChat, streamingMessageIDs[source.id] != messageID,
+    /// A branch of the mini chat opens in the mini chat.
+    func branchChat(at messageID: ChatMessage.ID, inMiniChat: Bool = false) {
+        guard let source = inMiniChat ? currentMiniChat : selectedChat, streamingMessageIDs[source.id] != messageID,
               let position = source.messages.firstIndex(where: { $0.id == messageID }) else { return }
-        open(makeBranch(of: source, keeping: position + 1, from: messageID, editedQuestion: false))
+        let branch = makeBranch(of: source, keeping: position + 1, from: messageID, editedQuestion: false)
+        guard inMiniChat else { return open(branch) }
+        chats.insert(branch, at: 0)
+        store.save(branch)
+        miniChat.chatID = branch.id
     }
 
     func startEditing(_ messageID: ChatMessage.ID) {
@@ -1317,7 +1350,7 @@ final class AppModel {
         selectChat(chat.id)
     }
 
-    private static func title(for text: String) -> String {
+    static func title(for text: String) -> String {
         text.isEmpty ? "Bild" : Chat.makeTitle(from: text)
     }
 
@@ -1353,7 +1386,8 @@ final class AppModel {
         draftImages.removeAll { $0.id == id }
     }
 
-    func chooseImages() {
+    /// Pictures for the main window's composer, or for the mini chat's.
+    func chooseImages(forMiniChat: Bool = false) {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.image]
         panel.allowsMultipleSelection = true
@@ -1367,7 +1401,9 @@ final class AppModel {
             } else {
                 chosen = panel.runModal() == .OK
             }
-            if chosen { attachImages(panel.urls.map { .file($0) }) }
+            guard chosen else { return }
+            let sources: [AttachmentStore.Source] = panel.urls.map { .file($0) }
+            if forMiniChat { attachMiniChatImages(sources) } else { attachImages(sources) }
         }
     }
 
@@ -1375,6 +1411,7 @@ final class AppModel {
     private func removeUnusedAttachments() {
         var used = Set(chats.flatMap { $0.messages.flatMap { ($0.images ?? []).map(\.fileName) } })
         used.formUnion(draftImageLists.values.flatMap { $0.map(\.fileName) })
+        used.formUnion(miniChat.images.map(\.fileName))
         Task.detached(priority: .utility) { AttachmentStore.removeUnused(keeping: used) }
     }
 
@@ -1400,7 +1437,12 @@ final class AppModel {
     }
 
     func message(_ messageID: ChatMessage.ID) -> ChatMessage? {
-        selectedChat?.messages.first { $0.id == messageID }
+        chat(holding: messageID)?.messages.first { $0.id == messageID }
+    }
+
+    /// The chat a message on screen belongs to: the main window's, or the mini chat's.
+    func chat(holding messageID: ChatMessage.ID) -> Chat? {
+        [selectedChat, miniChat.chatID.flatMap { chat($0) }].compactMap { $0 }.first { $0.messages.contains { $0.id == messageID } }
     }
 
     func copyAnswer(_ messageID: ChatMessage.ID) {
@@ -1429,7 +1471,7 @@ final class AppModel {
     }
 
     func exportAnswer(_ messageID: ChatMessage.ID) {
-        guard let chat = selectedChat, let message = chat.messages.first(where: { $0.id == messageID }),
+        guard let chat = chat(holding: messageID), let message = chat.messages.first(where: { $0.id == messageID }),
               !message.content.isEmpty else { return }
         let label = pdfSpeakerLineEnabled
             ? LaTeXWriter.speakerLine(template: pdfSpeakerTemplate, model: message.model, name: persona(of: chat)?.displayName)

@@ -17,15 +17,17 @@ extension AppModel {
     // MARK: Dictation
 
     /// Starts or stops dictation. With a document open in Writer Studio, the words go into the document,
-    /// or into the assistant bar when it has the focus or `intoInstruction` is set.
-    func toggleDictation(intoInstruction: Bool = false) {
+    /// or into the assistant bar when it has the focus or `intoInstruction` is set. `intoMiniChat`: into the mini
+    /// chat's composer.
+    func toggleDictation(intoInstruction: Bool = false, intoMiniChat: Bool = false) {
         guard #available(macOS 26.0, *) else { return }
         let engine = dictation()
         Task {
             if engine.isRunning {
                 await engine.stop()
             } else if dictationStatus == .idle {
-                let writerOpen = sidebarMode == .chats && selectedDocumentID != nil
+                let writerOpen = sidebarMode == .chats && selectedDocumentID != nil && !intoMiniChat
+                miniChat.receivesDictation = intoMiniChat
                 dictationIntoInstruction = writerOpen && (intoInstruction || isWriterInstructionFocused)
                 dictationDocumentID = writerOpen && !dictationIntoInstruction ? selectedDocumentID : nil
                 // The microphone would hear the voice reading the document.
@@ -53,6 +55,7 @@ extension AppModel {
                 if let id = self.dictationDocumentID { self.writerDictation?(.ended, id) }
                 self.dictationDocumentID = nil
                 self.dictationIntoInstruction = false
+                self.miniChat.receivesDictation = false
             }
         }
         engine.onVolatile = { [weak self] text in
@@ -103,9 +106,9 @@ extension AppModel {
     private func appendDictatedText(_ text: String) {
         let piece = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !piece.isEmpty else { return }
-        var current = draft
+        var current = miniChat.receivesDictation ? miniChat.draft : draft
         if let last = current.last, !last.isWhitespace { current += " " }
-        draft = current + piece
+        if miniChat.receivesDictation { miniChat.draft = current + piece } else { draft = current + piece }
     }
 
     // MARK: Reading aloud
@@ -136,7 +139,7 @@ extension AppModel {
         guard let message = message(messageID) else { return }
         let text = SpeakableText.from(markdown: message.content)
         guard !text.isEmpty else { return }
-        speechReader.speak(text, voice: voice(for: selectedChat), rate: speechRate)
+        speechReader.speak(text, voice: voice(for: chat(holding: messageID)), rate: speechRate)
         speakingMessageID = messageID
         speechState = speechReader.state
     }

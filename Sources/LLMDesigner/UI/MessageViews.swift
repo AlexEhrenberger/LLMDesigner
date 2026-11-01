@@ -24,6 +24,8 @@ struct MessageRow: View, Equatable {
     var live: LiveAnswer? = nil
 
     @Environment(AppModel.self) private var app
+    /// Set in the mini chat: the buttons act on its chat; editing a question (which opens a branch) stays in the main window.
+    @Environment(\.miniChatID) private var miniChatID
 
     static func == (lhs: MessageRow, rhs: MessageRow) -> Bool {
         lhs.message == rhs.message && lhs.isStreaming == rhs.isStreaming && lhs.isLast == rhs.isLast
@@ -40,7 +42,7 @@ struct MessageRow: View, Equatable {
                 isHighlighted: highlight != nil,
                 isBookmarked: marks.wholeMessage,
                 isEditing: isEditing,
-                onEdit: { app.startEditing(message.id) }
+                onEdit: miniChatID == nil ? { app.startEditing(message.id) } : nil
             )
         case .assistant:
             AssistantMessageView(
@@ -53,11 +55,15 @@ struct MessageRow: View, Equatable {
                 highlight: highlight,
                 marks: marks,
                 speech: speech,
-                onRegenerate: { app.regenerate() },
+                onRegenerate: {
+                    if let miniChatID { app.regenerate(miniChatID) } else { app.regenerate() }
+                },
                 onSpeak: { app.toggleSpeaking(message.id) },
                 onExport: { app.exportAnswer(message.id) },
-                onBranch: { app.branchChat(at: message.id) },
-                onFollowUp: { app.sendFollowUp($0) }
+                onBranch: { app.branchChat(at: message.id, inMiniChat: miniChatID != nil) },
+                onFollowUp: { question in
+                    if miniChatID != nil { app.sendInMiniChat(text: question) } else { app.sendFollowUp(question) }
+                }
             )
         case .system:
             EmptyView()
@@ -70,7 +76,9 @@ private struct UserMessageView: View {
     let isHighlighted: Bool
     let isBookmarked: Bool
     let isEditing: Bool
-    let onEdit: () -> Void
+    /// Nil in the mini chat, which doesn't edit questions.
+    let onEdit: (() -> Void)?
+    @Environment(\.miniChatID) private var miniChatID
     @State private var hovering = false
 
     var body: some View {
@@ -89,14 +97,16 @@ private struct UserMessageView: View {
                     if !message.content.isEmpty {
                         CopyButton(text: message.content, help: "Nachricht kopieren")
                     }
-                    IconButton(systemName: "pencil", help: "Bearbeiten und als neuen Chat abzweigen", size: 12.5, action: onEdit)
+                    if let onEdit {
+                        IconButton(systemName: "pencil", help: "Bearbeiten und als neuen Chat abzweigen", size: 12.5, action: onEdit)
+                    }
                 }
                 .opacity(hovering ? 1 : 0.35)
                 .animation(.easeOut(duration: 0.12), value: hovering)
             }
         }
         .frame(maxWidth: .infinity, alignment: .trailing)
-        .padding(.leading, isEditing ? 0 : 90)
+        .padding(.leading, isEditing ? 0 : (miniChatID == nil ? 90 : 36))
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
     }

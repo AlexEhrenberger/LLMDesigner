@@ -55,10 +55,12 @@ struct IconMenu<Items: View>: View {
 /// Citation Studio, Stories Studio).
 struct NewItemMenu: View {
     @Environment(AppModel.self) private var app
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         IconMenu(systemName: "square.and.pencil", help: "Neu: Chat oder Applikation", frameSize: Theme.titleBarControlSize) {
             Button("Neuer Chat (⌘N)", systemImage: "bubble.left.and.bubble.right") { app.newChat() }
+            Button("Neuer Mini-Chat", systemImage: "pip.enter") { OpenInMiniChat(app: app, openWindow: openWindow)(nil) }
             Section("Applikationen") {
                 ForEach(StudioApplication.allCases) { application in
                     Button { app.openApplication(application) } label: {

@@ -125,6 +125,7 @@ private struct DropHint: View {
 
 private struct TopBar: View {
     @Environment(AppModel.self) private var app
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         HStack(spacing: 2) {
@@ -134,6 +135,9 @@ private struct TopBar: View {
                     .padding(.trailing, 6)
             }
             Spacer(minLength: 0)
+            IconButton(systemName: "pip.enter", help: "Im Mini-Chat öffnen (⇧⌘M): ein schmales Fenster, in dem du weiterchattest, während du im Hauptfenster arbeitest", size: 13, frameSize: Theme.titleBarControlSize) {
+                OpenInMiniChat(app: app, openWindow: openWindow)(app.selectedChatID)
+            }
             PowerButton()
                 .padding(.trailing, 2)
             if let chat = app.selectedChat, !chat.messages.isEmpty {
@@ -212,13 +216,16 @@ private struct ChatExportControls: View {
     }
 }
 
-private struct MessageList: View {
+/// The messages of a chat, following the answer being written. `isCompact` for the mini chat's narrow window, whose
+/// messages don't take part in the main window's right-click menu.
+struct MessageList: View {
     @Environment(AppModel.self) private var app
     let chat: Chat
     let streamingID: ChatMessage.ID?
     let exportingIDs: Set<UUID>
     let scrollRequest: ScrollRequest?
     let highlight: OutlineTarget?
+    var isCompact = false
 
     @State private var position = ScrollPosition(edge: .bottom)
     @State private var following = true
@@ -241,7 +248,7 @@ private struct MessageList: View {
         return ScrollView {
             // Deliberately not lazy: LazyVStack's height estimates fight the bottom scroll anchor
             // and send SwiftUI into an endless layout loop (beachball) once the user scrolls up.
-            VStack(alignment: .leading, spacing: 28) {
+            VStack(alignment: .leading, spacing: isCompact ? 22 : 28) {
                 if let branch = chat.branch, branch.lastCopiedMessageID == nil {
                     BranchDivider(branch: branch)
                 }
@@ -254,14 +261,14 @@ private struct MessageList: View {
                         highlight: highlight?.messageID == message.id ? highlight : nil,
                         marks: marks(for: message.id),
                         speech: app.speakingMessageID == message.id ? app.speechState : nil,
-                        isEditing: app.editingMessageID == message.id,
+                        isEditing: !isCompact && app.editingMessageID == message.id,
                         persona: persona,
                         live: message.id == streamingID ? app.liveAnswer(message.id) : nil
                     )
                     .equatable()
                     .scrollAnchor(OutlineTarget.viewID(message.id, nil))
                     .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
-                        app.setMessageFrame(frame, for: message.id)
+                        if !isCompact { app.setMessageFrame(frame, for: message.id) }
                     }
                     // Everything above was copied from the chat this one branched off.
                     if let branch = chat.branch, branch.lastCopiedMessageID == message.id {
@@ -270,15 +277,15 @@ private struct MessageList: View {
                 }
             }
             .frame(maxWidth: Theme.contentWidth)
-            .padding(.horizontal, 28)
-            .padding(.top, 12)
-            .padding(.bottom, 28)
+            .padding(.horizontal, isCompact ? 16 : 28)
+            .padding(.top, isCompact ? 8 : 12)
+            .padding(.bottom, isCompact ? 20 : 28)
             .frame(maxWidth: .infinity)
         }
         .scrollPosition($position)
         .defaultScrollAnchor(.bottom)
         .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
-            app.setMessageViewport(frame)
+            if !isCompact { app.setMessageViewport(frame) }
         }
         .onScrollPhaseChange { _, phase, context in
             // Only the user's own scrolling decides whether we keep following the stream.
