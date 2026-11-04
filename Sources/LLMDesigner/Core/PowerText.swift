@@ -83,7 +83,7 @@ enum PowerText {
 
     private static func kind(of markdown: String) -> PowerChunk.Kind {
         let first = markdown.components(separatedBy: "\n").first?.trimmingCharacters(in: .whitespaces) ?? ""
-        if MarkdownParser.divOpening(first) != nil { return first.contains(".box") ? .box : .other }
+        if MarkdownParser.divOpening(first) != nil { return first.contains(".box") ? .box : first.contains(".\(WriterTableStyle.className)") ? .table : .other }
         if first.hasPrefix("```") || first.hasPrefix("~~~") { return .code }
         if first.hasPrefix("$$") || first.hasPrefix("\\[") { return .math }
         if first.hasPrefix("#") {
