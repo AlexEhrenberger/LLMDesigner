@@ -115,7 +115,7 @@ final class MermaidRenderer: NSObject, WKNavigationDelegate {
             let webView = WKWebView(frame: NSRect(x: 0, y: 0, width: 1600, height: 1200), configuration: configuration)
             webView.navigationDelegate = self
             self.webView = webView
-            webView.loadHTMLString("<!doctype html><html><head><meta charset=\"utf-8\"></head><body></body></html>", baseURL: nil)
+            webView.loadOfflineHTML("<!doctype html><html><head><meta charset=\"utf-8\"></head><body></body></html>")
         }
         try await withCheckedThrowingContinuation { waitingForLoad.append($0) }
     }

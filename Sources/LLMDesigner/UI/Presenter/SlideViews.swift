@@ -145,7 +145,7 @@ private struct LiveDesignView: NSViewRepresentable {
         view.navigationDelegate = context.coordinator
         context.coordinator.onLoad = onLoad
         context.coordinator.html = html
-        view.loadHTMLString(html, baseURL: nil)
+        view.loadOfflineHTML(html)
         return view
     }
 
@@ -153,7 +153,7 @@ private struct LiveDesignView: NSViewRepresentable {
         context.coordinator.onLoad = onLoad
         guard context.coordinator.html != html else { return }
         context.coordinator.html = html
-        view.loadHTMLString(html, baseURL: nil)
+        view.loadOfflineHTML(html)
     }
 
     final class Coordinator: NSObject, WKNavigationDelegate {

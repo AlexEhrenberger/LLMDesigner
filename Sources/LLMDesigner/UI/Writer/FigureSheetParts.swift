@@ -165,7 +165,7 @@ struct SVGPreview: NSViewRepresentable {
         svg{max-width:96%;max-height:96%;width:auto;height:auto}
         </style></head><body>\(svg)</body></html>
         """
-        view.loadHTMLString(page, baseURL: nil)
+        view.loadOfflineHTML(page)
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }

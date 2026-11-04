@@ -206,7 +206,7 @@ private struct DiagramWebView: NSViewRepresentable {
         let html = page()
         guard context.coordinator.html != html else { return }
         context.coordinator.html = html
-        webView.loadHTMLString(html, baseURL: nil)
+        webView.loadOfflineHTML(html)
     }
 
     static func dismantleNSView(_ webView: DiagramWKWebView, coordinator: Coordinator) {

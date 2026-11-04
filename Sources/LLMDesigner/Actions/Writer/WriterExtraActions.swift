@@ -5,7 +5,24 @@ extension ActionRegistry {
     func registerWriterExtraActions() {}
 }
 
+/// A short sign on the screen that something other than the person changed the open document.
+struct ActionFlash: Equatable {
+    let id = UUID()
+    let document: WriterDocument.ID
+    let channel: ActionChannel
+}
+
 extension AppModel {
-    /// Lets the open editor show what an agent changed (phase 3.6).
-    func highlightActionChange(in id: WriterDocument.ID, channel: ActionChannel) {}
+    /// How long the sign stays.
+    static let actionFlashSeconds = 1.6
+
+    func highlightActionChange(in id: WriterDocument.ID, channel: ActionChannel) {
+        guard channel != .ui, selectedDocumentID == id else { return }
+        let flash = ActionFlash(document: id, channel: channel)
+        actionFlash = flash
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(Self.actionFlashSeconds))
+            if self?.actionFlash == flash { self?.actionFlash = nil }
+        }
+    }
 }

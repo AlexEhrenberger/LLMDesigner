@@ -111,3 +111,17 @@ struct DynamicCommandTests {
         #expect(script.contains("--occurrence"))
     }
 }
+
+@Suite("llmd: Ereignisse")
+struct EventFormatTests {
+    @Test func eventsComeAsNotifications() throws {
+        let event = ActionEvent(kind: ActionEvent.documentChanged, action: "writer.text.insert", channel: "cli", run: "r", target: "d")
+        let message = RPCMessage(id: nil, method: RPCMethod.event, params: try JSONValue.encoding(event))
+        let decoded = try JSONDecoder().decode(RPCMessage.self, from: message.line())
+        #expect(decoded.id == nil)
+        #expect(decoded.method == "event")
+        let back = try #require(try decoded.params?.decoded(as: ActionEvent.self))
+        #expect(back.kind == "document.changed")
+        #expect(back.target == "d")
+    }
+}

@@ -16,6 +16,7 @@ struct RootView: View {
             }
         }
         .background(Theme.background)
+        .overlay(alignment: .top) { ActionFlashBadge() }
         .ignoresSafeArea()
         .background(WindowConfigurator())
         .tint(Theme.accent)

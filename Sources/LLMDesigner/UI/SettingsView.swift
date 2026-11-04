@@ -74,6 +74,8 @@ struct SettingsView: View {
 
             DrawThingsSettings(center: app.imageGeneration)
 
+            ActionSettings()
+
             Section {
                 Picker("Papierformat", selection: $app.pdfPaperSize) {
                     ForEach(PaperSize.allCases) { size in

@@ -20,6 +20,7 @@ struct LLMDesignerApp: App {
         .commands {
             AppCommands(app: session.app)
             LibraryCommands(session: session)
+            ActivityCommands()
         }
 
         // A chat of its own in a narrow window, beside the main window (see `MiniChat`).
@@ -32,6 +33,14 @@ struct LLMDesignerApp: App {
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: Theme.powerWidth, height: 640)
         .defaultPosition(.topTrailing)
+        .restorationBehavior(.disabled)
+
+        // What agents and the terminal did, with the decisions of the safety rule.
+        Window("Aktivität", id: ActivityWindow.id) {
+            ActivityView()
+                .tint(Theme.accent)
+        }
+        .defaultSize(width: 820, height: 480)
         .restorationBehavior(.disabled)
 
         Settings {
@@ -82,6 +91,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         MainActor.assumeIsolated { ActionHub.shared?.stop() }
         // The narrow conversation window must not become the size the app opens with next time.
         MainWindow.restoreBeforeQuit()
+    }
+}
+
+/// Window menu: the protocol of the actions.
+struct ActivityCommands: Commands {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some Commands {
+        CommandGroup(after: .windowArrangement) {
+            Button("Aktivität von Terminal und Agenten") { openWindow(id: ActivityWindow.id) }
+        }
     }
 }
 

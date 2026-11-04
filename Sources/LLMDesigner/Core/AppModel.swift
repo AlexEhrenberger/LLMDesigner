@@ -127,6 +127,9 @@ final class AppModel {
     /// The settings live in the open library (`Einstellungen.plist`), not in the system preferences.
     @ObservationIgnored let settings: LibrarySettings = AppLibrary.current.settings
 
+    /// Something other than the person just changed the open document.
+    var actionFlash: ActionFlash?
+
     /// Decides tool calls that need the person's consent. A property so tests can answer without a dialog.
     @ObservationIgnored var toolConsent: @MainActor (ToolConsentRequest) async -> Bool = AppModel.askForToolConsent
 

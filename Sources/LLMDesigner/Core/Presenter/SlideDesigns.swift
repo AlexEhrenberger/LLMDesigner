@@ -59,7 +59,7 @@ struct SlideDesign: Identifiable, Hashable, Sendable {
 
     /// Reads the comment at the top of a design file.
     static func parse(id: String, css: String, isBuiltIn: Bool) -> SlideDesign {
-        var design = SlideDesign(id: id, name: id.capitalized, summary: "", css: css, tones: [:], accent: nil, isBuiltIn: isBuiltIn)
+        var design = SlideDesign(id: id, name: id.capitalized, summary: "", css: removingExternalResources(css), tones: [:], accent: nil, isBuiltIn: isBuiltIn)
         design.isAnimated = css.contains("@keyframes")
         guard let start = css.range(of: "/*"), let end = css.range(of: "*/", range: start.upperBound..<css.endIndex) else { return design }
         for rawLine in css[start.upperBound..<end.lowerBound].components(separatedBy: "\n") {
@@ -229,7 +229,7 @@ final class SlideDesignRenderer: NSObject, WKNavigationDelegate {
         }()
         await withCheckedContinuation { continuation in
             loaded = continuation
-            webView.loadHTMLString(html, baseURL: nil)
+            webView.loadOfflineHTML(html)
         }
         // A moment for the layers with filters to be drawn.
         try? await Task.sleep(for: .milliseconds(60))

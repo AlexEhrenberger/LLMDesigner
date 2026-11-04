@@ -81,7 +81,7 @@ final class FlowImageRenderer: NSObject, WKNavigationDelegate {
         webView.setValue(false, forKey: "drawsBackground")
         await withCheckedContinuation { continuation in
             loaded = continuation
-            webView.loadHTMLString(page(svg: svg, size: size, opaque: opaque), baseURL: nil)
+            webView.loadOfflineHTML(page(svg: svg, size: size, opaque: opaque))
         }
         // A moment for the fonts and the layout.
         try? await Task.sleep(for: .milliseconds(80))
