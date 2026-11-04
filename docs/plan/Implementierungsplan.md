@@ -288,6 +288,15 @@ _(wird von Claude Code nach jeder Phase gepflegt)_
 | 5 | fertig | 04.11.2026 | Eigener Adapter (Entscheidung nach 5.0). Skriptierte stdio-Sitzung mit beiden Handshakes lief gegen eine Wegwerf-Bibliothek. **Offen:** 5.6 mit echtem Claude Code und MCP Inspector, weil `claude` hier nicht im PATH lag und der Inspector einen Download gebraucht hätte. Kein Python-`jsonschema` vorhanden: Schemas prüft ein eigener Strukturtest. |
 | 6 | fertig | 04.11.2026 | Mit Qwen 3.5 9B (Kapitsa) auf einer Wegwerf-Bibliothek geprüft: Dokument angelegt, Stichpunkte, Fettdruck, 84 s, drei Schritte, „Antwort rückgängig“ nahm alle drei zurück. Plan-Ziel über MCP: Dokument, Format, Beleg, Literatur, Präsentation daraus. Angriffssammlung in `Tests/LLMDesignerTests/Security/` spielt die Angriffe mit einem Modell durch, das dem eingeschleusten Text folgt: 0 Abflüsse. **Offen:** Das Blitz-Menü im Eingabefeld und der Rückgängig-Pfeil wurden nur gebaut, nicht von Hand angeklickt. PDF-Anhänge lesen die Actions noch nicht (`citation.attachment.read` fehlt), also keine PDF-Szenarien. |
 
+### Weitere Katalog-Actions (Reihenfolge vom Nutzer bestätigt)
+
+| Stufe | Status | Notizen |
+|---|---|---|
+| W1 Tabellen | fertig | `MarkdownTable` arbeitet auf dem Markdown und schreibt über `WriterMarkdown.tableMarkdown`, also wie der Editor. Sortieren und Summenzeile teilen sich beide über `WriterTableArrange`. Tabellen in Kästen oder Spaltenabschnitten sind nicht adressierbar: der Editor lässt dort keine zu. |
+| W2 Kästen, Spalten | fertig | |
+| W3 Bilder, Diagramme, Mermaid, Zeichnungen | fertig | Zusätzlich `writer.figure.read`, sonst könnte ein Agent ein Diagramm nur blind ändern. `writer.image.insert` fragt über Chat und MCP nach. |
+| W4 Formeln, Plots, Code | fertig | Zusätzlich `writer.formula.list`. Der Katalog nennt `python` bei `writer.plot.insert`: nicht umgesetzt, das wäre beliebiger Code von außen. Plots entstehen wie im Editor aus der Formel. |
+
 ### Entscheidungen (04.11.2026)
 
 Vom Nutzer bestätigt: CLI-Name `llmd`; eigener kleiner Parser statt swift-argument-parser; Block-IDs flüchtig; Installation nach `~/.local/bin`; Exportordner frei mit Freigabe; MCP-Kanal immer `fremd`; Gedächtnis über MCP gesperrt; „geprüft“ nur einzeln. Die Phasen laufen ohne Rückfrage nacheinander.

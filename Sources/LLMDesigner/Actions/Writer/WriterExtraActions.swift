@@ -4,6 +4,10 @@ import LLMDProtocol
 extension ActionRegistry {
     func registerWriterExtraActions() {
         registerWriterTableActions()
+        registerWriterBoxActions()
+        registerWriterFigureActions()
+        registerWriterMathActions()
+        registerWriterCodeActions()
     }
 }
 

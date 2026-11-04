@@ -228,7 +228,7 @@ struct PresenterSlideReadAction: LLMDAction {
 
 /// A change to a deck with undo, origin and event.
 @MainActor
-private func changeDeck(_ reference: String, context: ActionContext, _ change: (inout PresentationDeck) throws -> Void) throws -> WriterDocument {
+func changeDeck(_ reference: String, context: ActionContext, _ change: (inout PresentationDeck) throws -> Void) throws -> WriterDocument {
     let document = try context.app.actionDocument(reference, presentation: true)
     var failure: Error?
     context.app.modifyDeck(document.id) { deck in

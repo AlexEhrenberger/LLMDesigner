@@ -343,6 +343,25 @@ enum WriterMermaid {
     }
 
     /// Messages that ask to repair code Mermaid couldn't read.
+    /// The model writes a diagram from a description. Code Mermaid can't read goes back to the model, twice at most.
+    @MainActor
+    static func written(client: LLMClient, model: String, description: String, type: DiagramType?, context: String, current: String?) async throws -> String {
+        let messages = messages(description: description, type: type, context: context, current: current)
+        var answer = code(inAnswer: try await client.complete(model: model, messages: messages, temperature: 0.3, maxTokens: 2_000))
+        for _ in 0..<2 {
+            do {
+                _ = try await MermaidRenderer.shared.render(answer, palette: .light)
+                break
+            } catch {
+                let repaired = try await client.complete(
+                    model: model, messages: repairMessages(code: answer, error: error.localizedDescription), temperature: 0.2, maxTokens: 2_000
+                )
+                answer = code(inAnswer: repaired)
+            }
+        }
+        return answer
+    }
+
     static func repairMessages(code: String, error: String) -> [ChatPayloadMessage] {
         var task = "Dieser Mermaid-Code ist ungültig:\n\(code)\n\nFehlermeldung: \(error)"
         if let type = type(of: code) {

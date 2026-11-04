@@ -95,7 +95,7 @@ struct WriterTarget {
         let before = document
         store(text)
         context.noteChange(of: documentID, before: before)
-        return WriterWriteResult(doc: documentID.uuidString, version: version, block: nil)
+        return WriterWriteResult(doc: documentID.uuidString, version: version, block: nil, source: nil)
     }
 
     func checkVersion(_ wanted: String?) throws {
@@ -108,6 +108,8 @@ struct WriterWriteResult: Encodable, Sendable {
     var doc: String
     var version: String
     var block: String?
+    /// The file of a picture the change made.
+    var source: String?
 }
 
 extension ActionContext {

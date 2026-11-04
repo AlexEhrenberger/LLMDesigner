@@ -72,23 +72,10 @@ final class MermaidEditorModel {
         let body = WriterMermaid.splitFrontMatter(code).body.trimmingCharacters(in: .whitespacesAndNewlines)
         let keepsCurrent = isExisting || body != WriterMermaid.template(type ?? .flowchart).trimmingCharacters(in: .whitespacesAndNewlines)
         do {
-            let messages = WriterMermaid.messages(
-                description: request.isEmpty ? "Fasse den Text als passendes Diagramm zusammen." : request,
+            let answer = try await WriterMermaid.written(
+                client: client, model: model, description: request.isEmpty ? "Fasse den Text als passendes Diagramm zusammen." : request,
                 type: nil, context: usesContext ? context : "", current: keepsCurrent && !request.isEmpty ? code : nil
             )
-            var answer = WriterMermaid.code(inAnswer: try await client.complete(model: model, messages: messages, temperature: 0.3, maxTokens: 2_000))
-            // Code Mermaid can't read goes back to the model, twice at most.
-            for _ in 0..<2 {
-                do {
-                    _ = try await MermaidRenderer.shared.render(answer, palette: .light)
-                    break
-                } catch {
-                    let repaired = try await client.complete(
-                        model: model, messages: WriterMermaid.repairMessages(code: answer, error: error.localizedDescription), temperature: 0.2, maxTokens: 2_000
-                    )
-                    answer = WriterMermaid.code(inAnswer: repaired)
-                }
-            }
             guard !answer.isEmpty else {
                 message = "Das Modell hat kein Diagramm geschrieben."
                 return
