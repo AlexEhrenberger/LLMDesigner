@@ -20,6 +20,7 @@ extension ActionRegistry {
         register(StoriesElementUpdateAction.self)
         register(StoriesElementDeleteAction.self)
         register(StoriesElementUsagesAction.self)
+        registerStoriesMoreActions()
     }
 }
 
@@ -89,11 +90,14 @@ extension StoryWorld {
 
     /// Fields an agent must not set: identity and media, which have their own ways in.
     static let protectedElementFields: Set<String> = ["id", "createdAt", "updatedAt", "images", "videos"]
+    /// Fields that are missing from an element's JSON while they are empty, and can be set all the same.
+    static let optionalElementFields: [StoryElementKind: Set<String>] = [.figure: ["speciesID"], .place: ["parentID"], .reason: ["holderID"]]
 
     private mutating func apply<E: StoryElement>(_ type: E.Type, _ id: UUID, fields: [String: JSONValue]) throws {
         guard let current = element(type, id), case .object(var object) = try JSONValue.encoding(current) else { return }
         for (key, value) in fields {
-            guard object[key] != nil, !Self.protectedElementFields.contains(key) else {
+            let isKnown = object[key] != nil || Self.optionalElementFields[E.kind]?.contains(key) == true
+            guard isKnown, !Self.protectedElementFields.contains(key) else {
                 let known = object.keys.filter { !Self.protectedElementFields.contains($0) }.sorted().joined(separator: ", ")
                 throw RPCError.invalidParams("„\(type.kind.rawValue)“ hat kein Feld „\(key)“. Möglich: \(known).")
             }

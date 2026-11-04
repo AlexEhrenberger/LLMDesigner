@@ -142,6 +142,10 @@ struct WriterObjectActionTests {
     }
 
     @Test func generatedPictures() async throws {
+        // A port where nothing listens, so a running Draw Things isn't bothered.
+        let address = h.app.imageGeneration.address
+        h.app.imageGeneration.address = "http://127.0.0.1:9"
+        defer { h.app.imageGeneration.address = address }
         let id = try await h.document("Text")
         let made = try await h.call("writer.image.generate", ["doc": .string(id), "prompt": "a lighthouse", "format": .string(ImageFormat.allCases[0].rawValue), "caption": "Leuchtturm"])
         let source = try #require(made["source"]?.stringValue)

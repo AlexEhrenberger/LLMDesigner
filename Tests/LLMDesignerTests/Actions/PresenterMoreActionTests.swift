@@ -155,6 +155,10 @@ struct PresenterMoreActionTests {
     }
 
     @Test func generatedPictureOnASlide() async throws {
+        // A port where nothing listens, so a running Draw Things isn't bothered.
+        let address = h.app.imageGeneration.address
+        h.app.imageGeneration.address = "http://127.0.0.1:9"
+        defer { h.app.imageGeneration.address = address }
         let id = try await make()
         let made = try #require(try await h.call("presenter.field.generateImage", ["deck": .string(id), "slideIndex": 1, "prompt": "a lighthouse"])["id"]?.stringValue)
         let image = try field(id, made)

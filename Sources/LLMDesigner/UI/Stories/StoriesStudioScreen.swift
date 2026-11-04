@@ -1,5 +1,12 @@
 import SwiftUI
 
+/// What an action wants Stories Studio to show.
+struct StoriesStudioCommand: Equatable {
+    var world: UUID
+    var element: StoryRef?
+    var part: UUID?
+}
+
 /// What Stories Studio shows.
 @MainActor
 @Observable
@@ -58,6 +65,12 @@ final class StoriesStudioModel {
         partTab = tab
     }
 
+    func apply(_ command: StoriesStudioCommand, library: StoryLibrary) {
+        open(command.world)
+        if let element = command.element { show(element) }
+        if let part = command.part, let world = library.world(command.world) { showPart(part, in: world) }
+    }
+
     func isSelected(_ ref: StoryRef) -> Bool {
         page == .elements(ref.kind) && selected[ref.kind] == ref.id
     }
@@ -92,8 +105,17 @@ struct StoriesStudioScreen: View {
             library.loadIfNeeded()
             let last = app.settings.string(forKey: Self.lastWorldKey).flatMap(UUID.init(uuidString:))
             if let id = last.flatMap({ library.world($0)?.id }) ?? library.worlds.first?.id { model.open(id) }
+            if let command = app.storiesStudioCommand {
+                model.apply(command, library: library)
+                app.storiesStudioCommand = nil
+            }
         }
         .onChange(of: model.worldID) { _, id in app.settings.set(id?.uuidString, forKey: Self.lastWorldKey) }
+        .onChange(of: app.storiesStudioCommand) { _, command in
+            guard let command else { return }
+            model.apply(command, library: library)
+            app.storiesStudioCommand = nil
+        }
     }
 
     private func emptyState(_ library: StoryLibrary) -> some View {

@@ -436,6 +436,8 @@ final class AppModel {
     var presenterBackgroundPickerOpen = false
     /// Stories Studio is shown in the main area.
     var storiesStudioOpen = false
+    /// What an action wants Stories Studio to show; the open screen takes it over.
+    var storiesStudioCommand: StoriesStudioCommand?
     /// Writer Studio shows a white sheet instead of the dark one (the user's choice in the dark design).
     var writerLightPaper: Bool {
         didSet { settings.set(writerLightPaper, forKey: Keys.writerLightPaper) }
