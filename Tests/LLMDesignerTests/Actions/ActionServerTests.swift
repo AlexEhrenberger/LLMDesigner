@@ -3,6 +3,7 @@ import Foundation
 import LLMDProtocol
 @testable import LLMDesigner
 
+extension ActionSuites {
 @MainActor
 @Suite("llmd-Socket")
 struct ActionServerTests {
@@ -126,4 +127,5 @@ struct ActionServerTests {
         #expect(!ActionConnection.constantTimeEqual("abc", "abd"))
         #expect(!ActionConnection.constantTimeEqual("abc", "abcd"))
     }
+}
 }

@@ -96,6 +96,7 @@ final class ActionRegistry {
         let state = runState(id: runID, channel: channel)
         let group = UndoGroup(label: id)
         group.runID = state.id
+        group.turnID = state.currentTurn
         do {
             let result = try await perform(id, args: args, app: app, state: state, group: group)
             undoStack.push(group)
@@ -111,6 +112,7 @@ final class ActionRegistry {
         let state = runState(id: runID, channel: channel)
         let group = UndoGroup(label: "Stapel (\(steps.count))")
         group.runID = state.id
+        group.turnID = state.currentTurn
         var results: [JSONValue] = []
         do {
             for step in steps {
@@ -163,10 +165,13 @@ final class ActionRegistry {
             var security = descriptor.security
             security.readsUntrusted = security.readsUntrusted || preflight.readsUntrusted
             security.sensitive = security.sensitive || preflight.readsSensitive
+            let levelKind: ActionKind = preflight.isInSafePlace ? .write : descriptor.kind
+            let level = state.approval?.level(for: levelKind, isSensitive: security.sensitive)
+                ?? approval.level(channel: state.channel, kind: levelKind, settings: app.settings)
             var decision = ActionPolicy.decide(
                 ActionPolicy.Input(channel: state.channel, runHasUntrusted: state.hasReadUntrusted, runHasSensitive: state.hasReadSensitive,
                                    security: security, kind: descriptor.kind),
-                level: approval.level(channel: state.channel, kind: preflight.isInSafePlace ? .write : descriptor.kind, settings: app.settings)
+                level: level
             )
             if let reason = preflight.needsConsent, decision == .allow { decision = .ask(reason: reason) }
             logEntry.decision = decision.label

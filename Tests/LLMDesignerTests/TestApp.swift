@@ -1,4 +1,5 @@
 import AppKit
+import Testing
 @testable import LLMDesigner
 
 /// A real `AppModel` for tests. There is one throwaway library per test run, because the stores read the global
@@ -22,3 +23,8 @@ enum TestApp {
     /// One model per run: it loads and starts background work once, as in the app.
     private static let shared = AppModel()
 }
+
+/// Everything that works on the shared model runs one after the other: its settings, endpoint and registry are shared,
+/// and main-actor tests would otherwise take turns at every `await`.
+@Suite("Actions", .serialized)
+enum ActionSuites {}

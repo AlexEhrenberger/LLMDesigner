@@ -3,6 +3,7 @@ import Foundation
 import LLMDProtocol
 @testable import LLMDesigner
 
+extension ActionSuites {
 @MainActor
 @Suite("Writer-Actions: Dokumente und Lesen", .serialized)
 struct WriterDocumentActionTests {
@@ -621,4 +622,5 @@ struct ProvenanceTests {
         #expect(!own.contains("herkunft"))
         #expect(WriterDocumentStore.decode(own, fallbackID: nil)?.provenance == nil)
     }
+}
 }

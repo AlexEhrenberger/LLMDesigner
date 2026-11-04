@@ -62,9 +62,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate()
         MainActor.assumeIsolated {
             let hub = ActionHub { LibrarySession.shared?.app }
+            // The chat's tools need the registry even if the terminal can't get in.
+            ActionHub.shared = hub
             do {
                 try hub.start()
-                ActionHub.shared = hub
             } catch {
                 // The app works without it; only the terminal can't reach it.
                 print("LLMDesigner: llmd-Socket konnte nicht starten: \(error.localizedDescription)")

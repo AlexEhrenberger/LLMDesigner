@@ -130,6 +130,9 @@ final class AppModel {
     /// Chats a chat's action is waiting on; they can't be asked again (see `ActionContext.checkNoRecursion`).
     @ObservationIgnored var chatsBeingAskedByActions: Set<Chat.ID> = []
 
+    /// Set in tests; the app uses the hub's registry.
+    @ObservationIgnored var actionRegistryOverride: ActionRegistry?
+
     /// Something other than the person just changed the open document.
     var actionFlash: ActionFlash?
 
@@ -246,6 +249,8 @@ final class AppModel {
     }
     /// Globe and W buttons in the composer of a chat that doesn't exist yet.
     private var newChatWebSearch = false
+    private var newChatActionGroups: [String] = []
+    private var newChatActionApproval: ChatToolApproval?
     private var newChatWikipedia = false
     /// Thinking button in the composer of a chat that doesn't exist yet; starts with the last choice.
     private var newChatThinking: Bool
@@ -693,6 +698,30 @@ final class AppModel {
         toggleChatFlag(\.webSearch)
     }
 
+    // The composer's menu of tool groups: for the selected chat, or the next one.
+
+    var activeActionGroups: [String] { selectedChat.map { $0.actionGroups ?? [] } ?? newChatActionGroups }
+    var activeActionApproval: ChatToolApproval { selectedChat.map { $0.actionApproval ?? .ask } ?? newChatActionApproval ?? .ask }
+
+    func toggleActionGroup(_ group: String) {
+        var groups = activeActionGroups
+        if let position = groups.firstIndex(of: group) { groups.remove(at: position) } else { groups.append(group) }
+        guard let id = selectedChatID else { return newChatActionGroups = groups }
+        updateChat(id) { $0.actionGroups = groups.isEmpty ? nil : groups }
+    }
+
+    func setActionApproval(_ approval: ChatToolApproval) {
+        guard let id = selectedChatID else { return newChatActionApproval = approval == .ask ? nil : approval }
+        updateChat(id) { $0.actionApproval = approval == .ask ? nil : approval }
+    }
+
+    /// Changes a chat's settings and saves it.
+    func updateChat(_ id: Chat.ID, _ change: (inout Chat) -> Void) {
+        guard let index = index(of: id) else { return }
+        change(&chats[index])
+        store.save(chats[index])
+    }
+
     func toggleWikipedia() {
         guard selectedIndex != nil else { return newChatWikipedia.toggle() }
         toggleChatFlag(\.wikipediaSearch)
@@ -849,6 +878,8 @@ final class AppModel {
         editingMessageID = nil
         newChatWebSearch = false
         newChatWikipedia = false
+        newChatActionGroups = []
+        newChatActionApproval = nil
         newChatThinking = settings.bool(forKey: Keys.thinkingDefault)
         newChatSkillIDs = []
         newChatPersonaID = nil
@@ -942,6 +973,10 @@ final class AppModel {
             chat.hasCustomTitle = false
             if newChatWebSearch { chat.webSearch = true }
             if newChatWikipedia { chat.wikipediaSearch = true }
+            if !newChatActionGroups.isEmpty { chat.actionGroups = newChatActionGroups }
+            chat.actionApproval = newChatActionApproval
+            newChatActionGroups = []
+            newChatActionApproval = nil
             if newChatThinking { chat.thinking = true }
             if let personaID = newChatPersonaID, persona(personaID) != nil {
                 chat.personaID = personaID
@@ -1036,13 +1071,19 @@ final class AppModel {
         let sources: WebTools.Sources = canCallTools ? lookupSources(of: chats[index]) : []
         // A persona with files may look into them whenever it needs to.
         let fileTools = canCallTools ? persona(of: chats[index]).flatMap(PersonaFileTools.init(persona:)) : nil
-        let offeredTools = WebTools.definitions(for: sources) + (fileTools?.definitions ?? [])
+        // A turn that an action started runs without action tools (see `startTurn` in ChatActions).
+        let actionTools = canCallTools && !chatsBeingAskedByActions.contains(chatID)
+            ? actionRegistry.flatMap { ChatActionTools(registry: $0, chat: chats[index]) } : nil
+        if actionTools != nil { prepareActionRun(for: chats[index]) }
+        let offeredTools = WebTools.definitions(for: sources) + (fileTools?.definitions ?? []) + (actionTools?.definitions ?? [])
         let tools = offeredTools.isEmpty ? nil : offeredTools
+        let maxRounds = actionTools == nil ? WebTools.maxRounds : ChatActionTools.maxRounds
+        let maxCalls = actionTools == nil ? WebTools.maxCallsPerRound : ChatActionTools.maxCallsPerRound
         // The strong memory sorts the question first; the moments it recalls join the system prompt.
         let thalamusJob = thalamusJob(for: chats[index], model: modelId)
         var payload: [ChatPayloadMessage] = []
         var system = systemPrompt(for: chats[index])
-        for hint in [sources.isEmpty ? nil : WebTools.systemHint(for: sources), fileTools?.systemHint].compactMap({ $0 }) {
+        for hint in [sources.isEmpty ? nil : WebTools.systemHint(for: sources), fileTools?.systemHint, actionTools?.systemHint].compactMap({ $0 }) {
             system = system.isEmpty ? hint : system + "\n\n" + hint
         }
         // The answer will be read aloud: short, spoken sentences without Markdown.
@@ -1072,6 +1113,7 @@ final class AppModel {
         let assistant = ChatMessage(role: .assistant, content: "", model: modelId)
         let messageID = assistant.id
         chats[index].messages.append(assistant)
+        if actionTools != nil { actionRegistry?.runState(id: chatID.uuidString, channel: .chat).currentTurn = messageID }
         let live = LiveAnswer()
         liveAnswers[messageID] = live
         streamingMessageIDs[chatID] = messageID
@@ -1155,7 +1197,7 @@ final class AppModel {
                 try Task.checkCancellation()
                 for round in 0... {
                     // The last round goes without tools, so the model answers with what it found so far.
-                    let offered = round < WebTools.maxRounds ? tools : nil
+                    let offered = round < maxRounds ? tools : nil
                     let stream = client.streamChat(
                         model: modelId, messages: conversation, temperature: temperature, tools: offered, thinking: thinking
                     )
@@ -1194,13 +1236,13 @@ final class AppModel {
                     for (position, call) in calls.enumerated() {
                         try Task.checkCancellation()
                         let output: String
-                        if position >= WebTools.maxCallsPerRound {
+                        if position >= maxCalls {
                             output = WebTools.skippedOutput
                         } else if resultBudget < 800 {
                             output = WebTools.budgetExhaustedOutput
                         } else {
                             output = await self?.runTool(
-                                call, chatID: chatID, messageID: messageID, sources: sources, fileTools: fileTools,
+                                call, chatID: chatID, messageID: messageID, sources: sources, fileTools: fileTools, actionTools: actionTools,
                                 offered: offeredTools, limit: min(resultLimit, resultBudget), readerFallback: readerFallback
                             ) ?? ""
                             resultBudget -= output.count
@@ -1251,13 +1293,24 @@ final class AppModel {
     /// Shows a tool call as a step of the answer, runs it and returns the text for the model.
     private func runTool(
         _ call: ToolCall, chatID: Chat.ID, messageID: ChatMessage.ID, sources: WebTools.Sources, fileTools: PersonaFileTools?,
-        offered: [ToolDefinition], limit: Int, readerFallback: Bool
+        actionTools: ChatActionTools?, offered: [ToolDefinition], limit: Int, readerFallback: Bool
     ) async -> String {
+        if let actionTools, let action = actionTools.action(forTool: call.function.name) {
+            let running = ToolStep(kind: .action, argument: action.id)
+            updateMessage(chatID, messageID) { $0.toolSteps = ($0.toolSteps ?? []) + [running] }
+            var (finished, output) = await actionTools.execute(call, action: action, app: self, limit: limit)
+            finished.id = running.id
+            updateMessage(chatID, messageID) { message in
+                if let position = message.toolSteps?.firstIndex(where: { $0.id == running.id }) { message.toolSteps?[position] = finished }
+            }
+            return output
+        }
         let fileStep = fileTools?.step(for: call)
         guard let step = fileStep ?? WebTools.step(for: call, allowed: sources) else {
             return WebTools.unknownToolOutput(call, available: offered)
         }
-        if let refusal = await webToolRefusal(for: step, messages: index(of: chatID).map { chats[$0].messages } ?? []) {
+        let run = actionTools == nil ? nil : actionRegistry?.runState(id: chatID.uuidString, channel: .chat)
+        if let refusal = await webToolRefusal(for: step, messages: index(of: chatID).map { chats[$0].messages } ?? [], runHasSensitive: run?.hasReadSensitive == true) {
             var refused = step
             refused.status = .failed
             refused.error = "Nicht erlaubt"
@@ -1275,12 +1328,19 @@ final class AppModel {
                 message.toolSteps?[position] = finished
             }
         }
-        return output
+        // In a chat with action tools, what the lookups bring counts for the safety rule, and a foreign text is framed.
+        guard let run else { return output }
+        if finished.status == .done {
+            if finished.kind.isFile { run.markSensitive() } else { run.markUntrusted() }
+        }
+        return finished.kind.isFile ? output : ForeignFrame.wrap(output)
     }
 
     /// Applies `WebToolGuard` to a step in a chat with these messages. Returns the text for the model when the step may not run.
-    func webToolRefusal(for step: ToolStep, messages: [ChatMessage]) async -> String? {
-        switch WebToolGuard.verdict(for: step, evidence: .init(messages: messages)) {
+    func webToolRefusal(for step: ToolStep, messages: [ChatMessage], runHasSensitive: Bool = false) async -> String? {
+        var evidence = WebToolGuard.ChatEvidence(messages: messages)
+        if runHasSensitive { evidence.hasReadPersonaFiles = true }
+        switch WebToolGuard.verdict(for: step, evidence: evidence) {
         case .allowed:
             return nil
         case .denied(let text):
@@ -1385,6 +1445,8 @@ final class AppModel {
         chat.hasCustomTitle = source.isTitleCustom
         chat.webSearch = source.webSearch
         chat.wikipediaSearch = source.wikipediaSearch
+        chat.actionGroups = source.actionGroups
+        chat.actionApproval = source.actionApproval
         chat.thinking = source.thinking
         chat.folderID = source.folderID
         chat.skillIDs = source.skillIDs
@@ -1797,6 +1859,8 @@ final class AppModel {
     }
 
     private func finishGeneration(_ chatID: Chat.ID, answerID: ChatMessage.ID, completed: Bool) {
+        chatsBeingAskedByActions.remove(chatID)
+        actionRegistry?.runState(id: chatID.uuidString, channel: .chat).currentTurn = nil
         streamingMessageIDs[chatID] = nil
         liveAnswers[answerID] = nil
         generationTasks[chatID] = nil

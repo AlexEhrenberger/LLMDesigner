@@ -1,4 +1,5 @@
 import Foundation
+import LLMDProtocol
 
 /// Where the language models run.
 enum LLMProvider: String, CaseIterable, Identifiable, Sendable {
@@ -136,10 +137,23 @@ struct ToolDefinition: Encodable, Sendable {
         let properties: [String: Parameter]
         let required: [String]
     }
+    /// The fixed kind above, or a whole JSON schema, as the actions have.
+    enum Schema: Encodable, Sendable {
+        case simple(Parameters)
+        case json(JSONValue)
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.singleValueContainer()
+            switch self {
+            case .simple(let parameters): try container.encode(parameters)
+            case .json(let schema): try container.encode(schema)
+            }
+        }
+    }
     struct Function: Encodable, Sendable {
         let name: String
         let description: String
-        let parameters: Parameters
+        let parameters: Schema
     }
     let type = "function"
     let function: Function
@@ -149,8 +163,12 @@ struct ToolDefinition: Encodable, Sendable {
         function = Function(
             name: name,
             description: description,
-            parameters: Parameters(properties: parameters, required: required ?? parameters.keys.sorted())
+            parameters: .simple(Parameters(properties: parameters, required: required ?? parameters.keys.sorted()))
         )
+    }
+
+    init(name: String, description: String, schema: JSONValue) {
+        function = Function(name: name, description: description, parameters: .json(schema))
     }
 }
 

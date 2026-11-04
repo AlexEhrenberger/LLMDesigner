@@ -10,6 +10,10 @@ final class RunState {
     private(set) var hasReadUntrusted: Bool
     private(set) var hasReadSensitive = false
     var lastUsed = Date()
+    /// A chat's own setting of how much it may do without asking.
+    var approval: ChatToolApproval?
+    /// The answer of the chat this run is working on.
+    var currentTurn: UUID?
 
     init(id: String = UUID().uuidString, channel: ActionChannel) {
         self.id = id

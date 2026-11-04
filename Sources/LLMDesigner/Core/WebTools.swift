@@ -135,6 +135,7 @@ enum WebTools {
             case .openPage: "Adresse"
             case .wikiArticle: "Artikeltitel"
             case .fileRead: "Dateiname"
+            case .action: "Action"
             }
             return (step, "Fehler: Der Aufruf enthielt keine \(missing).")
         }
@@ -159,8 +160,8 @@ enum WebTools {
                 let (source, text) = wikiArticleOutput(article, section: step.section)
                 step.sources = [source]
                 output = text
-            case .fileSearch, .fileRead:
-                // A persona's files are read by `PersonaFileTools`; such steps never come here.
+            case .fileSearch, .fileRead, .action:
+                // Files are read by `PersonaFileTools`, actions by `ChatActionTools`; such steps never come here.
                 output = ""
             }
             step.status = .done
@@ -178,7 +179,7 @@ enum WebTools {
     /// so the model can open them again in a follow-up question. The full results are not repeated.
     static func historyContent(of message: ChatMessage) -> String {
         // A persona's files are offered again with every question anyway.
-        let sources = (message.toolSteps ?? []).filter { !$0.kind.isFile }.flatMap { step in
+        let sources = (message.toolSteps ?? []).filter { !$0.kind.isFile && $0.kind != .action }.flatMap { step in
             step.kind.readsPage ? (step.sources ?? []) : Array((step.sources ?? []).prefix(3))
         }
         var seen: Set<String> = []

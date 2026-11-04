@@ -58,7 +58,7 @@ enum WebToolGuard {
                 action: "Im Web suchen", detail: step.argument,
                 reason: "In diesem Chat wurden Persona-Dateien gelesen. Über die Suchbegriffe könnten deren Inhalte die App verlassen."
             ))
-        case .wikiSearch, .wikiArticle, .fileSearch, .fileRead:
+        case .wikiSearch, .wikiArticle, .fileSearch, .fileRead, .action:
             return .allowed
         }
     }

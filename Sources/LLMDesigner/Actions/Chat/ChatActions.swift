@@ -59,7 +59,7 @@ extension AppModel {
         let isPrivate = chat.memory == .on || persona?.files?.isEmpty == false
             || chat.messages.contains { $0.toolSteps?.contains { $0.kind.isFile } == true }
         let isForeign = chat.webSearch == true || chat.wikipediaSearch == true
-            || chat.messages.contains { $0.toolSteps?.contains { !$0.kind.isFile } == true }
+            || chat.messages.contains { $0.toolSteps?.contains { !$0.kind.isFile && $0.kind != .action } == true }
         return ActionPreflight(readsUntrusted: isForeign, readsSensitive: isPrivate, target: chat.title)
     }
 }
@@ -263,6 +263,9 @@ private func startTurn(_ args: ChatTextArgs, context: ActionContext) throws -> (
     guard !app.isGenerating(chat.id) else { throw RPCError.unavailable("In diesem Chat läuft gerade eine Antwort.") }
     guard let model = app.modelId(for: chat) ?? app.currentModelId else { throw RPCError.unavailable("Es ist kein Modell gewählt.") }
     let count = chat.messages.count
+    // A turn from a program or a marked run gets no action tools: otherwise it could have its work done by a chat whose
+    // run looks clean. The person at the terminal may use them. It ends with the answer (`finishGeneration`).
+    if context.channel != .cli || context.run.hasReadUntrusted { app.chatsBeingAskedByActions.insert(chat.id) }
     app.ask(args.text, images: [], in: chat.id, model: model)
     return (chat, count)
 }
@@ -336,8 +339,6 @@ struct ChatAskAction: LLMDAction {
     static func run(_ args: ChatTextArgs, context: ActionContext) async throws -> MessageInfo {
         let app = context.app
         let (chat, count) = try startTurn(args, context: context)
-        if context.channel == .chat { app.chatsBeingAskedByActions.insert(chat.id) }
-        defer { app.chatsBeingAskedByActions.remove(chat.id) }
         try await waitForAnswer(in: chat.id, app: app, timeout: args.timeout ?? ChatWaitAction.defaultTimeout)
         guard let last = answer(in: chat.id, after: count, app: app) else { throw RPCError.internal("Es kam keine Antwort.") }
         if let error = last.error { throw RPCError.unavailable("Das Modell antwortet nicht: \(error)") }

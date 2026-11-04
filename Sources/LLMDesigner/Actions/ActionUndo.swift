@@ -13,6 +13,8 @@ final class UndoGroup {
     let id = UUID()
     /// The run it belongs to; "undo this answer" takes back all groups of a run and turn.
     var runID: String?
+    /// The answer of a chat it happened in; "undo this answer" takes back all groups of a turn.
+    var turnID: UUID?
     var label: String
     private(set) var steps: [UndoStep] = []
     /// The documents this group changed, for "undo in this document".
@@ -69,10 +71,10 @@ final class ActionUndoStack {
         return group.label
     }
 
-    /// Takes back all groups of a run, newest first. Returns how many.
-    func undoAll(run: String) -> Int {
+    /// Takes back all groups of an answer, newest first. Returns how many.
+    func undoAll(turn: UUID) -> Int {
         var count = 0
-        while undo(where: { $0.runID == run }) != nil { count += 1 }
+        while undo(where: { $0.turnID == turn }) != nil { count += 1 }
         return count
     }
 

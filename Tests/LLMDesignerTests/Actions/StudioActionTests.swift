@@ -3,6 +3,13 @@ import AppKit
 import LLMDProtocol
 @testable import LLMDesigner
 
+private extension Dictionary where Key == String, Value == String {
+    func decoded<T: Decodable>() throws -> T {
+        try JSONDecoder().decode(T.self, from: JSONEncoder().encode(self))
+    }
+}
+
+extension ActionSuites {
 @MainActor
 @Suite("Presenter-Actions", .serialized)
 struct PresenterActionTests {
@@ -247,11 +254,6 @@ struct CitationActionTests {
     }
 }
 
-private extension Dictionary where Key == String, Value == String {
-    func decoded<T: Decodable>() throws -> T {
-        try JSONDecoder().decode(T.self, from: JSONEncoder().encode(self))
-    }
-}
 
 @MainActor
 @Suite("Stories-Actions", .serialized)
@@ -503,4 +505,5 @@ struct ChatActionTests {
             #expect(try await h.call("chat.ask", ["chat": .string(id), "text": "Hi"], channel: .mcp)["text"] == "Hallo.")
         }
     }
+}
 }

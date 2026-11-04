@@ -4,6 +4,7 @@ import WebKit
 import LLMDProtocol
 @testable import LLMDesigner
 
+extension ActionSuites {
 @MainActor
 @Suite("Einstellungen, Ereignisse, Installation", .serialized)
 struct ActionSettingsTests {
@@ -168,4 +169,5 @@ struct OfflineWebContentTests {
         await wait({ counter.hits > 0 }, seconds: 10)
         #expect(counter.hits > 0)
     }
+}
 }

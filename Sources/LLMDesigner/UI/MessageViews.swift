@@ -222,6 +222,9 @@ private struct PillButtonStyle: ButtonStyle {
 }
 
 private struct AssistantMessageView: View {
+    @Environment(AppModel.self) private var app
+    /// Redraws the footer after undoing; the undo stack isn't observed.
+    @State private var undoneActions = 0
     let message: ChatMessage
     let live: LiveAnswer?
     let persona: Persona?
@@ -328,6 +331,12 @@ private struct AssistantMessageView: View {
                 SpeakButton(state: speech, action: onSpeak)
                 IconButton(systemName: "arrow.triangle.branch", help: "Ab hier in neuem Chat abzweigen", size: 12.5, action: onBranch)
             }
+            if message.toolSteps?.contains(where: { $0.kind == .action }) == true, undoneActions >= 0, app.canUndoActions(ofAnswer: message.id) {
+                IconButton(systemName: "arrow.uturn.backward", help: "Alle Änderungen dieser Antwort zurücknehmen", size: 12.5) {
+                    app.undoActions(ofAnswer: message.id)
+                    undoneActions += 1
+                }
+            }
             if isLast {
                 IconButton(systemName: "arrow.clockwise", help: "Neu generieren (⇧⌘R)", size: 12.5, action: onRegenerate)
             }
@@ -432,19 +441,21 @@ private struct ToolStepsView: View {
         let pages = count([.openPage])
         let articles = count([.wikiArticle])
         let files = count([.fileRead])
+        let actions = count([.action])
         let failed = steps.filter { $0.status == .failed }.count
-        let usesWeb = steps.contains { !$0.kind.isWikipedia && !$0.kind.isFile }
+        let usesWeb = steps.contains { !$0.kind.isWikipedia && !$0.kind.isFile && $0.kind != .action }
         let usesWikipedia = steps.contains(where: \.kind.isWikipedia)
         let usesFiles = steps.contains(where: \.kind.isFile)
         var places: [String] = []
         if usesFiles { places.append("Dateien") }
         if usesWeb { places.append(usesWikipedia || usesFiles ? "Web" : "Websuche") }
         if usesWikipedia { places.append("Wikipedia") }
-        var parts = [places.joined(separator: " & ")]
+        var parts = places.isEmpty ? [] : [places.joined(separator: " & ")]
         if searches > 0 { parts.append(searches == 1 ? "1 Suche" : "\(searches) Suchen") }
         if pages > 0 { parts.append(pages == 1 ? "1 Seite gelesen" : "\(pages) Seiten gelesen") }
         if articles > 0 { parts.append("\(articles) Artikel gelesen") }
         if files > 0 { parts.append(files == 1 ? "1 Datei gelesen" : "\(files) Dateien gelesen") }
+        if actions > 0 { parts.append(actions == 1 ? "1 Aktion" : "\(actions) Aktionen") }
         if failed > 0 { parts.append(failed == 1 ? "1 Fehler" : "\(failed) Fehler") }
         return parts.joined(separator: " · ")
     }
@@ -457,6 +468,7 @@ private struct ToolStepsView: View {
         case .wikiArticle: "Liest in Wikipedia: \(articleName(step)) …"
         case .fileSearch: "Sucht in den Dateien: „\(step.argument)“ …"
         case .fileRead: "Liest „\(step.argument)“ …"
+        case .action: "Führt aus: \(step.argument) …"
         }
     }
 
@@ -514,6 +526,7 @@ private struct ToolStepRow: View {
         case .search, .wikiSearch, .fileSearch: return "magnifyingglass"
         case .openPage, .fileRead: return "doc.text"
         case .wikiArticle: return "book.closed"
+        case .action: return "bolt"
         }
     }
 
@@ -544,6 +557,9 @@ private struct ToolStepRow: View {
             } else {
                 Text(step.argument)
             }
+        case .action:
+            Text(step.argument).font(.system(size: 13, weight: .medium, design: .monospaced))
+                + Text(step.section.map { "  ·  \($0)" } ?? "").foregroundColor(Theme.textTertiary)
         }
     }
 }

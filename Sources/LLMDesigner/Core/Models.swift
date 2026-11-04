@@ -51,6 +51,8 @@ struct ToolStep: Identifiable, Codable, Hashable, Sendable {
         case search, openPage, wikiSearch, wikiArticle
         /// A persona searching or reading one of its files.
         case fileSearch, fileRead
+        /// An action of the app (`ChatActionTools`): `argument` is its id, `section` what it worked on.
+        case action
 
         var isWikipedia: Bool { self == .wikiSearch || self == .wikiArticle }
         var isFile: Bool { self == .fileSearch || self == .fileRead }
@@ -117,6 +119,10 @@ struct Chat: Identifiable, Codable, Hashable, Sendable {
     /// Context length the model runs with for this chat (8K, 16K or 32K); chosen when the chat starts.
     /// Nil for chats from before the setting existed: they use whatever the model is loaded with.
     var contextLength: Int?
+    /// Tool groups of the studios this chat may use (`ChatToolGroups`).
+    var actionGroups: [String]?
+    /// How much it may do with them without asking. Nil: everything is asked.
+    var actionApproval: ChatToolApproval?
 
     /// Whether the user chose the title. Chats from before `hasCustomTitle` existed count as renamed
     /// when their title differs from the one derived from the first message.

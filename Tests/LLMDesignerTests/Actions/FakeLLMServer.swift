@@ -17,6 +17,10 @@ final class FakeLLMServer: @unchecked Sendable {
     private let listener: Int32
     let port: UInt16
     var fallback = "Fertig."
+    /// What any other address answers, as a web page.
+    var page = "<html><body>Nichts.</body></html>"
+    /// A placeholder in scripted tool arguments and what it stands for, for things only known once the server runs.
+    var substitute: (String, String)?
 
     init(script: [Turn] = []) throws {
         self.script = script
@@ -76,7 +80,9 @@ final class FakeLLMServer: @unchecked Sendable {
         }
         let path = head.split(separator: " ").dropFirst().first.map(String.init) ?? ""
         let reply: (type: String, text: String)
-        if path.contains("models/load") {
+        if path.hasPrefix("/artikel") {
+            reply = ("text/html; charset=utf-8", page)
+        } else if path.contains("models/load") {
             reply = ("application/json", "{}")
         } else if path.contains("models") {
             reply = ("application/json", #"{"data":[{"id":"fake","object":"model","type":"llm","state":"loaded","loaded_context_length":16384,"max_context_length":32768,"capabilities":["tool_use"]}]}"#)
@@ -84,7 +90,7 @@ final class FakeLLMServer: @unchecked Sendable {
             let request = (try? JSONDecoder().decode(JSONValue.self, from: body)) ?? .null
             if request["stream"] == true {
                 lock.withLock { seen.append(request) }
-                reply = ("text/event-stream", Self.stream(nextTurn()))
+                reply = ("text/event-stream", Self.stream(nextTurn(), substitute: substitute))
             } else {
                 reply = ("application/json", #"{"choices":[{"message":{"role":"assistant","content":"{}"}}]}"#)
             }
@@ -93,7 +99,7 @@ final class FakeLLMServer: @unchecked Sendable {
         _ = UnixSocket.writeAll(Data(response.utf8), to: client)
     }
 
-    private static func stream(_ turn: Turn) -> String {
+    private static func stream(_ turn: Turn, substitute: (String, String)?) -> String {
         func event(_ delta: JSONValue, finish: JSONValue = nil) -> String {
             let value: JSONValue = ["model": "fake", "choices": [["index": 0, "delta": delta, "finish_reason": finish]]]
             return "data: \(value.jsonLine())\n\n"
@@ -105,7 +111,7 @@ final class FakeLLMServer: @unchecked Sendable {
             text += event([:], finish: "stop")
         case .tools(let calls):
             let list: [JSONValue] = calls.enumerated().map { index, call in
-                ["index": .int(index), "id": .string("call_\(index)"), "type": "function", "function": ["name": .string(call.name), "arguments": .string(call.arguments)]]
+                ["index": .int(index), "id": .string("call_\(index)"), "type": "function", "function": ["name": .string(call.name), "arguments": .string(substitute.map { call.arguments.replacingOccurrences(of: $0.0, with: $0.1) } ?? call.arguments)]]
             }
             text += event(["tool_calls": .array(list)])
             text += event([:], finish: "tool_calls")

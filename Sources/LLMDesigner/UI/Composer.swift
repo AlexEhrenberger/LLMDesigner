@@ -50,6 +50,7 @@ struct ComposerView: View {
                 SkillsButton()
                 ThinkingButton()
                 WebSearchButton()
+                ActionToolsMenu()
                 WikipediaButton()
                 if app.isDictationAvailable {
                     DictationButton()
@@ -144,6 +145,39 @@ private struct ThinkingButton: View {
         ) {
             Image(systemName: "brain").font(.system(size: 14, weight: .medium))
         }
+    }
+}
+
+/// Which of the studios this chat may work in, and how much it may do without asking.
+private struct ActionToolsMenu: View {
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        let active = app.activeActionGroups
+        Menu {
+            Section("Dieser Chat darf benutzen") {
+                ForEach(ChatToolGroups.labels, id: \.id) { group in
+                    Toggle(group.label, isOn: Binding(get: { active.contains(group.id) }, set: { _ in app.toggleActionGroup(group.id) }))
+                }
+            }
+            Section("Ohne Rückfrage") {
+                Picker("Ohne Rückfrage", selection: Binding(get: { app.activeActionApproval }, set: { app.setActionApproval($0) })) {
+                    ForEach(ChatToolApproval.allCases, id: \.self) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.inline)
+                .labelsHidden()
+            }
+        } label: {
+            Image(systemName: active.isEmpty ? "bolt" : "bolt.fill")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(active.isEmpty ? Theme.textSecondary : Theme.accent)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .frame(width: 32, height: 32)
+        .disabled(!app.canUseLookupTools)
+        .help(active.isEmpty ? "Werkzeuge: Der Chat kann Dokumente, Folien, Quellen und Romanwelten bearbeiten" : "Werkzeuge: \(active.count) eingeschaltet")
     }
 }
 

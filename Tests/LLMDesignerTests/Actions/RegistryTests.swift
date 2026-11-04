@@ -33,6 +33,7 @@ struct FailingAction: LLMDAction {
     static func run(_ args: NoArgs, context: ActionContext) async throws -> [String: String] { throw RPCError.notFound("weg") }
 }
 
+extension ActionSuites {
 @MainActor
 @Suite("Action-Registry")
 struct RegistryTests {
@@ -168,4 +169,5 @@ struct RegistryTests {
         _ = await code { try await registry.run("test.fail", app: app, channel: .cli) }
         #expect(registry.log.entries.last?.error == "weg")
     }
+}
 }

@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import LLMDesigner
 
+extension ActionSuites {
 @Suite("Sicherheit: Regeln für open_page und web_search")
 struct WebToolGuardTests {
     private func searchMessage(_ urls: String...) -> ChatMessage {
@@ -143,4 +144,5 @@ struct WebToolGuardTests {
         app.toolConsent = { _ in true }
         #expect(await app.webToolRefusal(for: step, messages: messages) == nil)
     }
+}
 }

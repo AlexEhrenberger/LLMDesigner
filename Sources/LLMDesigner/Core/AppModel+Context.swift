@@ -114,11 +114,13 @@ extension AppModel {
         if model?.acceptsTools ?? false {
             let sources = lookupSources(of: chat)
             let fileTools = persona.flatMap(PersonaFileTools.init(persona:))
-            let definitions = WebTools.definitions(for: sources) + (fileTools?.definitions ?? [])
+            let actionTools = actionRegistry.flatMap { ChatActionTools(registry: $0, chat: chat) }
+            let definitions = WebTools.definitions(for: sources) + (fileTools?.definitions ?? []) + (actionTools?.definitions ?? [])
             // JSON splits into more tokens than prose.
             if !definitions.isEmpty, let json = try? JSONEncoder().encode(definitions) { tools += json.count / 3 }
             if !sources.isEmpty { tools += tokens(WebTools.systemHint(for: sources)) }
             if let fileTools { tools += tokens(fileTools.systemHint) }
+            if let actionTools { tools += tokens(actionTools.systemHint) }
         }
 
         // Each message also costs a few tokens of chat-template markup.
