@@ -22,6 +22,7 @@ extension ActionRegistry {
         register(MemoryProfileGetAction.self)
         register(PersonaFilesSearchAction.self)
         registerChatToolActions()
+        registerChatMoreActions()
     }
 }
 
@@ -532,10 +533,17 @@ struct MemoryListAction: LLMDAction {
         var persona: String
         var kind: String?
     }
+    struct Item: Encodable, Sendable {
+        var id: String
+        var kind: String
+        var text: String
+    }
     struct Output: Encodable, Sendable {
         var impressions: [String]?
         var memories: [String]?
         var facts: [String]?
+        /// The same with ids, for `memory.delete`.
+        var items: [Item]
     }
     static let descriptor = ActionDescriptor(
         id: "memory.list", summary: "Liest das Gedächtnis einer Persona", kind: .destructive, security: .sensitiveRead,
@@ -551,7 +559,10 @@ struct MemoryListAction: LLMDAction {
         return Output(
             impressions: wanted == nil || wanted == "impressions" ? library.entries.map(\.category) : nil,
             memories: wanted == nil || wanted == "memories" ? library.memories?.map { "\($0.title): \($0.summary)" } ?? [] : nil,
-            facts: wanted == nil || wanted == "facts" ? library.profile?.map(\.text) ?? [] : nil
+            facts: wanted == nil || wanted == "facts" ? library.profile?.map(\.text) ?? [] : nil,
+            items: (wanted == nil || wanted == "impressions" ? library.entries.map { Item(id: $0.id.uuidString, kind: "impression", text: $0.category) } : [])
+                + (wanted == nil || wanted == "memories" ? (library.memories ?? []).map { Item(id: $0.id.uuidString, kind: "memory", text: "\($0.title): \($0.summary)") } : [])
+                + (wanted == nil || wanted == "facts" ? (library.profile ?? []).map { Item(id: $0.id.uuidString, kind: "fact", text: $0.text) } : [])
         )
     }
 }

@@ -95,7 +95,7 @@ extension AppModel {
         }
     }
 
-    private static func uniqueName(_ name: String, among names: [String]) -> String {
+    static func uniqueName(_ name: String, among names: [String]) -> String {
         let taken = Set(names)
         guard taken.contains(name) else { return name }
         var number = 2

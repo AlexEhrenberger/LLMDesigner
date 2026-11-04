@@ -438,6 +438,8 @@ final class AppModel {
     var storiesStudioOpen = false
     /// What an action wants Stories Studio to show; the open screen takes it over.
     var storiesStudioCommand: StoriesStudioCommand?
+    /// An action wants the mini chat window open; the main window's view opens it.
+    var miniChatOpenRequest: UUID?
     /// Writer Studio shows a white sheet instead of the dark one (the user's choice in the dark design).
     var writerLightPaper: Bool {
         didSet { settings.set(writerLightPaper, forKey: Keys.writerLightPaper) }
@@ -679,6 +681,12 @@ final class AppModel {
         get { draftImageLists[selectedChatID ?? newChatDraftKey] ?? [] }
         set { draftImageLists[selectedChatID ?? newChatDraftKey] = newValue }
     }
+
+    /// A chat's composer without opening the chat (for actions).
+    func draftText(of chatID: Chat.ID) -> String { drafts[chatID] ?? "" }
+    func setDraftText(_ text: String, of chatID: Chat.ID) { drafts[chatID] = text }
+    func draftImages(of chatID: Chat.ID) -> [ImageAttachment] { draftImageLists[chatID] ?? [] }
+    func setDraftImages(_ images: [ImageAttachment], of chatID: Chat.ID) { draftImageLists[chatID] = images }
     var importingDraftImages: Int { draftImports[selectedChatID ?? newChatDraftKey] ?? 0 }
 
     var isGenerating: Bool { selectedChatID.map(isGenerating) ?? false }
@@ -1064,7 +1072,7 @@ final class AppModel {
         generate(in: id)
     }
 
-    private func generate(in chatID: Chat.ID, spoken: Bool = false) {
+    func generate(in chatID: Chat.ID, spoken: Bool = false) {
         guard let client, let index = index(of: chatID),
               let modelId = self.modelId(for: chats[index]) else { return }
 
@@ -1441,7 +1449,7 @@ final class AppModel {
 
     /// A new chat with the first `count` messages of `source`. Messages get new IDs, so bookmarks are carried over
     /// with them; the table of contents is rebuilt for the branch.
-    private func makeBranch(of source: Chat, keeping count: Int, from messageID: ChatMessage.ID, editedQuestion: Bool) -> Chat {
+    func makeBranch(of source: Chat, keeping count: Int, from messageID: ChatMessage.ID, editedQuestion: Bool) -> Chat {
         var newIDs: [ChatMessage.ID: ChatMessage.ID] = [:]
         let messages = source.messages.prefix(count).map { message in
             var copy = message
@@ -1479,7 +1487,7 @@ final class AppModel {
         return chat
     }
 
-    private func open(_ chat: Chat) {
+    func open(_ chat: Chat) {
         chats.insert(chat, at: 0)
         store.save(chat)
         selectChat(chat.id)
@@ -1642,7 +1650,7 @@ final class AppModel {
     }
 
     /// Message parts for the PDF; with an outline, every jump target gets a LaTeX label for the table of contents.
-    private func exportParts(of chat: Chat, outline: ChatOutline?) -> (parts: [LaTeXWriter.Part], outline: LaTeXWriter.Outline?) {
+    func exportParts(of chat: Chat, outline: ChatOutline?) -> (parts: [LaTeXWriter.Part], outline: LaTeXWriter.Outline?) {
         var labels: [OutlineTarget: String] = [:]
         func label(for target: OutlineTarget) -> String {
             if let existing = labels[target] { return existing }
