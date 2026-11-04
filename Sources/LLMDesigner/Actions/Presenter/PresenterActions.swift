@@ -30,6 +30,7 @@ extension ActionRegistry {
         register(PresenterAICancelAction.self)
         register(PresenterFromDocumentAction.self)
         registerPresenterViewActions()
+        registerPresenterMoreActions()
     }
 }
 
@@ -373,11 +374,16 @@ struct PresenterSlideDeleteAction: LLMDAction {
         input: .object(slideProperties, required: ["deck"]), output: .freeObject(), groups: ["presenter.core"]
     )
     static func run(_ args: PresenterSlideArgs, context: ActionContext) async throws -> OKOutput {
-        _ = try changeDeck(args.deck, context: context) { deck in
+        var removed: (slide: PresentationSlide, index: Int)?
+        let document = try changeDeck(args.deck, context: context) { deck in
             let slide = try deck.actionSlide(id: args.slide, index: args.slideIndex)
             guard deck.slides.count > 1 else { throw RPCError.invalidTarget("Die letzte Folie bleibt.") }
-            deck.slides.remove(at: deck.index(of: slide.id)!)
+            let index = deck.index(of: slide.id)!
+            removed = (slide, index)
+            deck.slides.remove(at: index)
         }
+        // As in the app, the slide can come back: presenter.slide.restore.
+        if let removed { context.app.deletedSlide = DeletedSlide(documentID: document.id, slide: removed.slide, index: removed.index) }
         return OKOutput()
     }
 }

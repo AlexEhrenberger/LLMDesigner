@@ -376,7 +376,7 @@ struct WriterImageToSlideAction: LLMDAction {
 
 // MARK: Charts
 
-private extension WriterFigureArgs {
+extension WriterFigureArgs {
     /// The chart with what this call says.
     @MainActor
     func apply(to chart: inout WriterChart) throws {
@@ -458,7 +458,7 @@ struct WriterChartEditAction: WriterTargetedAction {
 
 // MARK: Mermaid
 
-private func mermaidImages(_ code: String) async throws -> (WriterFigureImages, CGSize) {
+func mermaidImages(_ code: String) async throws -> (WriterFigureImages, CGSize) {
     do {
         let result = try await FlowImageRenderer.shared.images(mermaid: code)
         return (WriterFigureImages(light: result.light, dark: result.dark, pdf: result.pdf), result.size)
@@ -549,7 +549,7 @@ struct WriterMermaidEditAction: WriterTargetedAction {
 
 // MARK: Drawings
 
-private extension WriterFigureArgs {
+extension WriterFigureArgs {
     @MainActor
     func shapes() throws -> [WriterDrawing.Shape] {
         try (elements ?? []).map { element in

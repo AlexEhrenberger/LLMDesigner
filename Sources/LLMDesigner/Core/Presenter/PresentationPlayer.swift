@@ -26,6 +26,8 @@ final class PresentationPlayer {
     private(set) var spokenRange: NSRange?
     /// The speaker notes show as subtitles on the slide.
     var showsSubtitles = false
+    /// At the end the model starts again from the first slide.
+    var repeats = false
     private(set) var isFullScreen = false
     var error: String?
 
@@ -167,6 +169,9 @@ final class PresentationPlayer {
             guard isPresenting, !Task.isCancelled, let count = self.deck?.slides.count else { return }
             if index + 1 < count {
                 withAnimation(.easeInOut(duration: 0.6)) { index += 1 }
+                if let slide = currentSlide { app.selectedSlideID = slide.id }
+            } else if repeats {
+                withAnimation(.easeInOut(duration: 0.6)) { index = 0 }
                 if let slide = currentSlide { app.selectedSlideID = slide.id }
             } else {
                 isPresenting = false
