@@ -25,7 +25,7 @@ Legende Art: **L** lesen · **S** schreiben (rückgängig machbar) · **D** dest
 
 **KI fehlt hier noch:** Das Stories Studio hat bisher keine KI-Funktionen. Abschnitt 11 schlägt sie vor (🆕). Gerade hier ist KI besonders wertvoll: Konsistenz prüfen, Figuren ausarbeiten, offene Fäden finden.
 
-**Romantext:** Im Modell gibt es Fokus und Notizen je Teil, aber kein Feld für den eigentlichen Manuskripttext. Die Verbindung Kapitel ↔ Writer-Dokument ist als 🆕 vorgeschlagen (Abschnitt 10).
+**Romantext:** Der Text lebt in Writer-Dokumenten, die mit ihrem Teil verknüpft sind (`manuscriptID`, vom Nutzer am 04.11.2026 entschieden). Die Welt enthält Fokus und Notizen.
 
 ---
 
@@ -194,6 +194,5 @@ _Grundsatz: KI-Vorschläge werden als Entwurf markiert und erst nach Bestätigun
 **Kontext sparen:** Eine Romanwelt kann groß werden. `stories.world.read --depth overview` sollte nur Namen und Kurzzeilen liefern; Details holt das Modell gezielt nach. Für ein 9B-Modell mit 16–32K Kontext ist das entscheidend.
 
 **Offene Fragen**
-- Wo soll der eigentliche Romantext leben – in Writer-Dokumenten, die mit Kapiteln verknüpft sind, oder direkt im Stories Studio?
 - Figuren als Chat-Personas: gewünscht? (Würde Stories, Personas und Thalamus verbinden.)
 - Export als „Story-Bible“ (Markdown/PDF) gewünscht?

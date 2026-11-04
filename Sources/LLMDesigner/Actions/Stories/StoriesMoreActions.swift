@@ -12,6 +12,7 @@ extension ActionRegistry {
         register(StoriesPartPovAction.self)
         register(StoriesPartMoveAction.self)
         register(StoriesPartReparentAction.self)
+        register(StoriesPartManuscriptAction.self)
         register(StoriesOutlineCreateAction.self)
         register(StoriesElementCreateFromTextAction.self)
         register(StoriesElementFactsAction.self)
@@ -463,6 +464,48 @@ struct StoriesPartReparentAction: LLMDAction {
             world.updatePart(parent.id) { $0.children.append(part) }
         }
         return OKOutput(id: part.id.uuidString)
+    }
+}
+
+struct StoriesPartManuscriptAction: LLMDAction {
+    struct Args: Decodable, Sendable {
+        var world: String
+        var part: String
+        var open: Bool?
+    }
+    struct Output: Encodable, Sendable {
+        var doc: String
+        var title: String
+        var created: Bool
+    }
+    static let descriptor = ActionDescriptor(
+        id: "stories.part.manuscript", summary: "Liefert das Writer-Dokument mit dem Text eines Teils und legt es an, wenn es fehlt", kind: .write, security: .localWrite,
+        input: schema(["part": partSchema, "open": .boolean("Auch öffnen; Standard: false")], required: ["part"]),
+        output: .freeObject(), example: "llmd stories part manuscript --world Saga --part 'Buch/Akt/Kapitel 1'"
+    )
+    static func run(_ args: Args, context: ActionContext) async throws -> Output {
+        let app = context.app
+        let world = try app.actionWorld(args.world)
+        let partID = try world.actionPart(args.part).id
+        let worldID = world.id
+        // What a marked run makes counts as foreign, as with any other document it writes.
+        guard let found = app.manuscript(ofPart: partID, inWorld: worldID, provenance: context.mergedProvenance(nil)) else {
+            throw RPCError.internal("Das Manuskript ließ sich nicht anlegen.")
+        }
+        if found.isNew {
+            let document = found.document
+            let library = app.stories
+            let previous = world.part(partID)?.manuscriptID
+            context.undoGroup.add(UndoStep(label: "Manuskript anlegen", undo: {
+                app.removeDocumentForActionUndo(document.id)
+                library.update(worldID) { $0.updatePart(partID) { $0.manuscriptID = previous } }
+            }, redo: {
+                app.reinsertDocumentForActionRedo(document)
+                library.update(worldID) { $0.updatePart(partID) { $0.manuscriptID = document.id } }
+            }))
+        }
+        if args.open == true { app.selectDocument(found.document.id) }
+        return Output(doc: found.document.id.uuidString, title: found.document.displayTitle, created: found.isNew)
     }
 }
 

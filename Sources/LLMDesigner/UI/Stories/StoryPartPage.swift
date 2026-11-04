@@ -181,6 +181,7 @@ struct StoryWorldPage: View {
 
 /// A book, act, chapter or section: its five questions, its notes, what lies within it; and its timeline.
 struct StoryPartPage: View {
+    @Environment(AppModel.self) private var app
     let partID: UUID
     let world: StoryWorld
     let model: StoriesStudioModel
@@ -190,7 +191,12 @@ struct StoryPartPage: View {
         if let part = world.part(partID) {
             VStack(spacing: 0) {
                 StoryPageHead(model: model, tabs: tabs(part)) {
-                    breadcrumb(part)
+                    HStack(spacing: 8) {
+                        breadcrumb(part)
+                        IconButton(systemName: "doc.text", help: part.manuscriptID.flatMap { app.document($0) } == nil ? "Manuskript in Writer Studio anlegen" : "Manuskript in Writer Studio öffnen") {
+                            if let id = app.manuscript(ofPart: partID, inWorld: world.id)?.document.id { app.selectDocument(id) }
+                        }
+                    }
                 }
                 Rectangle().fill(Theme.border).frame(height: 1)
                 if model.partTab == .timeline, part.level.hasTimeline {

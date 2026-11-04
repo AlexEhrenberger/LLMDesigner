@@ -315,6 +315,7 @@ struct StoriesPartReadAction: LLMDAction {
         var status: String
         var bookKind: String?
         var pov: String?
+        var manuscript: String?
         var notes: String
         var focus: [String: String]
         var links: [String: [String]]
@@ -337,7 +338,8 @@ struct StoriesPartReadAction: LLMDAction {
         }
         return Output(id: part.id.uuidString, level: part.level.rawValue, title: world.displayTitle(of: part), subtitle: part.subtitle,
                       status: part.status.rawValue, bookKind: part.level == .book ? part.bookKind.rawValue : nil,
-                      pov: part.povFigureID.flatMap { world.name(of: StoryRef(kind: .figure, id: $0)) }, notes: part.notes,
+                      pov: part.povFigureID.flatMap { world.name(of: StoryRef(kind: .figure, id: $0)) },
+                      manuscript: part.manuscriptID.flatMap { context.app.document($0) }?.id.uuidString, notes: part.notes,
                       focus: focus, links: links, children: StoriesPartTreeAction.nodes(part.children, in: world))
     }
 }

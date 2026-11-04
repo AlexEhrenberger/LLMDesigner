@@ -104,6 +104,63 @@ struct StoriesMoreActionTests {
         #expect(world(id).books[0].children[0].children.map(\.title) == ["K2", "K1"])
     }
 
+    @Test func manuscripts() async throws {
+        let id = try await make()
+        try await h.call("stories.outline.create", ["world": .string(id), "outline": [["title": "Buch", "children": [["title": "Akt", "children": [["title": "Kapitel"]]]]]]])
+        let part = "Buch/Akt/Kapitel"
+        let first = try await h.call("stories.part.manuscript", ["world": .string(id), "part": .string(part)])
+        #expect(first["created"] == true)
+        let doc = try #require(first["doc"]?.stringValue)
+        #expect(h.trimmed(doc).hasSuffix("Kapitel"))
+        #expect(h.app.selectedDocumentID?.uuidString != doc)
+        #expect((try await h.call("stories.part.read", ["world": .string(id), "part": .string(part)]))["manuscript"] == .string(doc))
+
+        // The second time it is the same document, with what has been written.
+        try await h.call("writer.text.insertMarkdown", ["doc": .string(doc), "markdown": "Es war einmal."])
+        let second = try await h.call("stories.part.manuscript", ["world": .string(id), "part": .string(part), "open": true])
+        #expect(second["created"] == false)
+        #expect(second["doc"] == .string(doc))
+        #expect(h.app.selectedDocumentID?.uuidString == doc)
+        h.app.closeDocument()
+
+        // Deleting the part leaves the text alone.
+        try await h.call("stories.part.delete", ["world": .string(id), "part": .string(part)])
+        #expect(h.text(doc).contains("Es war einmal."))
+
+        // A deleted document gets a new one; undo takes it back and the link with it.
+        try await h.call("stories.outline.create", ["world": .string(id), "parent": "Buch/Akt", "outline": [["title": "Neu"]]])
+        let made = try #require(try await h.call("stories.part.manuscript", ["world": .string(id), "part": "Buch/Akt/Neu"])["doc"]?.stringValue)
+        try await h.call("writer.doc.delete", ["doc": .string(made)])
+        let again = try await h.call("stories.part.manuscript", ["world": .string(id), "part": "Buch/Akt/Neu"])
+        #expect(again["created"] == true)
+        #expect(again["doc"] != .string(made))
+        try await h.call("writer.edit.undo")
+        #expect(world(id).books[0].children[0].children.first { $0.title == "Neu" }?.manuscriptID?.uuidString == made)
+        #expect(h.app.document(UUID(uuidString: try #require(again["doc"]?.stringValue))!) == nil)
+    }
+
+    @Test func aMarkedRunMakesAForeignManuscript() async throws {
+        let id = try await make()
+        try await h.call("stories.outline.create", ["world": .string(id), "outline": [["title": "Buch"]]])
+        // Reading a world marks the run.
+        try await h.call("stories.world.read", ["world": .string(id)], run: "manuskript-lauf")
+        let made = try await h.call("stories.part.manuscript", ["world": .string(id), "part": "Buch"], run: "manuskript-lauf")
+        let doc = try #require(made["doc"]?.stringValue)
+        #expect(h.app.document(UUID(uuidString: doc)!)?.provenance == .foreign)
+    }
+
+    @Test func aPartWithAManuscriptSurvivesTheFile() throws {
+        var part = StoryPart(level: .chapter, title: "Eins")
+        part.manuscriptID = UUID()
+        let data = try JSONEncoder().encode(part)
+        #expect(try JSONDecoder().decode(StoryPart.self, from: data).manuscriptID == part.manuscriptID)
+        // Files from before this field stay readable.
+        let id = UUID().uuidString
+        let old = try JSONDecoder().decode(StoryPart.self, from: Data("{\"id\":\"\(id)\",\"level\":\"chapter\",\"title\":\"Alt\"}".utf8))
+        #expect(old.title == "Alt")
+        #expect(old.manuscriptID == nil)
+    }
+
     // MARK: Elements
 
     @Test func elementsFromTextAndSearch() async throws {
