@@ -60,6 +60,9 @@ struct Skill: Identifiable, Codable, Hashable, Sendable {
     var folderID: Folder.ID?
     var createdAt = Date()
     var updatedAt = Date()
+    /// Where the instructions come from. Nil: the person's own, as for all older skills. A foreign skill goes to agents
+    /// only after the person agreed: its text is a system prompt.
+    var provenance: DocumentProvenance?
 
     static let defaultSymbol = "puzzlepiece.extension"
 

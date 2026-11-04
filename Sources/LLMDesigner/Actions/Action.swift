@@ -39,6 +39,8 @@ extension LLMDAction {
 struct ActionPreflight: Sendable {
     /// This call reads content of foreign origin, even if the action in general doesn't.
     var readsUntrusted = false
+    /// This call reads private data, even if the action in general doesn't.
+    var readsSensitive = false
     /// The call needs the person's consent whatever the rule says, for this reason.
     var needsConsent: String?
     /// The call stays where the person said it may: a file in the export folder. The level of "write" applies then

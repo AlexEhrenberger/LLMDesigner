@@ -149,6 +149,7 @@ final class ActionRegistry {
             logEntry.target = preflight.target
             var security = descriptor.security
             security.readsUntrusted = security.readsUntrusted || preflight.readsUntrusted
+            security.sensitive = security.sensitive || preflight.readsSensitive
             var decision = ActionPolicy.decide(
                 ActionPolicy.Input(channel: state.channel, runHasUntrusted: state.hasReadUntrusted, runHasSensitive: state.hasReadSensitive,
                                    security: security, kind: descriptor.kind),

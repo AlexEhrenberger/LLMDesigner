@@ -59,6 +59,8 @@ enum Output {
     private static func lines(_ object: [String: JSONValue]) -> String {
         object.sorted { $0.key < $1.key }.map { key, value in
             switch value {
+            // A picture in Base64 is of no use on the terminal.
+            case .string(let text) where text.count > 2_000 && key.lowercased().contains("base64"): "\(key): (\(text.count) Zeichen; --json zeigt alles)"
             case .string(let text): "\(key): \(text)"
             case .array, .object: "\(key): \(value.jsonLine())"
             default: "\(key): \(value.jsonLine())"

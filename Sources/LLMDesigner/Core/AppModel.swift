@@ -127,6 +127,9 @@ final class AppModel {
     /// The settings live in the open library (`Einstellungen.plist`), not in the system preferences.
     @ObservationIgnored let settings: LibrarySettings = AppLibrary.current.settings
 
+    /// Chats a chat's action is waiting on; they can't be asked again (see `ActionContext.checkNoRecursion`).
+    @ObservationIgnored var chatsBeingAskedByActions: Set<Chat.ID> = []
+
     /// Something other than the person just changed the open document.
     var actionFlash: ActionFlash?
 
@@ -983,6 +986,13 @@ final class AppModel {
     /// Puts a chat that was started outside the main window (in the mini chat) at the top of the list.
     func insert(_ chat: Chat) {
         chats.insert(chat, at: 0)
+    }
+
+    /// A chat an action made: it is saved right away and not opened, so an agent doesn't take the screen.
+    func addChatFromAction(_ chat: Chat) {
+        guard index(of: chat.id) == nil else { return }
+        chats.insert(chat, at: 0)
+        store.save(chat)
     }
 
     func stop() {
