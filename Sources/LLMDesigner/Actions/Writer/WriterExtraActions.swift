@@ -11,6 +11,9 @@ extension ActionRegistry {
         registerWriterAIActions()
         registerWriterAnalysisActions()
         registerWriterViewActions()
+        registerWriterPassageActions()
+        registerWriterStructureActions()
+        registerWriterPageActions()
     }
 }
 
