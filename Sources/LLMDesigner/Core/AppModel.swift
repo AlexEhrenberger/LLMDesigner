@@ -430,6 +430,10 @@ final class AppModel {
     var citationStudioOpen = false
     /// A source Citation Studio should show when it opens.
     var citationStudioRequest: UUID?
+    /// What an action wants Citation Studio to show; the open screen takes it over (see `CitationStudioModel.apply`).
+    var citationStudioCommand: CitationStudioCommand?
+    /// An action opens or closes the background picker of the open presentation.
+    var presenterBackgroundPickerOpen = false
     /// Stories Studio is shown in the main area.
     var storiesStudioOpen = false
     /// Writer Studio shows a white sheet instead of the dark one (the user's choice in the dark design).

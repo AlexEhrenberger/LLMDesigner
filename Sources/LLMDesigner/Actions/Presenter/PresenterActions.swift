@@ -29,6 +29,7 @@ extension ActionRegistry {
         register(PresenterAIStatusAction.self)
         register(PresenterAICancelAction.self)
         register(PresenterFromDocumentAction.self)
+        registerPresenterViewActions()
     }
 }
 
@@ -48,7 +49,7 @@ struct PresenterSlideArgs: Decodable, Sendable {
 }
 
 @MainActor
-private func deck(_ reference: String, _ app: AppModel) throws -> (WriterDocument, PresentationDeck) {
+func deck(_ reference: String, _ app: AppModel) throws -> (WriterDocument, PresentationDeck) {
     let document = try app.actionDocument(reference, presentation: true)
     return (document, document.deck ?? .new())
 }

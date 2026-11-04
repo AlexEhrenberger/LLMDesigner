@@ -770,6 +770,7 @@ private struct RoleMenu: View {
 
 /// Opens the background menu.
 private struct BackgroundButton: View {
+    @Environment(AppModel.self) private var app
     let document: WriterDocument
     let deck: PresentationDeck
     let slide: PresentationSlide
@@ -797,6 +798,9 @@ private struct BackgroundButton: View {
         .focusable(false)
         .onHover { hovering = $0 }
         .help("Hintergrund: Designs, Farbe, Verlauf oder ein Bild von Draw Things – für diese Folie, eine Art von Folien oder alle")
+        .onAppear { showsPopover = app.presenterBackgroundPickerOpen }
+        .onChange(of: app.presenterBackgroundPickerOpen) { _, open in showsPopover = open }
+        .onChange(of: showsPopover) { _, open in app.presenterBackgroundPickerOpen = open }
         .popover(isPresented: $showsPopover, arrowEdge: .bottom) {
             SlideBackgroundPicker(documentID: document.id, slideID: slide.id) {
                 showsPopover = false

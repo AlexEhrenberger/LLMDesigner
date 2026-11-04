@@ -10,6 +10,7 @@ extension ActionRegistry {
         registerWriterCodeActions()
         registerWriterAIActions()
         registerWriterAnalysisActions()
+        registerWriterViewActions()
     }
 }
 
