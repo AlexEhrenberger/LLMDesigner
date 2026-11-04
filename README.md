@@ -6,6 +6,7 @@ Native macOS-App (SwiftUI) als „LM Studio Plus“: Chat-Oberfläche im Stil vo
 
 ## Neu
 
+- **Terminal und Agenten**: `llmd` steuert die App aus dem Terminal, `llmd mcp` macht sie für MCP-Clients wie Claude Code erreichbar, und der Blitz im Eingabefeld gibt dem Chat Werkzeuge für alle Studios. Regeln im Code verhindern, dass ein gelesener Text private Daten nach außen bringt. Siehe [Action-Schicht](docs/actions.md).
 - **Neu-Menü**: Das Stift-Symbol öffnet ein Menü mit „Neuer Chat“ und allen Applikationen (Writer, Citation, Presenter, Stories).
 - **Power-Zugriff** (Blitz in der Titelleiste, ⌥⌘J): Das rechte Panel zeigt kompakte Versionen von Chats, Writer, Presenter, Citation und Stories Studio. Durchsuchen, Text in beide Richtungen ziehen, Zitate und Story-Elemente direkt anlegen, Änderungen rückgängig machen. Details in [docs/funktionen.md](docs/funktionen.md#power-zugriff).
 - **Presenter Studio** erbt Writers Formatierungen (hoch-/tiefgestellt, durchgestrichen, Code, Tabellen mit Formeln, Diagramme, Zeichnungen) und kennt **frei verschiebbare Elemente**: Textfelder, Kästen, Tabellen, Code und Abbildungen lassen sich wie Bilder auf der Folie verschieben und skalieren (Doppelklick zum Schreiben); auch der Textbereich der Folie ist verschiebbar.

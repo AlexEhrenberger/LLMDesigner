@@ -554,8 +554,12 @@ struct PresenterFieldAddImageAction: LLMDAction {
         output: .freeObject(), groups: ["presenter.core"]
     )
     static func preflight(_ args: Args, context: ActionContext) throws -> ActionPreflight {
-        // A path an agent names: the file comes into the library, so the person sees which one.
-        ActionPreflight(target: args.file)
+        var check = ActionPreflight(target: args.file)
+        // A model or a client names a path: rendered afterwards, that would show it any picture on this Mac.
+        if context.channel == .chat || context.channel == .mcp {
+            check.needsConsent = "Ein Bild von dieser Stelle der Festplatte käme in die Bibliothek und wäre danach für den Aufrufer sichtbar."
+        }
+        return check
     }
     static func run(_ args: Args, context: ActionContext) async throws -> OKOutput {
         let url = ActionExportFolder.expanded(args.file)

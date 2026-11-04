@@ -140,6 +140,10 @@ flowchart LR
 - Diagramme der Inhaltsanalyse baut die App selbst aus JSON – das Modell schreibt nie Mermaid-Code für sie, damit die Diagramme immer gültig sind. (Nur das Mermaid-Werkzeug in Writer lässt Qwen Mermaid schreiben, mit Syntax-Beispiel und Reparaturrunden.)
 - Eigenheit von LM Studio: Ein unbekannter Modellname fällt still auf das geladene Modell zurück. Die App vertraut deshalb dem `model`-Feld im Stream.
 
+## Action-Schicht
+
+Terminal, MCP und Chat erreichen die App über dieselbe Registry, die Parameter prüft, die Sicherheitsregel anwendet und Undo-Gruppen und Protokoll führt. Details: [Action-Schicht](actions.md).
+
 ## Weitere lokale Dienste
 
 | Dienst | Wofür | Anbindung |

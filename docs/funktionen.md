@@ -150,6 +150,10 @@ Dazu kommen **Spezies** (Wesen der Welt: Gestalt, Fähigkeiten und Schwächen, L
 
 Getippter Text geht zuerst in einen Entwurf und erst nach einer kurzen Pause (350 ms) in die Romanwelt; so muss das Studio nicht bei jedem Tastendruck neu gezeichnet werden. Gespeichert wird im Hintergrund. Die Textfelder wachsen mit dem Text (ohne Obergrenze, die Seite scrollt); Return beginnt eine neue Zeile, in Namen und Titeln beendet es die Eingabe; Tab springt ins nächste Feld. Kopf und Tabs einer Figur bleiben beim Scrollen stehen.
 
+## Terminal, MCP und Werkzeuge im Chat
+
+Die App lässt sich aus dem Terminal (`llmd`) und über MCP steuern, und der Chat kann auf Wunsch selbst in den Studios arbeiten. Heikle Schritte fragt die App nach, und jeder Schritt ist im Aktivitätsfenster und in der Antwort sichtbar. Siehe [Action-Schicht](actions.md).
+
 ## Power-Zugriff
 
 Der Blitz in der Titelleiste (⌥⌘J) verwandelt das rechte Panel in **kompakte Miniaturversionen aller Anwendungen** – neben dem, was in der Mitte offen ist. Das Panel ist dann breiter (400 pt).

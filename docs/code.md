@@ -55,6 +55,9 @@ flowchart LR
 | `Core/Math/`, `Core/Code/` | Formelbaum, Plots über Python, Code-Hervorhebung, Flussdiagramme |
 | `Core/Speech/` | Diktat, Vorlesen, Qwen TTS, Gesprächsmodus |
 | `Core/PowerText.swift`, `AppModel+Power.swift` | Power-Zugriff: Blöcke, Klartext, Änderungen mit Rückgängig |
+| `Actions/` | Action-Schicht: `ActionRegistry`, `ActionPolicy`, `ActionServer`, Adressen, Herkunft, je Studio ein Ordner; siehe [Action-Schicht](actions.md) |
+| `Sources/LLMDProtocol/` | Protokoll zwischen App und `llmd`: JSON-Werte, Schemas, Descriptoren, Nachrichten |
+| `Sources/llmd/` | Terminal-Werkzeug und MCP-Adapter (`MCP/`) |
 | `UI/RootView.swift` | Seitenleisten, Arbeitsfläche, Einklappen bei schmalen Fenstern |
 | `UI/Writer/` | `WriterScreen`, `WriterEditor` (Representable + Controller), `WriterTextView+*` (Editor nach Themen), Sheets |
 | `UI/Presenter/` | `PresenterScreen`, `SlideImageEditor` (Bilder/Textfelder/Textbereich verschieben), `SlideViews`, `SlidePrinter` (PDF) |
@@ -102,7 +105,7 @@ classDiagram
 ## Konventionen
 
 - **Sprache**: Code und Kommentare englisch, Oberfläche deutsch. Kommentare erklären das *Warum* in ganzen Sätzen.
-- **Alles in die Bibliothek**: Neue Daten und Einstellungen gehören in `AppLibrary.current` bzw. `AppModel.settings` – nie nach Application Support oder in `UserDefaults`.
+- **Alles in die Bibliothek**: Neue Daten und Einstellungen gehören in `AppLibrary.current` bzw. `AppModel.settings` – nie nach Application Support oder in `UserDefaults`. Einzige Ausnahme sind Socket und Token von `llmd`: Laufzeitdateien ohne Daten.
 - **Nachsichtiges Dekodieren**: Fehlende Felder bekommen Vorgaben, leere Felder werden nicht geschrieben. So bleiben alte Dateien lesbar.
 - **Neue Felder in Folien-JSON** sind optional und haben deutsche Schlüssel (`bilder`, `inhalt`, `kasten`, `textbereich` …), passend zum bestehenden Format.
 - **Undo** läuft über den `UndoManager` des Textfelds; Änderungen am Modell registrieren ihre Umkehrung (z. B. `setSlideImages`, `setSlideTextArea`).

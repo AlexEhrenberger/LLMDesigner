@@ -54,18 +54,18 @@ struct ActivityView: View {
             }
             .padding(12)
             Table(entries) {
-                TableColumn("Zeit") { Text($0.time.formatted(date: .omitted, time: .standard)) }.width(70)
-                TableColumn("Kanal") { Text($0.channel.label) }.width(70)
-                TableColumn("Lauf") { Text($0.run.prefix(8)).font(.system(size: 11, design: .monospaced)) }.width(70)
-                TableColumn("Action") { Text($0.action).font(.system(size: 11, design: .monospaced)) }.width(min: 150, ideal: 180)
-                TableColumn("Ziel") { Text($0.target ?? "").lineLimit(1) }.width(min: 80, ideal: 130)
+                TableColumn("Zeit") { Text($0.time.formatted(date: .omitted, time: .standard)) }.width(58)
+                TableColumn("Kanal") { Text($0.channel.label) }.width(62)
+                TableColumn("Lauf") { Text($0.run.prefix(8)).font(.system(size: 11, design: .monospaced)) }.width(62)
+                TableColumn("Action") { Text($0.action).font(.system(size: 11, design: .monospaced)) }.width(min: 120, ideal: 170)
+                TableColumn("Ziel") { Text($0.target ?? "").lineLimit(1) }.width(min: 60, ideal: 100)
                 TableColumn("Herkunft") { entry in
                     Text(Self.origin(entry)).foregroundStyle(entry.hadUntrusted || entry.hadSensitive ? Color.orange : Color.secondary)
-                }.width(70)
-                TableColumn("Regel") { Text($0.decision) }.width(80)
+                }.width(58)
+                TableColumn("Regel") { Text($0.decision) }.width(70)
                 TableColumn("Ergebnis") { entry in
                     Text(entry.error ?? "ok").foregroundStyle(entry.error == nil ? Color.secondary : Color.red).lineLimit(1).help(entry.error ?? "")
-                }.width(min: 60, ideal: 120)
+                }.width(min: 60, ideal: 110)
             }
         }
         .frame(minWidth: 640, minHeight: 300)
@@ -88,18 +88,31 @@ struct ActionSettings: View {
     @State private var installMessage: String?
     @State private var revision = 0
 
+    private static let levelWidth: CGFloat = 112
+
     private var approval: ActionApproval? { ActionHub.shared?.registry.approval }
 
     var body: some View {
         Section {
+            LabeledContent("Freigabe je Kanal") {
+                HStack(spacing: 8) {
+                    ForEach(ActionKind.allCases, id: \.self) { kind in
+                        Text(kind.label.capitalized)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(Theme.textSecondary)
+                            .frame(width: Self.levelWidth, alignment: .leading)
+                    }
+                }
+            }
             ForEach([ActionChannel.cli, .mcp, .chat], id: \.self) { channel in
                 LabeledContent(channel.label) {
-                    HStack(spacing: 10) {
+                    HStack(spacing: 8) {
                         ForEach(ActionKind.allCases, id: \.self) { kind in
                             Picker(kind.label, selection: level(channel, kind)) {
                                 ForEach(ActionPolicy.Level.allCases, id: \.self) { Text($0.label).tag($0) }
                             }
-                            .fixedSize()
+                            .labelsHidden()
+                            .frame(width: Self.levelWidth)
                         }
                     }
                 }

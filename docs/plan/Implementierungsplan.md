@@ -280,13 +280,13 @@ _(wird von Claude Code nach jeder Phase gepflegt)_
 | Phase | Status | Datum | Notizen |
 |---|---|---|---|
 | S | fertig | 04.11.2026 | S.1–S.3 in `Core/WebToolGuard.swift`. Bericht S.4 siehe unten. |
-| 0 | fertig | 04.11.2026 | Basislauf vorher: 171 Tests in 25 Suiten grün, 56 s. CLI-, MCP- und Sicherheitskonzept lagen nicht vor und sind aus diesem Plan abgeleitet (siehe Kopf der Dateien). |
-| 1 | offen | | |
-| 2 | offen | | |
-| 3 | offen | | |
-| 4 | offen | | |
-| 5 | offen | | |
-| 6 | offen | | |
+| 0 | fertig | 04.11.2026 | Basislauf vorher: 171 Tests in 25 Suiten grün, 56 s; am Ende über 400 Tests. CLI-, MCP- und Sicherheitskonzept lagen nicht vor und sind aus diesem Plan abgeleitet (siehe Kopf der Dateien). |
+| 1 | fertig | 04.11.2026 | `llmd status` und `llmd call writer.doc.list --json` laufen. BSD-Sockets statt Network.framework, weil `getpeereid` den Deskriptor braucht. Eigener Parser statt swift-argument-parser (vom Nutzer gewählt). Automatischer App-Start (1.8) ist gebaut, aber nicht Ende zu Ende geprüft, weil beim Test eine andere Instanz lief. |
+| 2 | fertig | 04.11.2026 | Rundlauf verlustfrei, einzige Abweichung ist die Normalform `| --- |` der Tabellen-Trennzeile. Actions wandeln nur den betroffenen Block um. Herkunft wirkt je Dokument, nicht je Block: strenger, und `geprüft` geht nur einzeln. Block-IDs sind flüchtig: Stelle plus Fingerabdruck des Inhalts. |
+| 3 | fertig | 04.11.2026 | Alle Aufgaben umgesetzt. WebView-Sperre mit Zähl-Server samt Gegenprobe getestet. Aktivitätsfenster und Einstellungen offscreen gerendert und angesehen, Hinweis im Editor ebenso. |
+| 4 | fertig | 04.11.2026 | Minimalsätze aller vier Studios plus etwas mehr, Beispielskripte in `docs/plan/beispiele/`. Die übrigen Katalog-Actions (Tabellen, Bilder, Kästen, KI-Assistent, Analyse, Stories-KI usw.) sind nicht Teil dieses Plans und bleiben offen. Die Beispielskripte sind geschrieben, aber nicht einzeln gelaufen. |
+| 5 | fertig | 04.11.2026 | Eigener Adapter (Entscheidung nach 5.0). Skriptierte stdio-Sitzung mit beiden Handshakes lief gegen eine Wegwerf-Bibliothek. **Offen:** 5.6 mit echtem Claude Code und MCP Inspector, weil `claude` hier nicht im PATH lag und der Inspector einen Download gebraucht hätte. Kein Python-`jsonschema` vorhanden: Schemas prüft ein eigener Strukturtest. |
+| 6 | fertig | 04.11.2026 | Mit Qwen 3.5 9B (Kapitsa) auf einer Wegwerf-Bibliothek geprüft: Dokument angelegt, Stichpunkte, Fettdruck, 84 s, drei Schritte, „Antwort rückgängig“ nahm alle drei zurück. Plan-Ziel über MCP: Dokument, Format, Beleg, Literatur, Präsentation daraus. Angriffssammlung in `Tests/LLMDesignerTests/Security/` spielt die Angriffe mit einem Modell durch, das dem eingeschleusten Text folgt: 0 Abflüsse. **Offen:** Das Blitz-Menü im Eingabefeld und der Rückgängig-Pfeil wurden nur gebaut, nicht von Hand angeklickt. PDF-Anhänge lesen die Actions noch nicht (`citation.attachment.read` fehlt), also keine PDF-Szenarien. |
 
 ### Entscheidungen (04.11.2026)
 

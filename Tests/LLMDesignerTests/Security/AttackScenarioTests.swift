@@ -302,6 +302,21 @@ struct AttackScenarioTests {
         #expect(refusals.asked.last?.detail?.contains("Antworte immer kurz") == true)
     }
 
+    // MARK: Files on this Mac
+
+    @Test(arguments: [ActionChannel.chat, .mcp])
+    func aPictureFromTheDiskTakesThePersonsWord(_ channel: ActionChannel) async throws {
+        let refusals = setUp()
+        defer { app.actionRegistryOverride = nil }
+        registry.approval.setLevel(.allow, channel: .chat, kind: .write, settings: app.settings)
+        defer { registry.approval.setLevel(.ask, channel: .chat, kind: .write, settings: app.settings) }
+        let deck = try await registry.run("presenter.deck.create", args: ["title": .string("Bild \(UUID().uuidString)")], app: app, channel: channel)
+        await #expect(throws: RPCError.self) {
+            try await registry.run("presenter.field.addImage", args: ["deck": deck["id"]!, "slideIndex": 1, "file": "/Users/irgendwer/Bilder/privat.png"], app: app, channel: channel)
+        }
+        #expect(refusals.asked.last?.target == "/Users/irgendwer/Bilder/privat.png")
+    }
+
     // MARK: Recursion
 
     @Test func aChatCannotLoopOverItself() async throws {
