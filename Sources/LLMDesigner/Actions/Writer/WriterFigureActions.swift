@@ -418,7 +418,7 @@ struct WriterChartInsertAction: WriterTargetedAction {
     static let descriptor = ActionDescriptor(
         id: "writer.chart.insert", summary: "Fügt ein Diagramm aus Zahlen ein", kind: .write, security: .localWrite,
         input: .object(Args.placed.merging(Args.look) { _, new in new }.merging(Args.chartProperties) { _, new in new }, required: ["categories", "series"]),
-        output: .freeObject(), example: "llmd call writer.chart.insert --json '{\"doc\":\"X\",\"categories\":[\"A\",\"B\"],\"series\":[{\"name\":\"2026\",\"values\":[1,2]}]}'"
+        output: .freeObject(), example: "llmd writer chart insert --doc X --categories '[\"A\",\"B\"]' --series '[{\"name\":\"2026\",\"values\":[1,2]}]'"
     )
     static func target(of args: Args) -> WriterTargetArgs { args.target }
     static func change(_ args: Args, markdown: String, target: WriterTarget, context: ActionContext) async throws -> (text: String, block: Int?) {
