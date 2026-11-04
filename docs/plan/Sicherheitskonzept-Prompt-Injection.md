@@ -85,4 +85,4 @@ Ergebnisse mit fremden Inhalten kommen eingerahmt mit zufälliger Kennung zum Mo
 
 ## 7. Ausgangskontrolle
 
-Export schreibt ohne Rückfrage nur in den Exportordner. Andere Pfade brauchen eine Freigabe. Web-Ansichten (Folien-Designs, Mermaid) laden keine externen Ressourcen (`WKContentRuleList`).
+Export schreibt ohne Rückfrage nur in den Exportordner. Andere Pfade brauchen eine Freigabe. Web-Ansichten (Folien-Designs, Mermaid) laden keine externen Ressourcen (`WKContentRuleList`). Formeln, die Dateien lesen oder Befehle zusammenbauen könnten, gehen nicht an die LaTeX-Engine, sondern werden als Code gesetzt (`LaTeXSafety`).

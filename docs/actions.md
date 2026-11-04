@@ -82,6 +82,7 @@ flowchart TB
 - **Socket:** nur für den eigenen Benutzer (Ordner 0700, Socket 0600), Peer-UID-Prüfung, neues Token je Start. Kein Netzwerkport.
 - **Export:** ohne Rückfrage nur in den Exportordner, und nur wenn der Lauf nichts Fremdes gelesen hat.
 - **Web-Ansichten:** laden nichts aus dem Netz (`WKContentRuleList`).
+- **LaTeX:** Formeln, die Dateien lesen oder Befehle zusammenbauen könnten, werden als Code gesetzt (`LaTeXSafety`).
 - **Protokoll:** Fenster → „Aktivität von Terminal und Agenten“ zeigt Zeit, Kanal, Lauf, Action, A/B, Entscheidung und Ergebnis, aber keine Inhalte.
 
 ## MCP

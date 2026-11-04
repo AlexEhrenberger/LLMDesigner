@@ -298,7 +298,7 @@ Das offizielle `modelcontextprotocol/swift-sdk` nennt im README nur die Spezifik
 
 ### Bericht S.4 (nur geprüft, nichts geändert)
 
-- **LaTeX, Befund:** Formeln gehen im Modus `native` unverändert an die Engine (`LaTeXWriter.displayMath`). Tectonic mit `--untrusted` sperrt nur Shell-Aufrufe: `\\openin` und `\\input` lesen weiter absolute Pfade (geprüft mit einer neutralen Datei; es erscheint nur eine Warnung „accessing absolute path“). Ein präpariertes Dokument kann so lokale Dateien in das exportierte PDF holen. **Vorschlag:** Vor dem Satz gefährliche Befehle in Formeln ablehnen (`\\input`, `\\include`, `\\openin`, `\\openout`, `\\read`, `\\write`, `\\catcode`, `\\csname`) und solche Formeln als Code setzen. Eigene Aufgabe.
+- **LaTeX, behoben (04.11.2026):** Formeln gingen im Modus `native` unverändert an die Engine, und Tectonic mit `--untrusted` sperrt nur Shell-Aufrufe: `\\openin` und `\\input` lasen absolute Pfade. `LaTeXSafety` setzt solche Formeln jetzt als Code. Gesperrt sind Befehle, die die Platte erreichen, und solche, die Befehle zusammenbauen können (`\\csname`, `^^5c`, `\\catcode`, `\\def` …); dazu sind nur Mathe-Umgebungen erlaubt. 39 präparierte Dokumente werden in `LaTeXAttackTests` mit der echten Engine gesetzt, samt Gegenprobe ohne Schutz.
 - **WebViews, Befund:** `SlideViews.LiveDesignView`, `FigureSheetParts` und `MermaidDiagramView` laden HTML ohne Inhaltsregeln. Externe Ressourcen in eigenen CSS-Designs (`url(http…)`) oder Diagrammen würden geladen. Wird in Aufgabe 3.7 behoben.
 - **Hinweis:** `wikipedia_search` bleibt auch nach gelesenen Persona-Dateien frei. Der Plan nennt nur `open_page` und `web_search`, und das Ziel ist fest wikipedia.org.
 

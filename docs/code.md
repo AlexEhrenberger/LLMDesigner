@@ -118,4 +118,5 @@ classDiagram
 - **Folien sind vergrößert**: Unteransichten im Textfeld werden mitvergrößert. Darum steht die Formelleiste von Tabellen auf Folien außerhalb der Leinwand (`controller.tableBar`).
 - **Drag & Drop**: SwiftUIs `onDrag` erreicht AppKit-Textansichten nicht zuverlässig; der Power-Zugriff benutzt `PowerDragSource` (AppKit).
 - **LM Studio** antwortet bei unbekanntem Modellnamen mit dem geladenen Modell – immer das `model`-Feld des Streams anzeigen.
+- **LaTeX liest Dateien**: Tectonic mit `--untrusted` sperrt nur Shell-Aufrufe. Alles, was roh an die Engine geht, muss durch `LaTeXSafety`; Text läuft durch `LaTeXWriter.escape`.
 - **Qwen-Image** malt jedes Wort über Schrift ins Bild, auch verneint: Hintergrund-Prompts filtern solche Wörter.

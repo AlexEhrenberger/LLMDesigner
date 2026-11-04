@@ -784,6 +784,7 @@ enum LaTeXWriter {
     }
 
     private static func usesLaTeX(_ latex: String, math: MathMode) -> Bool {
+        guard LaTeXSafety.isSafeFormula(latex) else { return false }
         switch math {
         case .native: return true
         case .plain: return false
