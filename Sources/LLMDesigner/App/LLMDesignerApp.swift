@@ -51,6 +51,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate()
+        MainActor.assumeIsolated {
+            let hub = ActionHub { LibrarySession.shared?.app }
+            do {
+                try hub.start()
+                ActionHub.shared = hub
+            } catch {
+                // The app works without it; only the terminal can't reach it.
+                print("LLMDesigner: llmd-Socket konnte nicht starten: \(error.localizedDescription)")
+            }
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -69,6 +79,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        MainActor.assumeIsolated { ActionHub.shared?.stop() }
         // The narrow conversation window must not become the size the app opens with next time.
         MainWindow.restoreBeforeQuit()
     }

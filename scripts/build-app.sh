@@ -27,6 +27,9 @@ fi
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN_DIR/LLMDesigner" "$APP/Contents/MacOS/LLMDesigner"
+# The terminal tool lives inside the app; Settings can link it to ~/.local/bin.
+mkdir -p "$APP/Contents/Helpers"
+cp "$BIN_DIR/llmd" "$APP/Contents/Helpers/llmd"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 # mermaid.js draws the diagrams of the content analysis (offline, in a hidden web view).
@@ -38,6 +41,7 @@ cp -R Resources/SlideDesigns "$APP/Contents/Resources/SlideDesigns"
 for bundle in "$BIN_DIR"/*.bundle; do
     [ -d "$bundle" ] && cp -R "$bundle" "$APP/Contents/Resources/"
 done
+codesign --force --sign - "$APP/Contents/Helpers/llmd" >/dev/null
 codesign --force --sign - "$APP" >/dev/null
 
 echo "Fertig: $APP"

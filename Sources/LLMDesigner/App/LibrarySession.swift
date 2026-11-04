@@ -19,9 +19,12 @@ final class LibrarySession {
     init() {
         // HTTP answers are never cached on disk: nothing of a library ends up in ~/Library/Caches.
         URLCache.shared = URLCache(memoryCapacity: 32 * 1024 * 1024, diskCapacity: 0, directory: nil)
-        let (library, message) = Self.libraryAtLaunch()
+        // For tests of the whole app: a throwaway library that the list of recent libraries doesn't learn about.
+        let override = ProcessInfo.processInfo.environment["LLMD_TEST_LIBRARY"].map { URL(fileURLWithPath: $0) }
+        let (library, message) = override.flatMap { (try? AppLibrary.create(at: $0)) ?? (AppLibrary.isLibrary($0) ? AppLibrary(url: $0) : nil) }
+            .map { ($0, String?.none) } ?? Self.libraryAtLaunch()
         AppLibrary.current = library
-        LibraryRegistry.remember(library.url)
+        if override == nil { LibraryRegistry.remember(library.url) }
         self.library = library
         self.message = message
         app = AppModel()
