@@ -127,6 +127,9 @@ final class AppModel {
     /// The settings live in the open library (`Einstellungen.plist`), not in the system preferences.
     @ObservationIgnored let settings: LibrarySettings = AppLibrary.current.settings
 
+    /// Decides tool calls that need the person's consent. A property so tests can answer without a dialog.
+    @ObservationIgnored var toolConsent: @MainActor (ToolConsentRequest) async -> Bool = AppModel.askForToolConsent
+
     /// Light, dark or like the system.
     var appearance: AppAppearance {
         didSet {
@@ -1241,6 +1244,13 @@ final class AppModel {
         guard let step = fileStep ?? WebTools.step(for: call, allowed: sources) else {
             return WebTools.unknownToolOutput(call, available: offered)
         }
+        if let refusal = await webToolRefusal(for: step, messages: index(of: chatID).map { chats[$0].messages } ?? []) {
+            var refused = step
+            refused.status = .failed
+            refused.error = "Nicht erlaubt"
+            updateMessage(chatID, messageID) { $0.toolSteps = ($0.toolSteps ?? []) + [refused] }
+            return refusal
+        }
         updateMessage(chatID, messageID) { $0.toolSteps = ($0.toolSteps ?? []) + [step] }
         let (finished, output) = if let fileTools, fileStep != nil {
             await fileTools.execute(step, limit: limit)
@@ -1253,6 +1263,30 @@ final class AppModel {
             }
         }
         return output
+    }
+
+    /// Applies `WebToolGuard` to a step in a chat with these messages. Returns the text for the model when the step may not run.
+    func webToolRefusal(for step: ToolStep, messages: [ChatMessage]) async -> String? {
+        switch WebToolGuard.verdict(for: step, evidence: .init(messages: messages)) {
+        case .allowed:
+            return nil
+        case .denied(let text):
+            return text
+        case .needsConsent(let request):
+            if await toolConsent(request) { return nil }
+            return "Nicht ausgeführt: Die Person hat „\(request.action)“ nicht erlaubt. Antworte mit dem, was du hast."
+        }
+    }
+
+    /// Asks the person whether a tool call may reach the outside. They see the unabridged address or search terms.
+    static func askForToolConsent(_ request: ToolConsentRequest) async -> Bool {
+        let alert = NSAlert()
+        alert.messageText = "\(request.action) erlauben?"
+        alert.informativeText = "\(request.detail)\n\n\(request.reason)"
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Nicht erlauben")
+        alert.addButton(withTitle: "Erlauben")
+        return alert.runModal() == .alertSecondButtonReturn
     }
 
     /// The messages with `text` added to the end of the system prompt (or as one, if there is none).

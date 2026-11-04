@@ -61,7 +61,7 @@ enum WebTools {
                     name: openPageName,
                     description: "Open a web page or PDF and return its main text. Use it when the search excerpts are not enough.",
                     parameters: [
-                        "url": .init(type: "string", description: "Full address of the page, usually one from the search results."),
+                        "url": .init(type: "string", description: "Full address of the page, exactly as it appears in a search result or in the person's message. Other addresses are refused."),
                     ]
                 ),
             ]
