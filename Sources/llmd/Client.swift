@@ -49,6 +49,8 @@ final class LLMDClient {
         let bundle = binary.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.activates = false
+        // A test instance needs to find the same socket as the client that started it.
+        configuration.environment = ProcessInfo.processInfo.environment.filter { $0.key.hasPrefix("LLMD_") }
         let appURL = bundle.pathExtension == "app" ? bundle
             : NSWorkspace.shared.urlForApplication(withBundleIdentifier: "app.llmdesigner.LLMDesigner")
         guard let appURL else { return }

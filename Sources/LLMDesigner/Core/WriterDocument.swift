@@ -10,6 +10,8 @@ struct WriterDocument: Identifiable, Hashable, Sendable {
     var updatedAt = Date()
     var folderID: Folder.ID?
     var font: WriterFont = .serif
+    /// Where the content comes from (safety concept, 4.1). Nil: the person's own, as for all older documents.
+    var provenance: DocumentProvenance?
     /// DIN A4, paperback or Normseite (Writer Studio; a presentation has slides).
     var pageFormat: WriterPageFormat = .standard
     /// The paper, margins and text size of the user's own format (`pageFormat == .custom`).
@@ -168,6 +170,7 @@ struct WriterDocumentStore {
             header.append("kind: presentation")
             header.append("backgrounds: \(deck.backgroundsLine)")
         }
+        if let origin = document.provenance, origin != .own { header.append("herkunft: \(origin.rawValue)") }
         if let mode = document.tocMode { header.append("toc: \(mode.rawValue)") }
         if document.pageFormat != .standard { header.append("format: \(document.pageFormat.rawValue)") }
         if let setup = document.pageSetup, let json = jsonLine(setup) { header.append("page: \(json)") }
@@ -205,6 +208,7 @@ struct WriterDocumentStore {
                 case "updated": document.updatedAt = (try? dateFormat.parse(value)) ?? document.updatedAt
                 case "font": document.font = WriterFont(rawValue: value) ?? .serif
                 case "folder": document.folderID = UUID(uuidString: value)
+                case "herkunft": document.provenance = DocumentProvenance(rawValue: value)
                 case "toc": document.tocMode = WriterTOCMode(rawValue: value)
                 case "format": document.pageFormat = WriterPageFormat(rawValue: value) ?? .standard
                 case "page": document.pageSetup = try? JSONDecoder().decode(WriterPageSetup.self, from: Data(value.utf8))

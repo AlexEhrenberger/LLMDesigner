@@ -15,8 +15,8 @@ final class UndoGroup {
     var runID: String?
     var label: String
     private(set) var steps: [UndoStep] = []
-    /// Documents already snapshotted in this group.
-    var snapshotted: Set<UUID> = []
+    /// The documents this group changed, for "undo in this document".
+    var documents: Set<UUID> = []
 
     init(label: String) {
         self.label = label

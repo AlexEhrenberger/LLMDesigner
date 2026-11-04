@@ -18,6 +18,7 @@ enum ActionChannel: String, Codable, Sendable, CaseIterable {
 /// One thing the app can do, reachable from the terminal, MCP and the chat. Actions are thin wrappers around what
 /// `AppModel` already does. `Args` and `Output` are plain Codable types; the schema in the descriptor is what is
 /// checked and published, so it decides what comes in.
+@MainActor
 protocol LLMDAction {
     associatedtype Args: Decodable & Sendable
     associatedtype Output: Encodable & Sendable
@@ -25,13 +26,13 @@ protocol LLMDAction {
     static var descriptor: ActionDescriptor { get }
 
     /// What the safety rule has to know before the action runs. The default adds nothing.
-    @MainActor static func preflight(_ args: Args, context: ActionContext) throws -> ActionPreflight
+    static func preflight(_ args: Args, context: ActionContext) throws -> ActionPreflight
 
-    @MainActor static func run(_ args: Args, context: ActionContext) async throws -> Output
+    static func run(_ args: Args, context: ActionContext) async throws -> Output
 }
 
 extension LLMDAction {
-    @MainActor static func preflight(_ args: Args, context: ActionContext) throws -> ActionPreflight { ActionPreflight() }
+    static func preflight(_ args: Args, context: ActionContext) throws -> ActionPreflight { ActionPreflight() }
 }
 
 /// What only a look at the concrete call can tell.

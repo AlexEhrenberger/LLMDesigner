@@ -3,13 +3,13 @@ import LLMDProtocol
 
 extension ActionRegistry {
     func registerWriterActions() {
-        register(WriterDocListAction.self)
-        register(WriterDocReadAction.self)
+        registerWriterDocumentActions()
+        registerWriterReadActions()
+        registerWriterTextActions()
+        registerWriterFormatActions()
+        registerWriterBlockActions()
+        registerWriterMoreActions()
     }
-    func registerPresenterActions() {}
-    func registerCitationActions() {}
-    func registerStoriesActions() {}
-    func registerChatActions() {}
 }
 
 /// The fingerprint of a text: every read returns it, and a write can demand `ifVersion`, so an agent doesn't overwrite
@@ -44,67 +44,6 @@ extension AppModel {
     }
 }
 
-struct WriterDocListAction: LLMDAction {
-    struct Args: Decodable, Sendable {
-        var folder: String?
-        var query: String?
-    }
-    struct Item: Encodable, Sendable {
-        var id: String
-        var title: String
-        var updated: Date
-        var folder: String?
-        var words: Int
-    }
-    struct Output: Encodable, Sendable {
-        var documents: [Item]
-    }
-
-    static let descriptor = ActionDescriptor(
-        id: "writer.doc.list", summary: "Listet die Dokumente", kind: .read, security: .plainRead,
-        input: .object(["folder": .string("Ordner (ID oder Name)"), "query": .string("Suchtext in Titel und Inhalt")]),
-        output: .freeObject(), example: "llmd writer doc list --query Bericht", groups: ["core", "writer.core"]
-    )
-
-    static func run(_ args: Args, context: ActionContext) async throws -> Output {
-        let app = context.app
-        let folderID = try args.folder.map { try app.actionChatFolder($0).id }
-        let items = app.documents
-            .filter { !$0.isPresentation && (args.query.map($0.matches) ?? true) && (folderID == nil || $0.folderID == folderID) }
-            .map { document in
-                Item(id: document.id.uuidString, title: document.displayTitle, updated: document.updatedAt,
-                     folder: document.folderID.flatMap { id in app.chatFolders.first { $0.id == id }?.name },
-                     words: document.markdown.split(whereSeparator: \.isWhitespace).count)
-            }
-        return Output(documents: items)
-    }
-}
-
-struct WriterDocReadAction: LLMDAction {
-    struct Args: Decodable, Sendable {
-        var doc: String
-        var format: String?
-    }
-    struct Output: Encodable, Sendable {
-        var id: String
-        var title: String
-        var text: String
-        var version: String
-    }
-
-    static let descriptor = ActionDescriptor(
-        id: "writer.doc.read", summary: "Liest ein Dokument", kind: .read, security: .plainRead,
-        input: .object(["doc": .string("Dokument (ID oder Titel)"), "format": .choice(["markdown", "plain"], "Standard: markdown")], required: ["doc"]),
-        output: .freeObject(), example: "llmd writer doc read Bericht --format plain", groups: ["core", "writer.core"]
-    )
-
-    static func run(_ args: Args, context: ActionContext) async throws -> Output {
-        let document = try context.app.actionDocument(args.doc)
-        let text = args.format == "plain" ? PowerText.plain(document.markdown) : document.markdown
-        return Output(id: document.id.uuidString, title: document.displayTitle, text: text, version: ActionVersion.of(document.markdown))
-    }
-}
-
 extension AppModel {
     /// A folder of the chat and document list by id or name.
     func actionChatFolder(_ reference: String) throws -> Folder {
@@ -113,5 +52,36 @@ extension AppModel {
         if found.count == 1 { return found[0] }
         if found.isEmpty { throw RPCError.notFound("Ordner „\(reference)“ gibt es nicht.") }
         throw RPCError.ambiguous("Mehrere Ordner heißen „\(reference)“.", candidates: found.map(\.id.uuidString))
+    }
+
+    /// A new document without opening it: an agent's work doesn't take the screen away from the person.
+    func createDocumentForAction(title: String?, folderID: Folder.ID?, markdown: String, provenance: DocumentProvenance?) -> WriterDocument {
+        var document = WriterDocument()
+        document.folderID = folderID
+        document.font = documents.first { !$0.isPresentation }?.font ?? .serif
+        document.provenance = provenance
+        document.markdown = markdown
+        if let title, !title.trimmingCharacters(in: .whitespaces).isEmpty {
+            document.title = title
+            document.hasCustomTitle = true
+        } else {
+            document.title = WriterDocument.makeTitle(from: markdown)
+        }
+        documents.insert(document, at: 0)
+        saveDocument(document.id)
+        return document
+    }
+
+    /// Removes a document again when its creation is taken back.
+    func removeDocumentForActionUndo(_ id: WriterDocument.ID) {
+        if selectedDocumentID == id { selectedDocumentID = nil }
+        documents.removeAll { $0.id == id }
+        documentStore.delete(id)
+    }
+
+    func reinsertDocumentForActionRedo(_ document: WriterDocument) {
+        guard !documents.contains(where: { $0.id == document.id }) else { return }
+        documents.insert(document, at: 0)
+        saveDocument(document.id)
     }
 }

@@ -264,6 +264,13 @@ extension AppModel {
         if selectedDocumentID == id { selectedDocumentID = nil }
     }
 
+    /// A document in a given state again (undo of an action, its origin). Saved at once, because it didn't come from typing.
+    func restoreDocument(_ document: WriterDocument) {
+        guard let index = documents.firstIndex(where: { $0.id == document.id }) else { return }
+        documents[index] = document
+        saveDocument(document.id)
+    }
+
     private func modifyDocument(_ id: WriterDocument.ID, _ change: (inout WriterDocument) -> Void) {
         guard let index = documents.firstIndex(where: { $0.id == id }) else { return }
         change(&documents[index])
@@ -352,10 +359,6 @@ extension AppModel {
         Task {
             let input = await prepareExport(of: document)
             let current = input.document
-            let markdown = input.markdown
-            let figures = input.figures
-            let printFigures = input.printFigures
-            let bibliography = input.bibliography
             let part = input.part
 
             do {
@@ -364,25 +367,7 @@ extension AppModel {
                     exportingIDs.remove(document.id)
                     guard let url = await askForDestination(fileName: current.displayTitle, type: format.type) else { return }
                     // The pictures go into a folder next to the file, e.g. "Aufsatz-Bilder".
-                    let used = format == .latex ? printFigures : figures
-                    let folder = used.isEmpty ? nil : figureFolderName(for: url)
-                    if let folder {
-                        try copyFigures(Array(used.values), to: url.deletingLastPathComponent().appendingPathComponent(folder, isDirectory: true))
-                    }
-                    let text: String
-                    if format != .latex {
-                        var exported = CitationExport.expandBibliography(in: WriterMarkdownExport.expandTableOfContents(in: markdown, outline: current.outline),
-                                                                         entries: bibliography)
-                        // Plain Markdown is for programs that only know Markdown: no colours, fonts, bookmarks or underline.
-                        if format == .plainMarkdown { exported = WriterMarkdownExport.plain(exported) }
-                        text = folder.map { folder in
-                            WriterImageStore.rewriteSources(in: exported) { figures[$0].map { folder + "/" + $0.lastPathComponent } }
-                        } ?? exported
-                    } else {
-                        text = LaTeXWriter.document(parts: [part], paper: paper, math: .native, figureFolder: folder,
-                                                    typeface: current.pageFormat.font(current.font), format: current.pageFormat, design: current.pageDesign)
-                    }
-                    try text.write(to: url, atomically: true, encoding: .utf8)
+                    try writeTextExport(input, as: format, paper: paper, to: url)
                 case .pdf:
                     guard let engine else { return }
                     let pdf = try await engine.makePDF(parts: [part], paper: paper, typeface: current.pageFormat.font(current.font), format: current.pageFormat,
@@ -397,6 +382,30 @@ extension AppModel {
                 exportError = error.localizedDescription
             }
         }
+    }
+
+    /// Writes Markdown, plain Markdown or LaTeX source; the pictures go into a folder next to the file, e.g. "Aufsatz-Bilder".
+    func writeTextExport(_ input: WriterExportInput, as format: WriterExportFormat, paper: PaperSize, to url: URL) throws {
+        let current = input.document
+        let used = format == .latex ? input.printFigures : input.figures
+        let folder = used.isEmpty ? nil : figureFolderName(for: url)
+        if let folder {
+            try copyFigures(Array(used.values), to: url.deletingLastPathComponent().appendingPathComponent(folder, isDirectory: true))
+        }
+        let text: String
+        if format != .latex {
+            var exported = CitationExport.expandBibliography(in: WriterMarkdownExport.expandTableOfContents(in: input.markdown, outline: current.outline),
+                                                             entries: input.bibliography)
+            // Plain Markdown is for programs that only know Markdown: no colours, fonts, bookmarks or underline.
+            if format == .plainMarkdown { exported = WriterMarkdownExport.plain(exported) }
+            text = folder.map { folder in
+                WriterImageStore.rewriteSources(in: exported) { input.figures[$0].map { folder + "/" + $0.lastPathComponent } }
+            } ?? exported
+        } else {
+            text = LaTeXWriter.document(parts: [input.part], paper: paper, math: .native, figureFolder: folder,
+                                        typeface: current.pageFormat.font(current.font), format: current.pageFormat, design: current.pageDesign)
+        }
+        try text.write(to: url, atomically: true, encoding: .utf8)
     }
 
     /// Everything an export or a print needs of a document: its text, the pictures on this Mac, the reference list,
