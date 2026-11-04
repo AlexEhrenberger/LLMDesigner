@@ -7,6 +7,18 @@ enum WriterPrompts {
     static let selectionStart = "⟦MARKIERUNG⟧"
     static let selectionEnd = "⟦/MARKIERUNG⟧"
 
+    /// What fits of a document into the prompt: the part around the cursor or the marked text.
+    static func window(of markdown: String, limit: Int) -> String {
+        guard markdown.count > limit else { return markdown }
+        let anchor = markdown.range(of: cursorMarker) ?? markdown.range(of: selectionStart)
+        let center = anchor.map { markdown.distance(from: markdown.startIndex, to: $0.lowerBound) } ?? markdown.count
+        let before = Int(Double(limit) * 0.7)
+        let start = max(0, min(center - before, markdown.count - limit))
+        let lower = markdown.index(markdown.startIndex, offsetBy: start)
+        let upper = markdown.index(lower, offsetBy: min(limit, markdown.count - start))
+        return (start > 0 ? "[…]\n" : "") + markdown[lower..<upper] + (upper < markdown.endIndex ? "\n[…]" : "")
+    }
+
     // MARK: Presets
 
     enum Rewrite: String, CaseIterable, Identifiable {

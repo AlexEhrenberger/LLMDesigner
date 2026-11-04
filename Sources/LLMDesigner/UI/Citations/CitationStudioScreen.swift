@@ -1,6 +1,14 @@
 import SwiftUI
 import AppKit
 
+/// What an action wants Citation Studio to show.
+enum CitationStudioCommand: Equatable {
+    case shelf(CitationStudioModel.Mode)
+    /// Sources or quotes with these tags: the search field's `#Schlagwort`.
+    case filterTags([String])
+    case select(source: UUID)
+}
+
 /// What Citation Studio shows and what it is doing.
 @MainActor
 @Observable
@@ -37,6 +45,18 @@ final class CitationStudioModel {
 
     var mode: Mode = .sources
     var sort: Sort = .newest
+
+    func apply(_ command: CitationStudioCommand, library: CitationLibrary) {
+        switch command {
+        case .shelf(let mode):
+            self.mode = mode
+        case .filterTags(let tags):
+            searchText = tags.map { "#" + $0 }.joined(separator: " ")
+        case .select(let source):
+            mode = .sources
+            select(source, in: library)
+        }
+    }
     var searchText = ""
     private(set) var selectedSourceID: UUID?
     var importText = ""
@@ -202,6 +222,15 @@ struct CitationStudioScreen: View {
             } else if model.selectedSourceID == nil, let first = library.sources.first {
                 model.select(first.id, in: library)
             }
+            if let command = app.citationStudioCommand {
+                model.apply(command, library: library)
+                app.citationStudioCommand = nil
+            }
+        }
+        .onChange(of: app.citationStudioCommand) { _, command in
+            guard let command else { return }
+            model.apply(command, library: library)
+            app.citationStudioCommand = nil
         }
         .onDisappear {
             if let id = model.selectedSourceID, let source = library.source(id), source.isBlank, library.quotes(of: id).isEmpty {

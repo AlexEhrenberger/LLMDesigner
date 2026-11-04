@@ -29,6 +29,8 @@ extension ActionRegistry {
         register(PresenterAIStatusAction.self)
         register(PresenterAICancelAction.self)
         register(PresenterFromDocumentAction.self)
+        registerPresenterViewActions()
+        registerPresenterMoreActions()
     }
 }
 
@@ -48,7 +50,7 @@ struct PresenterSlideArgs: Decodable, Sendable {
 }
 
 @MainActor
-private func deck(_ reference: String, _ app: AppModel) throws -> (WriterDocument, PresentationDeck) {
+func deck(_ reference: String, _ app: AppModel) throws -> (WriterDocument, PresentationDeck) {
     let document = try app.actionDocument(reference, presentation: true)
     return (document, document.deck ?? .new())
 }
@@ -228,7 +230,7 @@ struct PresenterSlideReadAction: LLMDAction {
 
 /// A change to a deck with undo, origin and event.
 @MainActor
-private func changeDeck(_ reference: String, context: ActionContext, _ change: (inout PresentationDeck) throws -> Void) throws -> WriterDocument {
+func changeDeck(_ reference: String, context: ActionContext, _ change: (inout PresentationDeck) throws -> Void) throws -> WriterDocument {
     let document = try context.app.actionDocument(reference, presentation: true)
     var failure: Error?
     context.app.modifyDeck(document.id) { deck in
@@ -372,11 +374,16 @@ struct PresenterSlideDeleteAction: LLMDAction {
         input: .object(slideProperties, required: ["deck"]), output: .freeObject(), groups: ["presenter.core"]
     )
     static func run(_ args: PresenterSlideArgs, context: ActionContext) async throws -> OKOutput {
-        _ = try changeDeck(args.deck, context: context) { deck in
+        var removed: (slide: PresentationSlide, index: Int)?
+        let document = try changeDeck(args.deck, context: context) { deck in
             let slide = try deck.actionSlide(id: args.slide, index: args.slideIndex)
             guard deck.slides.count > 1 else { throw RPCError.invalidTarget("Die letzte Folie bleibt.") }
-            deck.slides.remove(at: deck.index(of: slide.id)!)
+            let index = deck.index(of: slide.id)!
+            removed = (slide, index)
+            deck.slides.remove(at: index)
         }
+        // As in the app, the slide can come back: presenter.slide.restore.
+        if let removed { context.app.deletedSlide = DeletedSlide(documentID: document.id, slide: removed.slide, index: removed.index) }
         return OKOutput()
     }
 }

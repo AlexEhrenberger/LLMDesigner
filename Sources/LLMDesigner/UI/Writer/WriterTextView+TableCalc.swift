@@ -175,46 +175,18 @@ extension WriterTextView {
     /// a row's formulas move with it.
     func sortTable(_ model: TableModel, column: Int, ascending: Bool, contents: [[NSAttributedString]]) {
         let table = model.table
-        let texts = cellTexts(of: model)
-        var last = model.rows - 1
-        // Rows at the end that calculate over others (a row of sums) stay at the end.
-        while last > 1, table.style.formulas.contains(where: { place, formula in
-            place.row == last && WriterTableCalc.referencedRows(formula).contains(where: { $0 != last })
-        }) { last -= 1 }
-        guard last >= 2 else {
-            onNotice?("Zum Sortieren braucht die Tabelle unter der Kopfzeile mindestens zwei Zeilen.")
+        let plan: (order: [Int], style: WriterTableStyle)?
+        do {
+            plan = try WriterTableArrange.sorted(texts: cellTexts(of: model), style: table.style, spans: table.spans, column: column, ascending: ascending)
+        } catch {
+            onNotice?((error as? WriterTableArrange.SortProblem)?.message ?? error.localizedDescription)
             return
         }
-        if table.spans.contains(where: { start, span in start.row + span.rows - 1 >= 1 && start.row <= last }) {
-            onNotice?("Tabellen mit verbundenen Zellen lassen sich nicht sortieren – erst die Verbindung aufheben.")
-            return
-        }
-        let rows = Array(1...last)
-        let order = rows.enumerated().sorted { a, b in
-            let left = texts[a.element][column], right = texts[b.element][column]
-            let leftEmpty = left.trimmingCharacters(in: .whitespaces).isEmpty, rightEmpty = right.trimmingCharacters(in: .whitespaces).isEmpty
-            // Empty cells go last both ways; equal ones keep their order.
-            if leftEmpty != rightEmpty { return !leftEmpty }
-            guard let isAscending = WriterTableCalc.ascending(left, right) else { return a.offset < b.offset }
-            return ascending ? isAscending : !isAscending
-        }.map(\.element)
-        guard order != rows else { return }
+        guard let plan else { return }
         var sorted = contents
-        var style = table.style
-        var fills = style.fills.filter { $0.key.row == 0 || $0.key.row > last }
-        var formulas = style.formulas.filter { $0.key.row == 0 || $0.key.row > last }
-        for (offset, oldRow) in order.enumerated() {
-            let newRow = offset + 1
-            sorted[newRow] = contents[oldRow]
-            for (place, color) in style.fills where place.row == oldRow { fills[WriterCellPosition(row: newRow, column: place.column)] = color }
-            for (place, formula) in style.formulas where place.row == oldRow {
-                formulas[WriterCellPosition(row: newRow, column: place.column)] = WriterTableCalc.movingRow(formula, from: oldRow, to: newRow)
-            }
-        }
-        style.fills = fills
-        style.formulas = formulas
-        let caretRow = tableCellAtCaret.map { cell in order.firstIndex(of: cell.row).map { $0 + 1 } ?? cell.row } ?? 0
-        rebuild(model, contents: sorted, alignments: table.alignments, widths: table.widths, spans: table.spans, style: style,
+        for (offset, oldRow) in plan.order.enumerated() { sorted[offset + 1] = contents[oldRow] }
+        let caretRow = tableCellAtCaret.map { cell in plan.order.firstIndex(of: cell.row).map { $0 + 1 } ?? cell.row } ?? 0
+        rebuild(model, contents: sorted, alignments: table.alignments, widths: table.widths, spans: table.spans, style: plan.style,
                 caret: (caretRow, column))
         undoManager?.setActionName("Sortieren")
     }
@@ -224,24 +196,15 @@ extension WriterTextView {
     /// A row at the end with the sums of every column with numbers; the first column says "Summe" if it holds text.
     func addSumRow(_ model: TableModel, contents: [[NSAttributedString]]) {
         let table = model.table
-        let texts = cellTexts(of: model)
         guard model.rows >= 2 else { return }
-        let bodyRows = 1..<model.rows
-        var style = table.style
-        let newRow = model.rows
-        var row = Array(repeating: NSAttributedString(), count: table.columns)
-        var anySum = false
-        for column in 0..<table.columns {
-            let numbers = bodyRows.filter { WriterTableCalc.number(in: texts[$0][column]) != nil || style.formulas[WriterCellPosition(row: $0, column: column)] != nil }
-            guard !numbers.isEmpty else { continue }
-            let name = WriterTableCalc.columnName(column)
-            style.formulas[WriterCellPosition(row: newRow, column: column)] = "SUMME(\(name)2:\(name)\(model.rows))"
-            anySum = true
-        }
-        guard anySum else {
-            onNotice?("In der Tabelle stehen keine Zahlen zum Summieren.")
+        guard let sums = WriterTableArrange.sumFormulas(texts: cellTexts(of: model), style: table.style, columns: table.columns) else {
+            onNotice?(WriterTableArrange.noNumbersMessage)
             return
         }
+        var style = table.style
+        style.formulas.merge(sums) { $1 }
+        let newRow = model.rows
+        var row = Array(repeating: NSAttributedString(), count: table.columns)
         if style.formulas[WriterCellPosition(row: newRow, column: 0)] == nil {
             row[0] = NSAttributedString(string: "Summe", attributes: [.writerBold: true])
         }

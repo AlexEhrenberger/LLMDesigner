@@ -4,6 +4,7 @@ struct RootView: View {
     @Environment(AppModel.self) private var app
     @Environment(LibrarySession.self) private var session
     @State private var workspaceWidth: CGFloat = 0
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         Group {
@@ -21,6 +22,9 @@ struct RootView: View {
         .background(WindowConfigurator())
         .tint(Theme.accent)
         .onAppear { MessageContextMenu.install(app: app) }
+        .onChange(of: app.miniChatOpenRequest) { _, request in
+            if request != nil { openWindow(id: MiniChatWindow.id) }
+        }
         .alert("Diktat nicht möglich", isPresented: dictationErrorBinding) {
             Button("OK") {}
         } message: {

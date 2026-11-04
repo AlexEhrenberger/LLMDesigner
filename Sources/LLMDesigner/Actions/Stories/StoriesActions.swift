@@ -20,6 +20,7 @@ extension ActionRegistry {
         register(StoriesElementUpdateAction.self)
         register(StoriesElementDeleteAction.self)
         register(StoriesElementUsagesAction.self)
+        registerStoriesMoreActions()
     }
 }
 
@@ -89,11 +90,14 @@ extension StoryWorld {
 
     /// Fields an agent must not set: identity and media, which have their own ways in.
     static let protectedElementFields: Set<String> = ["id", "createdAt", "updatedAt", "images", "videos"]
+    /// Fields that are missing from an element's JSON while they are empty, and can be set all the same.
+    static let optionalElementFields: [StoryElementKind: Set<String>] = [.figure: ["speciesID"], .place: ["parentID"], .reason: ["holderID"]]
 
     private mutating func apply<E: StoryElement>(_ type: E.Type, _ id: UUID, fields: [String: JSONValue]) throws {
         guard let current = element(type, id), case .object(var object) = try JSONValue.encoding(current) else { return }
         for (key, value) in fields {
-            guard object[key] != nil, !Self.protectedElementFields.contains(key) else {
+            let isKnown = object[key] != nil || Self.optionalElementFields[E.kind]?.contains(key) == true
+            guard isKnown, !Self.protectedElementFields.contains(key) else {
                 let known = object.keys.filter { !Self.protectedElementFields.contains($0) }.sorted().joined(separator: ", ")
                 throw RPCError.invalidParams("„\(type.kind.rawValue)“ hat kein Feld „\(key)“. Möglich: \(known).")
             }
@@ -311,6 +315,7 @@ struct StoriesPartReadAction: LLMDAction {
         var status: String
         var bookKind: String?
         var pov: String?
+        var manuscript: String?
         var notes: String
         var focus: [String: String]
         var links: [String: [String]]
@@ -333,7 +338,8 @@ struct StoriesPartReadAction: LLMDAction {
         }
         return Output(id: part.id.uuidString, level: part.level.rawValue, title: world.displayTitle(of: part), subtitle: part.subtitle,
                       status: part.status.rawValue, bookKind: part.level == .book ? part.bookKind.rawValue : nil,
-                      pov: part.povFigureID.flatMap { world.name(of: StoryRef(kind: .figure, id: $0)) }, notes: part.notes,
+                      pov: part.povFigureID.flatMap { world.name(of: StoryRef(kind: .figure, id: $0)) },
+                      manuscript: part.manuscriptID.flatMap { context.app.document($0) }?.id.uuidString, notes: part.notes,
                       focus: focus, links: links, children: StoriesPartTreeAction.nodes(part.children, in: world))
     }
 }

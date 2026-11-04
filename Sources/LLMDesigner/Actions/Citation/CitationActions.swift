@@ -22,6 +22,9 @@ extension ActionRegistry {
         register(WriterCitationInsertAction.self)
         register(WriterQuoteInsertAction.self)
         register(WriterBibliographyInsertAction.self)
+        registerCitationAttachmentActions()
+        registerCitationStudioActions()
+        registerCitationMoreActions()
     }
 }
 

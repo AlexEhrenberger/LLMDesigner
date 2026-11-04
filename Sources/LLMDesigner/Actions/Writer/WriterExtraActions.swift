@@ -2,7 +2,19 @@ import Foundation
 import LLMDProtocol
 
 extension ActionRegistry {
-    func registerWriterExtraActions() {}
+    func registerWriterExtraActions() {
+        registerWriterTableActions()
+        registerWriterBoxActions()
+        registerWriterFigureActions()
+        registerWriterMathActions()
+        registerWriterCodeActions()
+        registerWriterAIActions()
+        registerWriterAnalysisActions()
+        registerWriterViewActions()
+        registerWriterPassageActions()
+        registerWriterStructureActions()
+        registerWriterPageActions()
+    }
 }
 
 /// A short sign on the screen that something other than the person changed the open document.

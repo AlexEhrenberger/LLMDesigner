@@ -232,6 +232,8 @@ struct StoryPart: Identifiable, Hashable, Codable, Sendable {
     var focus = StoryFocus()
     /// Chapters and sections: whose eyes the reader sees through.
     var povFigureID: UUID?
+    /// The Writer Studio document with this part's text. The world keeps the plan, the document the prose.
+    var manuscriptID: UUID?
     var notes = ""
     var timeline = StoryTimeline()
     /// Books only: pictures with a short description.
@@ -329,6 +331,7 @@ extension StoryPart {
         status = c.lenient(.status, status)
         focus = c.lenient(.focus, focus)
         povFigureID = c.lenient(.povFigureID, povFigureID)
+        manuscriptID = c.lenient(.manuscriptID, manuscriptID)
         notes = c.lenient(.notes, notes)
         timeline = c.lenient(.timeline, timeline)
         gallery = c.lenient(.gallery, gallery)

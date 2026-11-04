@@ -59,6 +59,10 @@ Writer-Actions arbeiten auf dem Markdown, auch wenn das Dokument nicht offen ist
 | `--range 120:15` | Zeichenbereich im Markdown |
 | `--all` | der ganze Text |
 
+Tabellen, Kästen, Spalten, Bilder, Formeln und Code-Blöcke haben eigene Parameter (`--table`, `--box`, `--section`, `--image`, `--formula`, `--plot`, `--code-block`): eine Nummer im Text ab 1 oder eine Block-ID, ohne Angabe das einzige Objekt dieser Art. Zellen heißen wie in Formeln: `A1` ist links oben, Zeile 1 die Kopfzeile. Bilder und Kästen werden auch in Kästen und Spaltenabschnitten gefunden; Tabellen und Code-Blöcke nur als eigener Block.
+
+Schreibmarke, Auswahl, Sprünge und Seitenleisten (`writer.select`, `writer.caret.set`, `writer.jump.*`, `writer.view.*`) wirken auf den offenen Editor, weil es sie nur dort gibt; alles andere arbeitet auch auf geschlossenen Dokumenten. Listen und Objekte übergibt man als JSON: `--widths '[2,1]'`.
+
 `--doc` nimmt ID oder Titel. `--deck` mit `--slide` oder `--slide-index` (und `--field`, `--notes`) wendet dieselben Actions auf Folien an. Lesen liefert eine `version`; Schreiben nimmt sie als `--if-version` und bricht bei fremden Änderungen ab.
 
 ## Sicherheit
@@ -83,6 +87,7 @@ flowchart TB
 - **Export:** ohne Rückfrage nur in den Exportordner, und nur wenn der Lauf nichts Fremdes gelesen hat.
 - **Web-Ansichten:** laden nichts aus dem Netz (`WKContentRuleList`).
 - **LaTeX:** Formeln, die Dateien lesen oder Befehle zusammenbauen könnten, werden als Code gesetzt (`LaTeXSafety`).
+- **Immer mit Rückfrage außerhalb der Oberfläche:** Mikrofon, Bildschirmfoto, Vollbild und Vortrag mit Stimme, Modellserver umstellen, Bibliothek wechseln, Anhang in einem anderen Programm öffnen. Über Chat und MCP auch jede Datei, deren Pfad der Aufrufer nennt.
 - **Protokoll:** Fenster → „Aktivität von Terminal und Agenten“ zeigt Zeit, Kanal, Lauf, Action, A/B, Entscheidung und Ergebnis, aber keine Inhalte.
 
 ## MCP
@@ -105,7 +110,7 @@ Der Kanal gilt immer als fremd. `memory.*` und `persona.files.*` sind gesperrt, 
 
 ## Werkzeuge im Chat
 
-Der Blitz im Eingabefeld schaltet Gruppen zu (Writer, Presenter, Citation, Stories, andere Chats, Gedächtnis) und stellt ein, wie viel ohne Rückfrage geht. Jede Gruppe enthält nur den Minimalsatz, weil ihre Schemas bei jeder Frage den Kontext belegen. Jeder Schritt erscheint in der Antwort, und der Pfeil unter der Antwort nimmt alle ihre Änderungen zurück, solange die App läuft.
+Der Blitz im Eingabefeld schaltet Gruppen zu (Writer, Presenter, Citation, Stories, andere Chats, Gedächtnis) und stellt ein, wie viel ohne Rückfrage geht. Jede Gruppe enthält nur den Minimalsatz, weil ihre Schemas bei jeder Frage den Kontext belegen. Über `llmd` und die MCP-Profile der Studios sind alle Actions erreichbar. Jeder Schritt erscheint in der Antwort, und der Pfeil unter der Antwort nimmt alle ihre Änderungen zurück, solange die App läuft.
 
 Fremde Ergebnisse kommen in einem Rahmen mit zufälliger Kennung zum Modell. Das hilft dem Modell, schützt aber nicht: Geschützt wird durch die Registry. Ein Chat kann sich keine Nachrichten schicken und seine eigenen Freigaben nicht ändern.
 

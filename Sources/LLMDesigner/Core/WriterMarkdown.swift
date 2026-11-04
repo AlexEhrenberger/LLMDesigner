@@ -1069,7 +1069,7 @@ enum WriterMarkdown {
         return references
     }
 
-    private static func tableMarkdown(_ table: WriterTable, cells: [Int: [Int: String]]) -> String {
+    static func tableMarkdown(_ table: WriterTable, cells: [Int: [Int: String]]) -> String {
         let rows = max((cells.keys.max() ?? 0) + 1, table.spans.map { $0.key.row + $0.value.rows }.max() ?? 0)
         var lines: [String] = []
         for row in 0..<rows {
