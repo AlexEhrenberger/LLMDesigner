@@ -105,7 +105,7 @@ struct WriterTextInsertAction: WriterEditAction {
         case .whole:
             return PowerText.inserting(writerEscaped(text), at: before ? 0 : .max, into: markdown)
         case .blocks(let range):
-            try editor.edit(range.lowerBound) { attributed in
+            editor.edit(range.lowerBound) { attributed in
                 insert(NSAttributedString(string: text), into: attributed, at: before ? 0 : BlockEditor.fullRange(of: attributed).length)
             }
         case .text(let block, let range):
