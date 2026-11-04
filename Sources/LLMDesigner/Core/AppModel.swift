@@ -481,6 +481,8 @@ final class AppModel {
     @ObservationIgnored var analysisTasks: [WriterDocument.ID: Task<Void, Never>] = [:]
     @ObservationIgnored var loadedAnalysisIDs: Set<WriterDocument.ID> = []
     @ObservationIgnored let analysisStore = ContentAnalysisStore()
+    /// What agents asked the model to do in documents (see `WriterAIActions.swift`).
+    @ObservationIgnored let writerAIJobs = WriterAIJobs()
     /// Pictures made with Draw Things, one after the other in the background.
     @ObservationIgnored let imageGeneration = ImageGenerationCenter(settings: AppLibrary.current.settings)
     /// Citation Studio: sources and quotes of the library (read when first needed).

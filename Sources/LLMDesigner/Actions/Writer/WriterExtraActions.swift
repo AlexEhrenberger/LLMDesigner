@@ -8,6 +8,8 @@ extension ActionRegistry {
         registerWriterFigureActions()
         registerWriterMathActions()
         registerWriterCodeActions()
+        registerWriterAIActions()
+        registerWriterAnalysisActions()
     }
 }
 

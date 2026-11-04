@@ -21,6 +21,8 @@ final class FakeLLMServer: @unchecked Sendable {
     var page = "<html><body>Nichts.</body></html>"
     /// A placeholder in scripted tool arguments and what it stands for, for things only known once the server runs.
     var substitute: (String, String)?
+    /// Seconds before a streamed answer comes, to catch something running.
+    var delay: Double = 0
     /// What requests without streaming get, one after the other; after the last one `{}`.
     var completions: [String] = []
     /// The requests without streaming.
@@ -94,6 +96,7 @@ final class FakeLLMServer: @unchecked Sendable {
             let request = (try? JSONDecoder().decode(JSONValue.self, from: body)) ?? .null
             if request["stream"] == true {
                 lock.withLock { seen.append(request) }
+                if delay > 0 { Thread.sleep(forTimeInterval: delay) }
                 reply = ("text/event-stream", Self.stream(nextTurn(), substitute: substitute))
             } else {
                 let content: String = lock.withLock {

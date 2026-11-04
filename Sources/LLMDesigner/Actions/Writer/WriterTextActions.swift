@@ -134,10 +134,13 @@ struct WriterTextInsertMarkdownAction: WriterEditAction {
     static func target(of args: Args) -> WriterTargetArgs { args.target }
 
     static func edit(_ args: Args, markdown: String, context: ActionContext) throws -> String {
-        let new = args.markdown ?? ""
-        let position = args.position ?? "after"
-        guard !args.address.isEmpty else { return PowerText.inserting(new, at: .max, into: markdown) }
-        switch try WriterAddressing.resolve(args.address, in: markdown) {
+        try place(args.markdown ?? "", at: args.address, position: args.position ?? "after", in: markdown)
+    }
+
+    /// Markdown at an address: next to it, or in its place.
+    static func place(_ new: String, at address: WriterAddress, position: String, in markdown: String) throws -> String {
+        guard !address.isEmpty else { return PowerText.inserting(new, at: .max, into: markdown) }
+        switch try WriterAddressing.resolve(address, in: markdown) {
         case .whole:
             switch position {
             case "before": return PowerText.inserting(new, at: 0, into: markdown)

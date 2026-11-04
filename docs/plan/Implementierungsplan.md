@@ -296,6 +296,7 @@ _(wird von Claude Code nach jeder Phase gepflegt)_
 | W2 Kästen, Spalten | fertig | |
 | W3 Bilder, Diagramme, Mermaid, Zeichnungen | fertig | Zusätzlich `writer.figure.read`, sonst könnte ein Agent ein Diagramm nur blind ändern. `writer.image.insert` fragt über Chat und MCP nach. |
 | W4 Formeln, Plots, Code | fertig | Zusätzlich `writer.formula.list`. Der Katalog nennt `python` bei `writer.plot.insert`: nicht umgesetzt, das wäre beliebiger Code von außen. Plots entstehen wie im Editor aus der Formel. |
+| W5 KI-Assistent, Analyse | fertig | Der Assistent des Editors hängt am offenen Editor und seiner Auswahl; die Actions nutzen dieselben Prompts (`WriterPrompts`), aber eigene Aufträge (`WriterAIJobs`) und warten auf das Modell. `writer.ai.rewrite` setzt den Text ein, mit `apply: false` bleibt er Vorschlag. `writer.ai.check` ändert nichts und liefert Funde. Der Text wird nach dem Warten neu gelesen, damit Getipptes nicht verloren geht. |
 
 ### Entscheidungen (04.11.2026)
 

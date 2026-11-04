@@ -183,15 +183,7 @@ extension WriterTextView {
         // Bookmarks are the user's; the model doesn't need them (and would copy them).
         var markdown = WriterMarkdown.removingDivFences(WriterBookmark.strip(WriterMarkdown.markdown(from: copy))).trimmingCharacters(in: .whitespacesAndNewlines)
         if markdown.isEmpty { markdown = WriterPrompts.cursorMarker }
-        guard markdown.count > limit else { return markdown }
-
-        let anchor = markdown.range(of: WriterPrompts.cursorMarker) ?? markdown.range(of: WriterPrompts.selectionStart)
-        let center = anchor.map { markdown.distance(from: markdown.startIndex, to: $0.lowerBound) } ?? markdown.count
-        let before = Int(Double(limit) * 0.7)
-        let start = max(0, min(center - before, markdown.count - limit))
-        let lower = markdown.index(markdown.startIndex, offsetBy: start)
-        let upper = markdown.index(lower, offsetBy: min(limit, markdown.count - start))
-        return (start > 0 ? "[…]\n" : "") + markdown[lower..<upper] + (upper < markdown.endIndex ? "\n[…]" : "")
+        return WriterPrompts.window(of: markdown, limit: limit)
     }
 
     /// The selected text as Markdown, without grey dictation.
