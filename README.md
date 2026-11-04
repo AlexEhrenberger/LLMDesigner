@@ -1,6 +1,6 @@
 # LLM Designer
 
-Native macOS-App (SwiftUI) als „LM Studio Plus“: Chat-Oberfläche im Stil von ChatGPT, die auf dem lokalen LM-Studio-Server (oder Kapitsa) aufsetzt – dazu Writer, Presenter, Citation und Stories Studio. Die UI ist immer schwarz, unabhängig vom System-Erscheinungsbild.
+Native macOS-App (SwiftUI) als „LM Studio Plus“: Chat-Oberfläche im Stil von ChatGPT, die auf dem lokalen LM-Studio-Server (oder Kapitsa) aufsetzt – dazu Writer, Presenter, Citation und Stories Studio. Das Design ist wählbar: hell, dunkel oder wie das System.
 
 **Dokumentation** mit Diagrammen: [Übersicht](docs/index.md) · [Funktionsweise](docs/funktionen.md) · [Architektur](docs/architektur.md) · [Code-Führer](docs/code.md) · [Speicherformate](docs/speicherformate.md)
 
