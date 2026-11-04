@@ -454,7 +454,14 @@ struct SkillReadAction: LLMDAction {
         input: .object(["skill": .string("Skill (ID oder Name)")], required: ["skill"]), output: .freeObject(), groups: ["chat.core"]
     )
     static func preflight(_ args: Args, context: ActionContext) throws -> ActionPreflight {
-        ActionPreflight(readsUntrusted: try context.app.actionSkill(args.skill).provenance == .foreign)
+        let skill = try context.app.actionSkill(args.skill)
+        var check = ActionPreflight(readsUntrusted: skill.provenance == .foreign, target: skill.displayName)
+        // Its text ends up as a system prompt: from a stranger, that takes the person's word.
+        if skill.provenance == .foreign {
+            check.needsConsent = "Dieser Skill stammt aus fremder Quelle; sein Text würde als Anweisung an ein Modell gehen."
+            check.detail = skill.instructions
+        }
+        return check
     }
     static func run(_ args: Args, context: ActionContext) async throws -> Output {
         let skill = try context.app.actionSkill(args.skill)

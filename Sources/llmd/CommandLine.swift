@@ -124,7 +124,7 @@ enum LLMDCommandLine {
                 throw UsageError(message: "Unbekanntes Profil „\(profile)“. Es gibt: \(MCPProfile.names.joined(separator: ", ")).")
             }
             let client = try LLMDClient(channel: "mcp", launch: globals.launch)
-            MCPServer(client: client, profile: profile).serve()
+            MCPServer(client: client, profile: profile, launch: globals.launch).serve()
         default:
             let client = try LLMDClient(launch: globals.launch)
             let actions = try SchemaCache.descriptors(client: client)

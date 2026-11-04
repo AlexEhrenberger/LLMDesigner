@@ -18,6 +18,8 @@ final class ActionRegistry {
     let undoStack = ActionUndoStack()
     /// Delivered to `events.subscribe`.
     var eventSink: (@MainActor (ActionEvent) -> Void)?
+    /// Actions running right now; a document change meanwhile is theirs and already reported.
+    private(set) var activeActions = 0
     /// The model the undo stack belongs to; a new library starts clean.
     private weak var lastApp: AppModel?
 
@@ -133,6 +135,8 @@ final class ActionRegistry {
             lastApp = app
         }
         guard let entry = entries[id] else { throw RPCError.methodNotFound(id) }
+        activeActions += 1
+        defer { activeActions -= 1 }
         let descriptor = entry.descriptor
         // JSON without parameters arrives as null from some clients.
         let args: JSONValue = args == .null ? .object([:]) : args
@@ -141,6 +145,15 @@ final class ActionRegistry {
 
         let context = ActionContext(app: app, channel: state.channel, run: state, undoGroup: group, registry: self)
         context.flushEditor()
+
+        // Before anything looks at the target: a closed door doesn't say what is behind it.
+        if state.channel == .mcp, descriptor.security.sensitive {
+            let refusal = ActionPolicy.decide(ActionPolicy.Input(channel: .mcp, runHasUntrusted: true, runHasSensitive: state.hasReadSensitive, security: descriptor.security, kind: descriptor.kind), level: .deny)
+            if case .deny(let reason) = refusal {
+                log.append(ActionLogEntry(channel: state.channel, run: state.id, action: id, target: nil, hadUntrusted: true, hadSensitive: state.hasReadSensitive, decision: refusal.label, error: reason))
+                throw RPCError.denied(reason)
+            }
+        }
 
         var logEntry = ActionLogEntry(channel: state.channel, run: state.id, action: id, target: nil,
                                       hadUntrusted: state.hasReadUntrusted, hadSensitive: state.hasReadSensitive, decision: "")

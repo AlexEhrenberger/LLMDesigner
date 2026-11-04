@@ -143,6 +143,13 @@ struct RegistryTests {
         #expect(await code { try await registry.run("test.sensitive", app: app, channel: .mcp) } == RPCError.deniedCode)
     }
 
+    @Test func aClosedDoorSaysNothingAboutWhatIsBehindIt() async {
+        let registry = ActionRegistry.standard()
+        let app = TestApp.model()
+        registry.approval.presenter = { _ in true }
+        #expect(await code { try await registry.run("memory.list", args: ["persona": "Gibt es nicht"], app: app, channel: .mcp) } == RPCError.deniedCode)
+    }
+
     @Test func aCliRunCannotTakeOverAnMcpRun() {
         let registry = registry()
         #expect(registry.runState(id: "x", channel: .mcp).hasReadUntrusted)

@@ -31,6 +31,12 @@ final class ActionHub {
         server = nil
     }
 
+    /// A document changed by the person's hand or the app's own model: subscribers hear of it too.
+    func noteDocumentChange(_ id: UUID) {
+        guard registry.activeActions == 0 else { return }
+        registry.eventSink?(ActionEvent(kind: ActionEvent.documentChanged, channel: ActionChannel.ui.rawValue, target: id.uuidString))
+    }
+
     func handle(_ message: RPCMessage, connection: ActionConnection) async -> RPCMessage? {
         guard let method = message.method else { return nil }
         if method == RPCMethod.auth {

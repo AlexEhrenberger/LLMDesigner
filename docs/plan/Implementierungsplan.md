@@ -292,6 +292,10 @@ _(wird von Claude Code nach jeder Phase gepflegt)_
 
 Vom Nutzer bestätigt: CLI-Name `llmd`; eigener kleiner Parser statt swift-argument-parser; Block-IDs flüchtig; Installation nach `~/.local/bin`; Exportordner frei mit Freigabe; MCP-Kanal immer `fremd`; Gedächtnis über MCP gesperrt; „geprüft“ nur einzeln. Die Phasen laufen ohne Rückfrage nacheinander.
 
+### Prüfung 5.0 (04.11.2026)
+
+Das offizielle `modelcontextprotocol/swift-sdk` nennt im README nur die Spezifikation 2025-11-25; `server/discover` und 2026-07-28 kommen dort nicht vor. Der Nutzer hat den eigenen Adapter gewählt: `Sources/llmd/MCP/`, ohne Fremdabhängigkeit, beantwortet `server/discover` und das alte `initialize`.
+
 ### Bericht S.4 (nur geprüft, nichts geändert)
 
 - **LaTeX, Befund:** Formeln gehen im Modus `native` unverändert an die Engine (`LaTeXWriter.displayMath`). Tectonic mit `--untrusted` sperrt nur Shell-Aufrufe: `\\openin` und `\\input` lesen weiter absolute Pfade (geprüft mit einer neutralen Datei; es erscheint nur eine Warnung „accessing absolute path“). Ein präpariertes Dokument kann so lokale Dateien in das exportierte PDF holen. **Vorschlag:** Vor dem Satz gefährliche Befehle in Formeln ablehnen (`\\input`, `\\include`, `\\openin`, `\\openout`, `\\read`, `\\write`, `\\catcode`, `\\csname`) und solche Formeln als Code setzen. Eigene Aufgabe.

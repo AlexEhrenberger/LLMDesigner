@@ -119,6 +119,7 @@ extension AppModel {
             documents[index].title = WriterDocument.makeTitle(from: documents[index].markdown)
         }
         saveDocument(id, after: delay)
+        ActionHub.shared?.noteDocumentChange(id)
         return true
     }
 

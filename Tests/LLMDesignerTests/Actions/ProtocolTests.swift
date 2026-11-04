@@ -56,3 +56,70 @@ struct ProtocolTests {
         #expect(ActionDescriptor(id: "a.b", summary: "x", kind: .write, security: local).inconsistency == nil)
     }
 }
+
+/// There is no validator package here, so this checks each published schema against the rules of JSON Schema 2020-12
+/// that matter for what the builder can produce. A real validator ran once by hand (see the plan's progress notes).
+@MainActor
+@Suite("Schemas aller Actions")
+struct AllSchemasTests {
+    private static let keywords: Set<String> = ["type", "description", "properties", "required", "enum", "minimum", "maximum", "additionalProperties", "items", "$schema"]
+    private static let types: Set<String> = ["string", "boolean", "integer", "number", "array", "object"]
+
+    private func problems(_ schema: JSONValue, at path: String) -> [String] {
+        guard let object = schema.objectValue else { return ["\(path): kein Objekt"] }
+        var found: [String] = []
+        for key in object.keys where !Self.keywords.contains(key) { found.append("\(path): unbekanntes Schlüsselwort \(key)") }
+        if let type = object["type"]?.stringValue, !Self.types.contains(type) { found.append("\(path): Typ \(type)") }
+        if let values = object["enum"]?.arrayValue, values.isEmpty || Set(values).count != values.count { found.append("\(path): enum") }
+        if object["type"]?.stringValue == "array", object["items"] == nil { found.append("\(path): Liste ohne items") }
+        if let required = object["required"]?.arrayValue {
+            if Set(required).count != required.count { found.append("\(path): required doppelt") }
+            for name in required.compactMap(\.stringValue) where object["properties"]?[name] == nil {
+                found.append("\(path): required \(name) fehlt in properties")
+            }
+        }
+        for (name, property) in object["properties"]?.objectValue ?? [:] { found += problems(property, at: "\(path).\(name)") }
+        if let items = object["items"] { found += problems(items, at: "\(path)[]") }
+        return found
+    }
+
+    @Test func everySchemaIsValid() {
+        let registry = ActionRegistry.standard()
+        #expect(registry.descriptors.count > 100)
+        for descriptor in registry.descriptors {
+            #expect(descriptor.input.type == "object", "\(descriptor.id)")
+            #expect(descriptor.input.document["$schema"] == "https://json-schema.org/draft/2020-12/schema")
+            #expect(problems(descriptor.input.document, at: descriptor.id).isEmpty, "\(problems(descriptor.input.document, at: descriptor.id))")
+            if let output = descriptor.output {
+                #expect(problems(output.document, at: "\(descriptor.id)→").isEmpty)
+                #expect(output.type == "object", "\(descriptor.id): structuredContent ist ein Objekt")
+            }
+        }
+    }
+
+    /// Tool names on MCP may only hold letters, digits, `_`, `-` and `.`.
+    @Test func everyIdMakesAValidToolName() {
+        for descriptor in ActionRegistry.standard().descriptors {
+            let name = descriptor.id.replacingOccurrences(of: ".", with: "_")
+            #expect(name.range(of: #"^[A-Za-z0-9_-]{1,128}$"#, options: .regularExpression) != nil, "\(name)")
+        }
+    }
+
+    @Test func toolNamesAreUnique() {
+        let names = ActionRegistry.standard().descriptors.map { $0.id.replacingOccurrences(of: ".", with: "_") }
+        #expect(Set(names).count == names.count)
+    }
+
+    @Test func privateActionsAreMarked() {
+        let registry = ActionRegistry.standard()
+        for id in ["memory.list", "memory.profile.get", "persona.files.search"] {
+            #expect(registry.descriptor(id)?.security.sensitive == true, "\(id)")
+        }
+    }
+
+    @Test func destructiveThingsAreKindD() {
+        for descriptor in ActionRegistry.standard().descriptors where descriptor.security.effect == .destructive || descriptor.security.effect == .outbound {
+            #expect(descriptor.kind == .destructive, "\(descriptor.id)")
+        }
+    }
+}

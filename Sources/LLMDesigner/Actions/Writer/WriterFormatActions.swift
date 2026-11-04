@@ -107,7 +107,9 @@ private func markDescriptor(_ name: String, _ label: String) -> ActionDescriptor
     ActionDescriptor(
         id: "writer.format.\(name)", summary: "\(label): an, aus oder umschalten", kind: .write, security: .localWrite,
         input: .object(WriterEditArgs.properties(["state": .choice(["toggle", "on", "off"], "Standard: toggle")])),
-        output: .freeObject(), example: "llmd writer format \(name) --doc X --match Wort --state on", groups: ["core", "writer.core"]
+        output: .freeObject(), example: "llmd writer format \(name) --doc X --match Wort --state on",
+        // The core set stays small: its schemas go into a client's context with every question.
+        groups: name == "bold" || name == "italic" ? ["core", "writer.core"] : ["writer.core"]
     )
 }
 

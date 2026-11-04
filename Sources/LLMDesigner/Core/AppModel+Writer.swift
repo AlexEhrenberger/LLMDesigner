@@ -135,6 +135,7 @@ extension AppModel {
             documents[index].title = WriterDocument.makeTitle(from: markdown)
         }
         saveDocument(id, after: .milliseconds(700))
+        ActionHub.shared?.noteDocumentChange(id)
     }
 
     func setDocumentFont(_ id: WriterDocument.ID, _ font: WriterFont) {
