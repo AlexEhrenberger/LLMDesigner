@@ -467,6 +467,9 @@ enum WriterStyler {
             }
         }
         highlightCode(storage, in: NSRange(location: start, length: end - start), palette: palette)
+        // The restyle runs after the storage has substituted fonts for characters the text face lacks
+        // (emoji, rare symbols), and setting the face again undid that: emoji came out empty.
+        storage.fixFontAttribute(in: NSRange(location: start, length: end - start))
     }
 
     static func restyleAll(_ storage: NSTextStorage, family: WriterFont, palette: WriterPalette) {

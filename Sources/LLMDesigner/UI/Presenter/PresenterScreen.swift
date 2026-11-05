@@ -531,6 +531,11 @@ private struct PresenterToolbar: View {
                 ToolbarButton(symbol: "wand.and.stars", help: "Bild mit Draw Things generieren (⌥⌘G)", isActive: false) { controller.generateImage() }
             }
             HStack(spacing: 2) {
+                ToolbarButton(symbol: "face.smiling", help: "Sonderzeichen und Symbole (⌃⌘Leertaste) – Pfeile, Griechisch, Mathesymbole, Emoji", isActive: false) {
+                    controller.showCharacterPalette()
+                }
+            }
+            HStack(spacing: 2) {
                 TableButton(controller: controller, isInTable: state.table != nil)
                 DiagramMenu(controller: controller, isInTable: state.table != nil, hasSelection: state.hasSelection)
                 ToolbarButton(symbol: "pencil.and.scribble", help: "Zeichnung … – Stift, Marker, Pfeile, Formen und Text", isActive: false) {

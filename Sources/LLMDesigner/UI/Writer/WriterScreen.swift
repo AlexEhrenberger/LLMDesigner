@@ -659,7 +659,7 @@ private struct WriterToolbar: View {
                     .disabled(state.table != nil)
                 }
                 group(20) {
-                    ToolbarButton(symbol: "character.textbox", help: "Sonderzeichen und Symbole (⌃⌘Leertaste) – Pfeile, Griechisch, Mathesymbole, Emoji", isActive: false) {
+                    ToolbarButton(symbol: "face.smiling", help: "Sonderzeichen und Symbole (⌃⌘Leertaste) – Pfeile, Griechisch, Mathesymbole, Emoji", isActive: false) {
                         controller.showCharacterPalette()
                     }
                 }

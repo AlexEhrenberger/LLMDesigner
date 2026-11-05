@@ -97,6 +97,19 @@ struct WriterLayoutTests {
         #expect(natural?.alignment == .natural)
     }
 
+    @Test func emojiKeepsItsFontAfterRestyle() {
+        let storage = NSTextStorage(attributedString: WriterMarkdown.attributedString(from: "Gut 😀 gemacht\n"))
+        // Inside an editing block nothing else fixes fonts: the restyle itself must leave the emoji drawable,
+        // as it does when it runs from the storage delegate after the storage's own fixing.
+        storage.beginEditing()
+        WriterStyler.restyle(storage, around: NSRange(location: 0, length: storage.length), family: .georgia, palette: .dark)
+        let emoji = (storage.string as NSString).range(of: "😀")
+        let font = storage.attribute(.font, at: emoji.location, effectiveRange: nil) as? NSFont
+        storage.endEditing()
+        #expect(font?.fontName.contains("Emoji") == true)
+        #expect((storage.attribute(.font, at: 0, effectiveRange: nil) as? NSFont)?.familyName == "Georgia")
+    }
+
     // MARK: Column widths
 
     @Test func columnWidthsRoundTrip() {

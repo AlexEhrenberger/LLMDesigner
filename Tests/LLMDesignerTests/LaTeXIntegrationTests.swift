@@ -35,6 +35,21 @@ struct LaTeXIntegrationTests {
         }
     }
 
+    @Test func emojiBecomePictures() async throws {
+        #expect(LaTeXWriter.escape("Gut 😀") == "Gut \\texorpdfstring{\\llmdemoji{llmdemoji-1F600}}{}")
+        // A sequence with a skin tone stays one picture.
+        let thumb: Character = "👍🏽"
+        #expect(LaTeXEmoji.character(fromName: LaTeXEmoji.name(thumb)) == thumb)
+        #expect(LaTeXEmoji.png("😀").map { $0.count > 1_000 } == true)
+
+        let markdown = "# Titel 🎉\n\nEin Satz mit 😀 und 👍🏽 im Text.\n\n- Liste ✅\n"
+        guard let pdf = try await typeset(markdown, typeface: .georgia) else { return }
+        #expect(pdf.count > 5_000)
+        if let directory = ProcessInfo.processInfo.environment["LLMD_PDF_OUT"] {
+            try pdf.write(to: URL(fileURLWithPath: directory).appendingPathComponent("emoji.pdf"))
+        }
+    }
+
     @Test func alignmentSizesAndColumnWidthsCompile() async throws {
         let wide = String(repeating: "-", count: 70)
         let narrow = String(repeating: "-", count: 30)

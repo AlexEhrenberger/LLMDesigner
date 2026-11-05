@@ -283,6 +283,7 @@ enum LaTeXWriter {
         \providecommand{\abs}[1]{\left|#1\right|}
         \providecommand{\norm}[1]{\left\|#1\right\|}
         \newcommand{\llmdmark}[1]{\markboth{#1}{#1}}
+        \DeclareRobustCommand{\llmdemoji}[1]{\raisebox{-0.17em}{\includegraphics[height=1.1em]{#1.png}}}
         \#(format.latexSetup)
         \#(pageSetup)
         """#
@@ -966,7 +967,11 @@ enum LaTeXWriter {
                 output += replacement
                 continue
             }
-            if isEmoji(character) { continue }
+            // XeTeX can't set Apple's colour emoji font, so an emoji becomes a small picture (made in `compile`).
+            if isEmoji(character) {
+                output += "\\texorpdfstring{\\llmdemoji{\(LaTeXEmoji.name(character))}}{}"
+                continue
+            }
             if let scalar = character.unicodeScalars.first, character.unicodeScalars.count == 1, isMathCharacter(scalar.value) {
                 output += "\\(\(character)\\)"   // Greek letters, arrows and mathematical symbols come from the math font
                 continue
@@ -1070,6 +1075,7 @@ struct LaTeXEngine: Sendable {
             try? FileManager.default.copyItem(at: image, to: directory.appendingPathComponent(image.lastPathComponent))
         }
 
+        LaTeXEmoji.renderPictures(in: source, to: directory)
         try source.write(to: directory.appendingPathComponent("export.tex"), atomically: true, encoding: .utf8)
         let log = directory.appendingPathComponent("engine.log")
 
