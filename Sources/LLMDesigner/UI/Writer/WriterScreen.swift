@@ -1,16 +1,12 @@
 import SwiftUI
 
-/// Writer Studio: the chat gives way to a sheet with a word processor's toolbar. Opening it unfolds a
-/// glowing frame from where the composer was to the size of the sheet; the toolbar drops in button by button.
+/// Writer Studio: the chat gives way to a sheet with a word processor's toolbar. A document opens at once,
+/// without an opening effect, so the user can start typing right away.
 struct WriterScreen: View {
     @Environment(AppModel.self) private var app
     @Environment(\.colorScheme) private var colorScheme
     @State private var controller = WriterEditorController()
     @State private var assistant = WriterAssistant()
-    @State private var unfold: CGFloat = 0
-    @State private var showsToolbar = false
-    @State private var showsContent = false
-    @State private var showsGlow = true
     @State private var analysisScrollTarget: ContentAnalysisModule?
 
     var body: some View {
@@ -18,7 +14,7 @@ struct WriterScreen: View {
             HStack(spacing: 0) {
                 main(document)
                 // The document's contents and bookmarks; the check results take its place while they are open.
-                if app.isPanelDocked, !assistant.isPanelShown, showsToolbar, app.writerTab == .document {
+                if app.isPanelDocked, !assistant.isPanelShown, app.writerTab == .document {
                     Group {
                         if app.power.isOn {
                             PowerPanel()
@@ -52,7 +48,11 @@ struct WriterScreen: View {
             .onAppear {
                 controller.find.isPresentation = false
                 app.documentFind = controller.find
-                playOpening()
+                // The text view joins the window a moment after the screen appears.
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(50))
+                    controller.focus()
+                }
             }
             .onDisappear {
                 app.writerFlush = nil
@@ -125,12 +125,11 @@ struct WriterScreen: View {
             let showsAnalysis = app.writerTab == .analysis
             return VStack(spacing: 0) {
                 WriterTopBar(document: document, pageCount: controller.pageCount)
-                    .opacity(showsToolbar ? 1 : 0)
                 Group {
                     if showsAnalysis {
                         ContentAnalysisToolbar(document: document, scrollTarget: $analysisScrollTarget)
                     } else {
-                        WriterToolbar(controller: controller, document: document, isShown: showsToolbar)
+                        WriterToolbar(controller: controller, document: document)
                     }
                 }
                 .transition(.opacity)
@@ -146,7 +145,7 @@ struct WriterScreen: View {
                             isReadingAloud: app.speakingDocumentID != nil,
                             isDictating: app.dictationIntoDocument
                         )
-                        .opacity(showsContent && !showsAnalysis ? 1 : 0)
+                        .opacity(showsAnalysis ? 0 : 1)
                         .allowsHitTesting(!showsAnalysis)
                         // The editor stays while the analysis is shown, with its caret, selection and undo.
                         if showsAnalysis {
@@ -168,19 +167,12 @@ struct WriterScreen: View {
                         }
                         .frame(maxHeight: .infinity, alignment: .bottom)
                         .padding(.bottom, 16)
-                        .opacity(showsContent ? 1 : 0)
                         if controller.find.isShown, !showsAnalysis {
                             DocumentFindBar(find: controller.find)
                                 .padding(.top, 10)
                                 .padding(.trailing, 18)
                                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
                                 .transition(.move(edge: .top).combined(with: .opacity))
-                        }
-                        if showsGlow {
-                            UnfoldingFrame(progress: unfold, lightPaper: lightPaper,
-                                           columnWidth: WriterStyler.columnWidth(document.pageFormat, family: document.textFont, setup: document.pageSetup)
-                                               ?? WriterTextView.maxColumnWidth)
-                                .allowsHitTesting(false)
                         }
                     }
                     if assistant.isPanelShown, !showsAnalysis {
@@ -209,72 +201,6 @@ struct WriterScreen: View {
             try? await Task.sleep(for: .milliseconds(60))
             controller.jump(to: anchor, blockCount: blockCount)
         }
-    }
-
-    private func playOpening() {
-        unfold = 0
-        withAnimation(.spring(response: 0.62, dampingFraction: 0.84)) { unfold = 1 }
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(160))
-            showsToolbar = true
-            try? await Task.sleep(for: .milliseconds(170))
-            withAnimation(.easeOut(duration: 0.45)) { showsContent = true }
-            try? await Task.sleep(for: .milliseconds(450))
-            withAnimation(.easeOut(duration: 0.5)) { showsGlow = false }
-            controller.focus()
-        }
-    }
-}
-
-/// The opening effect: a frame of light that grows from the composer's place to the sheet.
-private struct UnfoldingFrame: View {
-    let progress: CGFloat
-    let lightPaper: Bool
-    /// The sheet's text column (narrower for a paperback or a Normseite).
-    let columnWidth: CGFloat
-
-    var body: some View {
-        GeometryReader { geometry in
-            let size = geometry.size
-            let start = CGRect(
-                x: (size.width - min(size.width - 40, Theme.contentWidth + 16)) / 2,
-                y: size.height - 120,
-                width: min(size.width - 40, Theme.contentWidth + 16),
-                height: 92
-            )
-            let column = min(columnWidth, max(260, size.width - 120))
-            let padding = max(20, min(76, (size.width - column) / 2 - 18))
-            let end = CGRect(x: (size.width - column) / 2 - padding, y: 28, width: column + 2 * padding, height: size.height + 20)
-            let rect = interpolate(start, end, progress)
-            let radius = 22 - 12 * progress
-
-            ZStack {
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .fill(Color(nsColor: (lightPaper ? WriterPalette.light : .dark).page).opacity(Double(progress)))
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .strokeBorder(
-                        AngularGradient(
-                            colors: [Theme.accent, Color(hex: 0x6FD3FF), Color(hex: 0xFF8FD6), Theme.accent],
-                            center: .center,
-                            angle: .degrees(Double(progress) * 220)
-                        ),
-                        lineWidth: 1.6
-                    )
-                    .shadow(color: Theme.accent.opacity(0.75), radius: 18)
-                    .shadow(color: Theme.accent.opacity(0.35), radius: 42)
-            }
-            .frame(width: rect.width, height: rect.height)
-            .position(x: rect.midX, y: rect.midY)
-        }
-    }
-
-    private func interpolate(_ a: CGRect, _ b: CGRect, _ t: CGFloat) -> CGRect {
-        CGRect(
-            x: a.minX + (b.minX - a.minX) * t,
-            y: a.minY + (b.minY - a.minY) * t,
-            width: a.width + (b.width - a.width) * t,
-            height: a.height + (b.height - a.height) * t
-        )
     }
 }
 
@@ -643,7 +569,6 @@ private struct WriterToolbar: View {
     @Environment(AppModel.self) private var app
     let controller: WriterEditorController
     let document: WriterDocument
-    let isShown: Bool
 
     var body: some View {
         let state = controller.state
@@ -792,12 +717,9 @@ private struct WriterToolbar: View {
         .padding(.horizontal, 16)
     }
 
-    /// Each control drops in a moment after the one before it.
+    /// The index once staggered an opening effect; it stays so the toolbar's layout calls keep their shape.
     private func group<Content: View>(_ index: Int, @ViewBuilder content: () -> Content) -> some View {
         content()
-            .opacity(isShown ? 1 : 0)
-            .offset(y: isShown ? 0 : -12)
-            .animation(.spring(response: 0.42, dampingFraction: 0.72).delay(Double(index) * 0.028), value: isShown)
     }
 
     private func divider(_ index: Int) -> some View {

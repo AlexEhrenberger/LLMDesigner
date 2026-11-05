@@ -80,7 +80,8 @@ struct RootView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .animation(.easeInOut(duration: 0.4), value: app.selectedDocumentID == nil)
+            // Opening a document switches at once; only closing it fades back to the chat.
+            .animation(app.selectedDocumentID == nil ? .easeInOut(duration: 0.4) : nil, value: app.selectedDocumentID == nil)
             .animation(.easeInOut(duration: 0.25), value: app.citationStudioOpen)
             .animation(.easeInOut(duration: 0.25), value: app.storiesStudioOpen)
             if showsChatPower, app.isPanelDocked {
