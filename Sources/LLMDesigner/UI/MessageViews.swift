@@ -26,6 +26,8 @@ struct MessageRow: View, Equatable {
     @Environment(AppModel.self) private var app
     /// Set in the mini chat: the buttons act on its chat; editing a question (which opens a branch) stays in the main window.
     @Environment(\.miniChatID) private var miniChatID
+    /// Set in the search bar (together with `miniChatID`): branches and follow-up questions stay in the bar.
+    @Environment(\.isQuickBar) private var isQuickBar
 
     static func == (lhs: MessageRow, rhs: MessageRow) -> Bool {
         lhs.message == rhs.message && lhs.isStreaming == rhs.isStreaming && lhs.isLast == rhs.isLast
@@ -60,9 +62,15 @@ struct MessageRow: View, Equatable {
                 },
                 onSpeak: { app.toggleSpeaking(message.id) },
                 onExport: { app.exportAnswer(message.id) },
-                onBranch: { app.branchChat(at: message.id, inMiniChat: miniChatID != nil) },
+                onBranch: { app.branchChat(at: message.id, inMiniChat: miniChatID != nil && !isQuickBar, inQuickBar: isQuickBar) },
                 onFollowUp: { question in
-                    if miniChatID != nil { app.sendInMiniChat(text: question) } else { app.sendFollowUp(question) }
+                    if isQuickBar {
+                        app.sendInQuickBar(text: question)
+                    } else if miniChatID != nil {
+                        app.sendInMiniChat(text: question)
+                    } else {
+                        app.sendFollowUp(question)
+                    }
                 }
             )
         case .system:

@@ -89,6 +89,16 @@ sequenceDiagram
     L-->>M: Antwort (gestreamt)
 ```
 
+## Menüleiste und Suchleiste
+
+Ein Symbol in der Menüleiste (Zauberstab) startet ohne Umweg über das Fenster: Suchleiste, neuer Chat, neues Dokument, Präsentation (neu oder eine der zuletzt bearbeiteten), Zitat erfassen, Stories Studio, Mini-Chat, Gespräch und Bildschirmfoto in den Mini-Chat. Die App läuft weiter, wenn das letzte Fenster geschlossen ist; beendet wird sie über das Symbol oder ⌘Q.
+
+Die **Suchleiste** erscheint mit ⌥ Leertaste vor jeder App, wie Spotlight, ohne LLM Designer nach vorne zu holen. Darin chattet man oder gibt einen Auftrag („Erstelle eine Präsentation über …“). Beim Öffnen leuchtet ein Farbband um den Rand auf und dreht schnell aus; in Ruhe kreist es langsam, während das Modell arbeitet rast es und atmet. Mit „Bewegung reduzieren“ in den Bedienungshilfen steht es still. Escape oder ein Klick daneben schließt die Leiste; arbeitet das Modell noch, bleibt sie stehen. Nach zehn Minuten ohne Benutzung beginnt sie mit einem neuen Chat, ⌘N jederzeit; ⌘O öffnet den Chat im Hauptfenster. Ihre Chats stehen wie alle anderen in der Seitenleiste.
+
+Die Chats der Suchleiste dürfen alles ohne Rückfrage („Auch Löschen und Export erlauben“), dazu Web und Wikipedia. Was die Sicherheitsregel verlangt, fragt trotzdem: private Daten, und Änderungen oder Export, nachdem der Lauf fremde Inhalte gelesen hat. Mitgeschickt werden nur die Werkzeuggruppen, die der Auftrag nennt (`QuickBarTools`: Dokument, Präsentation, Quelle, Roman …; „erstelle“ ohne Ziel heißt Writer). Alle Gruppen zusammen sind rund 60 Beschreibungen, die ein 9B-Modell auf diesem Mac über eine Minute lesen würde, auch vor „Hallo“. Gruppen, die eine spätere Frage nennt, kommen dazu und bleiben. Der Chat bekommt mindestens 32K Kontext.
+
+Tastenkürzel und Ein/Aus stehen in den Einstellungen unter „Suchleiste“ und liegen in der Bibliothek. Das Kürzel ist ein Carbon-Hotkey (`GlobalHotKey`): keine Bedienungshilfen-Erlaubnis nötig, aber ⌘, ⌥ oder ⌃ müssen dabei sein. Ist die Kombination schon von einer anderen App belegt, sagen es die Einstellungen.
+
 ## Personas und Gedächtnis (Thalamus)
 
 Eine Persona hat Profilbild, Beschreibung und eigene Dateien. Mit eingeschaltetem **Thalamus** ordnet ein neutraler Modellaufruf jede Nachricht ein (Kategorie, bis zu drei Gefühle je Seite mit Stärke, Merkwürdigkeit). Wenn der Chat ruht, werden die Eindrücke pro Kategorie zu **Erinnerungen** und einem **Profil** verdichtet; passende Erinnerungen fließen in spätere Antworten ein.

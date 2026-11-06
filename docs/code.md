@@ -42,7 +42,7 @@ flowchart LR
 
 | Ort | Inhalt |
 |---|---|
-| `App/` | `LLMDesignerApp` (Szene, Menüs, Tastenkürzel), `LibrarySession` (offene Bibliothek), `WindowConfigurator` |
+| `App/` | `LLMDesignerApp` (Szene, Menüs, Tastenkürzel), `LibrarySession` (offene Bibliothek), `WindowConfigurator`, `MenuBarMenu` (Symbol in der Menüleiste), `GlobalHotKey` (Kürzel der Suchleiste) |
 | `Core/AppModel.swift` + `AppModel+*.swift` | Zentraler Zustand und Abläufe, nach Bereichen getrennt |
 | `Core/AppLibrary.swift` | Bibliotheken: Ort, Einstellungen (`Einstellungen.plist`), Liste der zuletzt geöffneten |
 | `Core/LLMClient.swift` | LM Studio / Kapitsa: Modelle, Streaming, Werkzeuge, JSON-Schema |
@@ -62,6 +62,7 @@ flowchart LR
 | `UI/Writer/` | `WriterScreen`, `WriterEditor` (Representable + Controller), `WriterTextView+*` (Editor nach Themen), Sheets |
 | `UI/Presenter/` | `PresenterScreen`, `SlideImageEditor` (Bilder/Textfelder/Textbereich verschieben), `SlideViews`, `SlidePrinter` (PDF) |
 | `UI/Power/` | `PowerPanel` (Rahmen, Ziehen, gemeinsame Bausteine), `PowerModules` (die fünf Miniatur-Apps) |
+| `UI/QuickBar/` | `QuickBarPanel` (Panel vor allen Apps, Controller), `QuickBarView` (Feld, Chat, leuchtender Rand); Zustand und Werkzeugwahl in `Core/AppModel+QuickBar.swift` |
 | `Tests/` | Swift-Testing-Suiten für Markdown, Layout, Tabellenformeln, Präsentationen, Power-Zugriff … |
 
 ## Wichtige Typen

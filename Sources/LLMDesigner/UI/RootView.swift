@@ -21,7 +21,11 @@ struct RootView: View {
         .ignoresSafeArea()
         .background(WindowConfigurator())
         .tint(Theme.accent)
-        .onAppear { MessageContextMenu.install(app: app) }
+        .onAppear {
+            MessageContextMenu.install(app: app)
+            // The search bar opens the main window with it after the window was closed.
+            QuickBarController.shared.openWindow = openWindow
+        }
         .onChange(of: app.miniChatOpenRequest) { _, request in
             if request != nil { openWindow(id: MiniChatWindow.id) }
         }

@@ -420,6 +420,8 @@ final class AppModel {
 
     /// The narrow window with a chat of its own, beside the main window.
     let miniChat = MiniChat()
+    /// The glowing search bar in front of all apps (see `QuickBar`).
+    let quickBar = QuickBar()
 
     // MARK: Writer Studio (see AppModel+Writer.swift)
 
@@ -1411,15 +1413,16 @@ final class AppModel {
     // MARK: Branches & editing
 
     /// Copies the chat up to and including this message into a new chat and opens it. The original stays as it is.
-    /// A branch of the mini chat opens in the mini chat.
-    func branchChat(at messageID: ChatMessage.ID, inMiniChat: Bool = false) {
-        guard let source = inMiniChat ? currentMiniChat : selectedChat, streamingMessageIDs[source.id] != messageID,
+    /// A branch of the mini chat opens in the mini chat, one of the search bar in the search bar.
+    func branchChat(at messageID: ChatMessage.ID, inMiniChat: Bool = false, inQuickBar: Bool = false) {
+        let source = inQuickBar ? currentQuickBarChat : inMiniChat ? currentMiniChat : selectedChat
+        guard let source, streamingMessageIDs[source.id] != messageID,
               let position = source.messages.firstIndex(where: { $0.id == messageID }) else { return }
         let branch = makeBranch(of: source, keeping: position + 1, from: messageID, editedQuestion: false)
-        guard inMiniChat else { return open(branch) }
+        guard inMiniChat || inQuickBar else { return open(branch) }
         chats.insert(branch, at: 0)
         store.save(branch)
-        miniChat.chatID = branch.id
+        if inQuickBar { quickBar.chatID = branch.id } else { miniChat.chatID = branch.id }
     }
 
     func startEditing(_ messageID: ChatMessage.ID) {

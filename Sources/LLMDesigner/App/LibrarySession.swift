@@ -9,7 +9,10 @@ final class LibrarySession {
     /// For the app delegate (a library double-clicked in the Finder).
     nonisolated(unsafe) static weak var shared: LibrarySession?
 
-    private(set) var app: AppModel
+    private(set) var app: AppModel {
+        // The search bar belongs to the library: its shortcut and its chats.
+        didSet { QuickBarController.shared.libraryChanged() }
+    }
     private(set) var library: AppLibrary
     private(set) var recent: [LibraryRegistry.Entry] = []
     private(set) var isSwitching = false

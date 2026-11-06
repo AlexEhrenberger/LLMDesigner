@@ -77,6 +77,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // The app works without it; only the terminal can't reach it.
                 print("LLMDesigner: llmd-Socket konnte nicht starten: \(error.localizedDescription)")
             }
+            // The search bar's shortcut (⌥ Leertaste unless the library says otherwise).
+            QuickBarController.shared.start()
         }
     }
 

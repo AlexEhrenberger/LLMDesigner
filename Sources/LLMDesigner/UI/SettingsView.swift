@@ -48,6 +48,19 @@ struct SettingsView: View {
             }
 
             Section {
+                Toggle("Suchleiste mit Tastenkürzel öffnen", isOn: Binding(get: { app.quickBar.isEnabled }, set: { app.quickBar.isEnabled = $0 }))
+                LabeledContent("Tastenkürzel") {
+                    QuickBarShortcutRecorder(bar: app.quickBar)
+                }
+                .disabled(!app.quickBar.isEnabled)
+            } header: {
+                Text("Suchleiste")
+            } footer: {
+                Text("Die Suchleiste erscheint vor jeder App, wie Spotlight. Darin chattest du oder gibst einen Auftrag, z. B. „Erstelle eine Präsentation über …“. Ihre Chats dürfen alle Werkzeuge der App ohne Rückfrage benutzen, auch Web und Wikipedia; private Daten und Änderungen nach fremden Inhalten fragen trotzdem. Mitgeschickt werden nur die Werkzeuge, die der Auftrag nennt (Dokument, Präsentation, Quelle, Roman …), damit ein lokales Modell schnell antwortet. Die Chats stehen danach in der Seitenleiste.")
+                    .foregroundStyle(Theme.textTertiary)
+            }
+
+            Section {
                 Picker("Quelle", selection: $app.provider) {
                     ForEach(LLMProvider.allCases) { provider in
                         Text(provider.label).tag(provider)
@@ -280,5 +293,65 @@ private struct DrawThingsSettings: View {
             reachable = false
             status = "Nicht erreichbar – API-Server in Draw Things einschalten"
         }
+    }
+}
+
+/// Records a new shortcut for the search bar: click, then press the combination; esc cancels.
+private struct QuickBarShortcutRecorder: View {
+    let bar: QuickBar
+    @State private var isRecording = false
+    @State private var monitor: Any?
+    @State private var notice: String?
+
+    var body: some View {
+        HStack(spacing: 8) {
+            if let notice {
+                Text(notice)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Theme.textTertiary)
+            }
+            Button(isRecording ? "Kürzel drücken …" : bar.shortcut.label) {
+                isRecording ? stop() : start()
+            }
+            .frame(minWidth: 130)
+            if bar.shortcut != .standard {
+                Button("Standard") { bar.shortcut = .standard }
+            }
+        }
+        .onDisappear { stop() }
+    }
+
+    private func start() {
+        notice = nil
+        isRecording = true
+        // The current shortcut would open the bar instead of being recorded.
+        GlobalHotKey.shared.suspend()
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            if event.keyCode == 53 { // esc
+                stop()
+                return nil
+            }
+            let flags = event.modifierFlags.intersection([.command, .option, .control, .shift])
+            let shortcut = QuickBarShortcut(keyCode: event.keyCode, modifiers: flags.rawValue,
+                                            key: QuickBarShortcut.keyName(keyCode: event.keyCode, characters: event.charactersIgnoringModifiers))
+            guard shortcut.isUsable else {
+                notice = "Mit ⌘, ⌥ oder ⌃"
+                return nil
+            }
+            stop()
+            bar.shortcut = shortcut
+            if !GlobalHotKey.shared.register(bar.activeShortcut) {
+                notice = "Belegt von einer anderen App"
+            }
+            return nil
+        }
+    }
+
+    private func stop() {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
+        guard isRecording else { return }
+        isRecording = false
+        GlobalHotKey.shared.resume()
     }
 }

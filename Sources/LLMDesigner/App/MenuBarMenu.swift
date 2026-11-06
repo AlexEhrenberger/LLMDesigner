@@ -11,6 +11,10 @@ struct MenuBarMenu: View {
     private static let recentPresentationCount = 8
 
     var body: some View {
+        Button("Suchleiste" + (app.quickBar.activeShortcut.map { "  " + $0.label } ?? "")) {
+            QuickBarController.shared.show()
+        }
+        Divider()
         Button("Neuer Chat") {
             showMain { app.newChat() }
         }
