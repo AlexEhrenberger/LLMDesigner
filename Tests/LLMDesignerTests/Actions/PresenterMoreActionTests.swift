@@ -31,6 +31,20 @@ struct PresenterMoreActionTests {
 
     // MARK: Decks
 
+    @Test func newDeckShowsItsTitleOnTheTitleSlide() async throws {
+        let id = try await make("Mythen und Archetypen")
+        let first = try #require(deck(id).slides.first)
+        #expect(first.role == .title)
+        #expect(first.markdown == "# Mythen und Archetypen {.chapter}")
+    }
+
+    @Test func toolCallWrittenAsTextIsFound() throws {
+        let text = "Jetzt die Folien:\n\n<tool_call>\n<function=presenter_slide_add>\n<parameter=deck>\nX\n</parameter>"
+        let start = try #require(WebTools.leakedCallStart(in: text))
+        #expect(text[..<start].trimmingCharacters(in: .whitespacesAndNewlines) == "Jetzt die Folien:")
+        #expect(WebTools.leakedCallStart(in: "Eine normale Antwort.") == nil)
+    }
+
     @Test func openRenameMoveDuplicateClose() async throws {
         let id = try await make()
         try await h.call("presenter.deck.open", ["deck": .string(id)])

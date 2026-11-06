@@ -77,7 +77,8 @@ enum ForeignFrame {
 /// The studios' actions as tools of one chat: the same descriptors and rules as on MCP.
 @MainActor
 struct ChatActionTools {
-    static let maxRounds = 12
+    /// A deck or a long document takes one call per slide or section; twelve rounds ran out halfway.
+    static let maxRounds = 40
     static let maxCallsPerRound = 6
     static let resultLimit = 8_000
 

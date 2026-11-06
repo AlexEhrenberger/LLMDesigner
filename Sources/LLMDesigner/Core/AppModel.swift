@@ -1245,6 +1245,19 @@ final class AppModel {
                     }
 
                     let roundText = closeRound()
+                    if offered == nil, tools != nil {
+                        // Out of rounds: drop a call written as text and say how to go on.
+                        let notice = WebTools.limitNotice(rounds: maxRounds)
+                        let kept: String
+                        if let start = WebTools.leakedCallStart(in: earlierContent) {
+                            kept = String(earlierContent[..<start]).trimmingCharacters(in: .whitespacesAndNewlines)
+                        } else {
+                            kept = earlierContent
+                        }
+                        earlierContent = Self.joined(kept, notice)
+                        let content = earlierContent
+                        self?.updateMessage(chatID, messageID) { $0.content = content }
+                    }
                     guard offered != nil, !calls.isEmpty else { break }
 
                     // Every call needs an answer, otherwise the chat template rejects the conversation.

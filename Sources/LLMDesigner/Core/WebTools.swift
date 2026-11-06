@@ -17,6 +17,17 @@ enum WebTools {
 
     /// Rounds in which the model may call tools; after that it has to answer with what it found.
     static let maxRounds = 5
+
+    /// Text from where a model began writing a tool call as plain text (Qwen's `<tool_call>` / `<function=…>`):
+    /// in the last round no tools are offered, and some models write the next call anyway, which then
+    /// showed up in the chat as raw markup with whole slide texts.
+    static func leakedCallStart(in text: String) -> String.Index? {
+        ["<tool_call>", "<function="].compactMap { text.range(of: $0)?.lowerBound }.min()
+    }
+
+    static func limitNotice(rounds: Int) -> String {
+        "*Die Grenze von \(rounds) Arbeitsschritten ist erreicht. Schreib „weiter“, dann geht es weiter.*"
+    }
     /// Calls per round that are carried out; further ones are answered with a short refusal.
     static let maxCallsPerRound = 3
     static let resultsPerSearch = 6

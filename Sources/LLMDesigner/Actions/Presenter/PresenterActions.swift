@@ -144,6 +144,11 @@ struct PresenterDeckCreateAction: LLMDAction {
         if let title = args.title, !title.isEmpty {
             document.title = title
             document.hasCustomTitle = true
+            // The title belongs on the title slide too; otherwise the deck opens on an empty slide.
+            if var deck = document.deck, !deck.slides.isEmpty {
+                deck.slides[0].markdown = "# \(AppModel.slideLine(title)) {.chapter}"
+                document.deck = deck
+            }
         }
         document.provenance = context.mergedProvenance(nil)
         app.reinsertDocumentForActionRedo(document)
