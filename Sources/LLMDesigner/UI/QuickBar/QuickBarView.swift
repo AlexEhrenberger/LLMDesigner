@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 private struct QuickBarKey: EnvironmentKey {
@@ -12,13 +13,12 @@ extension EnvironmentValues {
     }
 }
 
-/// The search bar's content: the field, the chat below it once there is one, and a glow that lights up when the bar
-/// opens and runs around it while the model works.
+/// The search bar's content: the field, the chat below it once there is one. Colour only moves softly inside the
+/// field (`QuickBarAurora`), a little livelier while the model works; the rest stays still, so streaming text scrolls
+/// without the whole bar being repainted each frame.
 struct QuickBarView: View {
-    /// Room around the bar for the glow; the panel is that much larger than the bar.
-    static let glowMargin: CGFloat = 90
     static let width: CGFloat = 720
-    static let cornerRadius: CGFloat = 24
+    static let cornerRadius: CGFloat = 20
     private static let chatHeight: CGFloat = 420
 
     let onSize: (CGSize) -> Void
@@ -27,15 +27,16 @@ struct QuickBarView: View {
 
     @Environment(AppModel.self) private var app
     @FocusState private var isFieldFocused: Bool
-    /// 1 right after opening, then dies away: the flash and the fast turn of the entrance.
-    @State private var flare: Double = 0
 
     var body: some View {
         let bar = app.quickBar
         let busy = app.isQuickBarGenerating
         let shape = RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
         VStack(spacing: 0) {
+            // The free space around the field and the footer move the bar.
             inputRow(busy: busy)
+                .background(QuickBarAurora(isBusy: busy))
+                .background(QuickBarDragArea())
             if let chat = app.currentQuickBarChat, !chat.messages.isEmpty {
                 Rectangle().fill(Theme.border).frame(height: 1)
                 MessageList(
@@ -50,64 +51,60 @@ struct QuickBarView: View {
                 .environment(\.miniChatID, chat.id)
                 .environment(\.isQuickBar, true)
                 .frame(height: Self.chatHeight)
-                .transition(.opacity.combined(with: .move(edge: .top)))
             } else {
                 QuickBarSuggestions { text in
                     bar.draft = text
                     isFieldFocused = true
                 }
-                .transition(.opacity)
             }
             footer(busy: busy)
         }
         .frame(width: Self.width)
-        .background(shape.fill(.ultraThinMaterial))
-        .background(shape.fill(Theme.background.opacity(0.82)))
+        .background(Theme.background)
         .clipShape(shape)
-        .overlay(QuickBarGlow(shape: shape, isBusy: busy, flare: flare, isHalo: false))
-        .background(QuickBarGlow(shape: shape, isBusy: busy, flare: flare, isHalo: true))
-        .scaleEffect(bar.isShown ? 1 : 0.92, anchor: .top)
-        .opacity(bar.isShown ? 1 : 0)
-        .offset(y: bar.isShown ? 0 : -14)
-        .animation(.spring(response: 0.42, dampingFraction: 0.72), value: bar.isShown)
-        .animation(.smooth(duration: 0.3), value: app.currentQuickBarChat?.messages.isEmpty ?? true)
-        .padding(Self.glowMargin)
+        .overlay(shape.strokeBorder(Theme.ink.opacity(0.12), lineWidth: 1))
+        .scaleEffect(bar.isShown ? 1 : 0.97, anchor: .top)
+        .animation(.spring(response: 0.32, dampingFraction: 0.85), value: bar.isShown)
         .fixedSize()
         .onGeometryChange(for: CGSize.self) { $0.size } action: { onSize($0) }
         .tint(Theme.accent)
-        .onChange(of: bar.isShown) { _, shown in
-            guard shown else { return }
-            flare = 1
-            withAnimation(.easeOut(duration: 1.4)) { flare = 0 }
-            isFieldFocused = true
-        }
+        .onChange(of: bar.isShown) { _, shown in if shown { isFieldFocused = true } }
         .onChange(of: bar.focusToken) { _, _ in isFieldFocused = true }
     }
 
     private func inputRow(busy: Bool) -> some View {
         @Bindable var bar = app.quickBar
-        return HStack(alignment: .center, spacing: 14) {
-            QuickBarSpark(isBusy: busy, flare: flare)
-            TextField("", text: $bar.draft, prompt: Text(placeholder).foregroundStyle(Theme.textTertiary), axis: .vertical)
-                .textFieldStyle(.plain)
-                .font(.system(size: 21))
-                .foregroundStyle(Theme.textPrimary)
-                .lineLimit(1...6)
-                .focused($isFieldFocused)
-                .onSubmit { app.sendQuickBar() }
-            if busy {
-                QuickBarRoundButton(systemName: "stop.fill", help: "Stoppen (⌘.)") { app.stopQuickBar() }
-                    .keyboardShortcut(".")
-                    .transition(.scale.combined(with: .opacity))
-            } else if app.canSendQuickBar {
-                QuickBarRoundButton(systemName: "arrow.up", help: "Senden (↩)") { app.sendQuickBar() }
-                    .transition(.scale.combined(with: .opacity))
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .center, spacing: 12) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 19, weight: .medium))
+                    .foregroundStyle(Theme.accent)
+                    .symbolEffect(.pulse, isActive: busy)
+                    .frame(width: 26, height: 26)
+                TextField("", text: $bar.draft, prompt: Text(placeholder).foregroundStyle(Theme.textTertiary), axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 20))
+                    .foregroundStyle(Theme.textPrimary)
+                    .lineLimit(1...6)
+                    .focused($isFieldFocused)
+                    .onSubmit { app.sendQuickBar() }
+                if app.isDictationAvailable {
+                    DictationButton(intoQuickBar: true)
+                }
+                if busy {
+                    QuickBarRoundButton(systemName: "stop.fill", help: "Stoppen (⌘.)") { app.stopQuickBar() }
+                        .keyboardShortcut(".")
+                } else if app.canSendQuickBar || app.isDictatingIntoQuickBar {
+                    QuickBarRoundButton(systemName: "arrow.up", help: "Senden (↩)") { app.sendQuickBar() }
+                }
+            }
+            if app.quickBar.receivesDictation, app.dictationStatus != .idle {
+                DictationPreview()
+                    .padding(.leading, 38)
             }
         }
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: busy)
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: app.canSendQuickBar)
-        .padding(.horizontal, 20)
-        .padding(.vertical, 16)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 15)
     }
 
     private var placeholder: String {
@@ -117,131 +114,194 @@ struct QuickBarView: View {
     private func footer(busy: Bool) -> some View {
         HStack(spacing: 10) {
             Label("Darf alles in der App", systemImage: "bolt.fill")
-                .foregroundStyle(Theme.accent)
+                .foregroundStyle(Theme.textSecondary)
                 .help("Die Suchleiste darf Dokumente, Präsentationen, Quellen und Romanwelten anlegen und ändern, ohne zu fragen. Private Daten und Änderungen nach fremden Inhalten (z. B. aus dem Web) fragen weiterhin.")
             if let model = app.quickBarModel {
                 Text("·").foregroundStyle(Theme.textTertiary)
-                Text(model.displayName).foregroundStyle(Theme.textSecondary).lineLimit(1)
+                Text(model.displayName).foregroundStyle(Theme.textTertiary).lineLimit(1)
             } else {
                 Text("· Kein Modell bereit").foregroundStyle(Theme.textTertiary)
             }
             if busy {
-                Text("arbeitet …")
-                    .foregroundStyle(Theme.accent)
-                    .phaseAnimator([0.45, 1]) { content, phase in content.opacity(phase) } animation: { _ in .easeInOut(duration: 0.7) }
+                Text("arbeitet …").foregroundStyle(Theme.accent)
             }
             Spacer(minLength: 8)
-            QuickBarFooterButton(title: "Neu", shortcut: "⌘N") { app.newQuickBarChat() }
+            QuickBarBroomButton { app.newQuickBarChat() }
                 .keyboardShortcut("n")
-                .disabled(busy || app.currentQuickBarChat == nil)
+                .disabled(busy || (app.currentQuickBarChat == nil && app.quickBar.draft.isEmpty))
             QuickBarFooterButton(title: "Im Hauptfenster", shortcut: "⌘O") { onOpenMain() }
                 .keyboardShortcut("o")
                 .disabled(app.currentQuickBarChat == nil)
             QuickBarFooterButton(title: "Schließen", shortcut: "esc") { onClose() }
         }
         .font(.system(size: 11.5, weight: .medium))
-        .padding(.horizontal, 18)
-        .frame(height: 36)
-        .background(Theme.ink.opacity(0.035))
+        .padding(.horizontal, 16)
+        .frame(height: 34)
+        .background(QuickBarDragArea())
         .overlay(alignment: .top) { Rectangle().fill(Theme.border).frame(height: 1) }
     }
 }
 
-// MARK: Glow
+// MARK: Colour in the field
 
-/// The light around the bar: a band of colours running around the edge. It flashes up and spins fast when the bar
-/// opens, turns slowly while it waits, and races and breathes while the model works.
-private struct QuickBarGlow: View {
-    let shape: RoundedRectangle
+/// Soft colour drifting behind the field, like light under frosted glass, a little brighter and quicker while the
+/// model works. Core Animation moves it in the render server: the app computes nothing per frame, and nothing at all
+/// while the bar is hidden. With "Bewegung reduzieren" it stands still.
+private struct QuickBarAurora: NSViewRepresentable {
     let isBusy: Bool
-    let flare: Double
-    /// The soft light outside the bar (behind it); otherwise the sharp edge (on top).
-    let isHalo: Bool
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.colorScheme) private var colorScheme
-    @State private var clock = GlowClock()
+    func makeNSView(context: Context) -> AuroraView { AuroraView() }
 
-    static let colors: [Color] = [
-        Theme.accent,
-        Color(red: 0.36, green: 0.62, blue: 1.0),
-        Color(red: 0.25, green: 0.88, blue: 0.95),
-        Color(red: 1.0, green: 0.42, blue: 0.78),
-        Color(red: 1.0, green: 0.66, blue: 0.30),
-        Color(red: 0.78, green: 0.45, blue: 1.0),
-        Theme.accent,
+    func updateNSView(_ view: AuroraView, context: Context) {
+        view.setBusy(isBusy)
+    }
+}
+
+final class AuroraView: NSView {
+    private let container = CALayer()
+    private let blobs = (0..<3).map { _ in CAGradientLayer() }
+    private let runner = CAGradientLayer()
+    private var isBusy = false
+    private var laidOutWidth: CGFloat = 0
+    private var reduceMotion: Bool { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+
+    /// Size and drift time of each patch of light: different times, so the pattern never repeats visibly.
+    private static let blobSpecs: [(width: CGFloat, duration: CFTimeInterval, start: CGFloat, end: CGFloat)] = [
+        (380, 13, 0.12, 0.62), (320, 17, 0.85, 0.35), (260, 11, 0.45, 0.95),
     ]
 
-    var body: some View {
-        TimelineView(.animation(paused: reduceMotion)) { context in
-            let time = context.date.timeIntervalSinceReferenceDate
-            // Degrees per second: the speed changes, the angle doesn't jump.
-            let speed = (isBusy ? 220 : 34) + flare * 720
-            let angle = reduceMotion ? 0 : clock.advance(to: time, degreesPerSecond: speed)
-            let breath = isBusy ? 0.5 + 0.5 * sin(time * 3.6) : 0
-            let gradient = AngularGradient(colors: Self.colors, center: .center, angle: .degrees(angle))
-            // A light background swallows soft light; there it needs more strength to be seen.
-            let strength = colorScheme == .light ? 1.25 : 1
-            if isHalo {
-                ZStack {
-                    shape.stroke(gradient, lineWidth: 24)
-                        .blur(radius: 26)
-                        .opacity(min(1, (0.34 + 0.3 * breath + 0.7 * flare + (isBusy ? 0.25 : 0)) * strength))
-                    shape.stroke(gradient, lineWidth: 8)
-                        .blur(radius: 12)
-                        .opacity(min(1, (0.42 + 0.3 * breath + 0.6 * flare + (isBusy ? 0.2 : 0)) * strength))
-                }
-                .scaleEffect(1 + 0.025 * flare + 0.006 * breath)
-            } else {
-                ZStack {
-                    shape.strokeBorder(gradient, lineWidth: isBusy ? 2 : 1.4)
-                        .opacity(0.75 + 0.25 * max(flare, breath))
-                    // A bright arc that sweeps the edge: the comet tail of the light.
-                    shape.strokeBorder(
-                        AngularGradient(colors: [.white.opacity(0), .white.opacity(0.9), .white.opacity(0)], center: .center,
-                                        startAngle: .degrees(angle * 1.6), endAngle: .degrees(angle * 1.6 + 70)),
-                        lineWidth: isBusy ? 2.2 : 1.4
-                    )
-                    .opacity(isBusy ? 0.9 : 0.35 + 0.65 * flare)
-                    .blendMode(.plusLighter)
-                }
-            }
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        layer?.masksToBounds = true
+        layer?.addSublayer(container)
+        for blob in blobs {
+            blob.type = .radial
+            blob.startPoint = CGPoint(x: 0.5, y: 0.5)
+            blob.endPoint = CGPoint(x: 1, y: 1)
+            container.addSublayer(blob)
         }
-        .allowsHitTesting(false)
+        runner.startPoint = CGPoint(x: 0, y: 0.5)
+        runner.endPoint = CGPoint(x: 1, y: 0.5)
+        runner.opacity = 0
+        layer?.addSublayer(runner)
+        // The light fades out towards the bottom, so the row has no edge where it ends.
+        let fade = CAGradientLayer()
+        fade.colors = [NSColor.black.cgColor, NSColor.black.withAlphaComponent(0).cgColor]
+        fade.startPoint = CGPoint(x: 0.5, y: 1)
+        fade.endPoint = CGPoint(x: 0.5, y: 0)
+        container.mask = fade
+        applyColors()
+        applyStrength(animated: false)
     }
-}
 
-/// The glow's angle, carried from frame to frame, so the speed can change without a jump.
-private final class GlowClock {
-    private var angle: Double = 0
-    private var last: TimeInterval?
+    required init?(coder: NSCoder) { fatalError() }
 
-    func advance(to time: TimeInterval, degreesPerSecond: Double) -> Double {
-        if let last { angle += min(time - last, 0.1) * degreesPerSecond }
-        last = time
-        angle = angle.truncatingRemainder(dividingBy: 360)
-        return angle
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        applyColors()
     }
-}
 
-/// The sparkle in front of the field: it jumps when the bar opens and shimmers while the model works.
-private struct QuickBarSpark: View {
-    let isBusy: Bool
-    let flare: Double
+    override func layout() {
+        super.layout()
+        let bounds = self.bounds
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        container.frame = bounds
+        container.mask?.frame = bounds
+        for (blob, spec) in zip(blobs, Self.blobSpecs) {
+            blob.bounds = CGRect(x: 0, y: 0, width: spec.width, height: max(bounds.height * 2.2, 140))
+            blob.position = CGPoint(x: bounds.width * spec.start, y: bounds.height * 0.7)
+        }
+        runner.bounds = CGRect(x: 0, y: 0, width: 220, height: 1.5)
+        runner.position = CGPoint(x: bounds.midX, y: 0.75)
+        CATransaction.commit()
+        if abs(bounds.width - laidOutWidth) > 1 {
+            laidOutWidth = bounds.width
+            startDrift()
+        }
+    }
 
-    var body: some View {
-        Image(systemName: "sparkles")
-            .font(.system(size: 22, weight: .semibold))
-            .foregroundStyle(LinearGradient(colors: [Theme.accent, Color(red: 1.0, green: 0.42, blue: 0.78), Color(red: 0.25, green: 0.88, blue: 0.95)],
-                                            startPoint: .topLeading, endPoint: .bottomTrailing))
-            .symbolEffect(.variableColor.iterative.reversing, isActive: isBusy)
-            .symbolEffect(.bounce, value: flare > 0.99)
-            .shadow(color: Theme.accent.opacity(0.4 + 0.5 * flare), radius: 6 + 10 * flare)
-            .frame(width: 28, height: 28)
+    func setBusy(_ busy: Bool) {
+        guard busy != isBusy else { return }
+        isBusy = busy
+        applyStrength(animated: true)
+        // Quicker while working, without a jump: the layer's own clock changes speed from where it is.
+        for layer in blobs + [runner] { setSpeed(busy ? 2.6 : 1, of: layer) }
+    }
+
+    private func startDrift() {
+        guard !reduceMotion, laidOutWidth > 0 else { return }
+        for (blob, spec) in zip(blobs, Self.blobSpecs) {
+            let drift = CABasicAnimation(keyPath: "position.x")
+            drift.fromValue = laidOutWidth * spec.start
+            drift.toValue = laidOutWidth * spec.end
+            drift.duration = spec.duration
+            drift.autoreverses = true
+            drift.repeatCount = .infinity
+            drift.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            blob.add(drift, forKey: "drift")
+        }
+        let run = CABasicAnimation(keyPath: "position.x")
+        run.fromValue = -110
+        run.toValue = laidOutWidth + 110
+        run.duration = 4.5
+        run.repeatCount = .infinity
+        run.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        runner.add(run, forKey: "run")
+    }
+
+    private func setSpeed(_ speed: Float, of layer: CALayer) {
+        let now = CACurrentMediaTime()
+        let local = layer.convertTime(now, from: nil)
+        layer.timeOffset = local
+        layer.beginTime = now
+        layer.speed = speed
+    }
+
+    private func applyStrength(animated: Bool) {
+        CATransaction.begin()
+        CATransaction.setAnimationDuration(animated ? 0.8 : 0)
+        CATransaction.setDisableActions(!animated)
+        container.opacity = isBusy ? 1 : 0.55
+        runner.opacity = isBusy ? 0.8 : 0
+        CATransaction.commit()
+    }
+
+    private func applyColors() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            let light = !effectiveAppearance.name.rawValue.lowercased().contains("dark")
+            let alpha: CGFloat = light ? 0.16 : 0.24
+            let tints: [NSColor] = [
+                NSColor(Theme.accent),
+                NSColor(red: 0.36, green: 0.56, blue: 0.95, alpha: 1),
+                NSColor(red: 0.30, green: 0.70, blue: 0.75, alpha: 1),
+            ]
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            for (blob, tint) in zip(blobs, tints) {
+                blob.colors = [tint.withAlphaComponent(alpha).cgColor, tint.withAlphaComponent(0).cgColor]
+            }
+            let accent = NSColor(Theme.accent)
+            runner.colors = [accent.withAlphaComponent(0).cgColor, accent.withAlphaComponent(0.7).cgColor, accent.withAlphaComponent(0).cgColor]
+            CATransaction.commit()
+        }
     }
 }
 
 // MARK: Pieces
+
+/// Drags the panel. Not `WindowDragArea`: its double click zooms, which a panel can't.
+private struct QuickBarDragArea: View {
+    var body: some View {
+        Color.clear
+            .contentShape(Rectangle())
+            .gesture(WindowDragGesture())
+            .allowsWindowActivationEvents(true)
+    }
+}
 
 /// Starts for a job: a click writes the beginning into the field.
 private struct QuickBarSuggestions: View {
@@ -261,7 +321,8 @@ private struct QuickBarSuggestions: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 20)
+        .padding(.horizontal, 18)
+        .padding(.top, 2)
         .padding(.bottom, 14)
     }
 }
@@ -279,13 +340,12 @@ private struct QuickBarChip: View {
                 .foregroundStyle(hovering ? Theme.textPrimary : Theme.textSecondary)
                 .padding(.horizontal, 11)
                 .frame(height: 28)
-                .background(Capsule().fill(hovering ? Theme.accent.opacity(0.16) : Theme.ink.opacity(0.05)))
-                .overlay(Capsule().strokeBorder(hovering ? Theme.accent.opacity(0.5) : Theme.border))
-                .scaleEffect(hovering ? 1.04 : 1)
+                .background(Capsule().fill(hovering ? Theme.hover : Theme.ink.opacity(0.04)))
+                .overlay(Capsule().strokeBorder(Theme.border))
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .onHover { hovering in withAnimation(.spring(response: 0.25, dampingFraction: 0.7)) { self.hovering = hovering } }
+        .onHover { hovering = $0 }
     }
 }
 
@@ -297,15 +357,62 @@ private struct QuickBarRoundButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: systemName)
-                .font(.system(size: 14, weight: .bold))
+                .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(.white)
-                .frame(width: 34, height: 34)
+                .frame(width: 32, height: 32)
                 .background(Circle().fill(Theme.accent))
-                .shadow(color: Theme.accent.opacity(0.6), radius: 8)
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
         .help(help)
+    }
+}
+
+/// Sweeps the bar clean: empty field, new chat. SF Symbols has no broom, so it is drawn.
+private struct QuickBarBroomButton: View {
+    let action: () -> Void
+    @Environment(\.isEnabled) private var isEnabled
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            BroomShape()
+                .stroke(style: StrokeStyle(lineWidth: 1.3, lineCap: .round, lineJoin: .round))
+                .frame(width: 13, height: 15)
+                .rotationEffect(.degrees(28))
+                .foregroundStyle(hovering && isEnabled ? Theme.textPrimary : Theme.textSecondary)
+                .frame(width: 26, height: 24)
+                .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(hovering && isEnabled ? Theme.hover : .clear))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .opacity(isEnabled ? 1 : 0.45)
+        .onHover { hovering = $0 }
+        .help("Suchleiste leeren und neu beginnen (⌘N) – der Chat bleibt in der Seitenleiste")
+    }
+}
+
+/// An upright broom in a 13×15 box: handle, binding, bristles.
+private struct BroomShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        let w = rect.width, h = rect.height
+        func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: rect.minX + x * w, y: rect.minY + y * h) }
+        var path = Path()
+        // Handle
+        path.move(to: p(0.5, 0))
+        path.addLine(to: p(0.5, 0.5))
+        // Binding
+        path.addRoundedRect(in: CGRect(origin: p(0.3, 0.5), size: CGSize(width: 0.4 * w, height: 0.1 * h)), cornerSize: CGSize(width: 1, height: 1))
+        // Bristles, fanning out
+        path.move(to: p(0.3, 0.6))
+        path.addLine(to: p(0.08, 1))
+        path.addLine(to: p(0.92, 1))
+        path.addLine(to: p(0.7, 0.6))
+        path.move(to: p(0.43, 0.68))
+        path.addLine(to: p(0.36, 0.95))
+        path.move(to: p(0.57, 0.68))
+        path.addLine(to: p(0.64, 0.95))
+        return path
     }
 }
 

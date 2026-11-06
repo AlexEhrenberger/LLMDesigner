@@ -18,16 +18,17 @@ extension AppModel {
 
     /// Starts or stops dictation. With a document open in Writer Studio, the words go into the document,
     /// or into the assistant bar when it has the focus or `intoInstruction` is set. `intoMiniChat`: into the mini
-    /// chat's composer.
-    func toggleDictation(intoInstruction: Bool = false, intoMiniChat: Bool = false) {
+    /// chat's composer; `intoQuickBar`: into the search bar's field.
+    func toggleDictation(intoInstruction: Bool = false, intoMiniChat: Bool = false, intoQuickBar: Bool = false) {
         guard #available(macOS 26.0, *) else { return }
         let engine = dictation()
         Task {
             if engine.isRunning {
                 await engine.stop()
             } else if dictationStatus == .idle {
-                let writerOpen = sidebarMode == .chats && selectedDocumentID != nil && !intoMiniChat
-                miniChat.receivesDictation = intoMiniChat
+                let writerOpen = sidebarMode == .chats && selectedDocumentID != nil && !intoMiniChat && !intoQuickBar
+                miniChat.receivesDictation = intoMiniChat && !intoQuickBar
+                quickBar.receivesDictation = intoQuickBar
                 dictationIntoInstruction = writerOpen && (intoInstruction || isWriterInstructionFocused)
                 dictationDocumentID = writerOpen && !dictationIntoInstruction ? selectedDocumentID : nil
                 // The microphone would hear the voice reading the document.
@@ -56,6 +57,7 @@ extension AppModel {
                 self.dictationDocumentID = nil
                 self.dictationIntoInstruction = false
                 self.miniChat.receivesDictation = false
+                self.quickBar.receivesDictation = false
             }
         }
         engine.onVolatile = { [weak self] text in
@@ -106,9 +108,15 @@ extension AppModel {
     private func appendDictatedText(_ text: String) {
         let piece = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !piece.isEmpty else { return }
-        var current = miniChat.receivesDictation ? miniChat.draft : draft
+        var current = quickBar.receivesDictation ? quickBar.draft : miniChat.receivesDictation ? miniChat.draft : draft
         if let last = current.last, !last.isWhitespace { current += " " }
-        if miniChat.receivesDictation { miniChat.draft = current + piece } else { draft = current + piece }
+        if quickBar.receivesDictation {
+            quickBar.draft = current + piece
+        } else if miniChat.receivesDictation {
+            miniChat.draft = current + piece
+        } else {
+            draft = current + piece
+        }
     }
 
     // MARK: Reading aloud

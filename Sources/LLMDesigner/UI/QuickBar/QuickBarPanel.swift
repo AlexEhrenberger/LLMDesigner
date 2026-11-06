@@ -4,8 +4,6 @@ import SwiftUI
 /// A borderless panel in front of all apps, like Spotlight: it takes the keyboard without making LLM Designer the
 /// active app, so the app the person works in stays where it is.
 final class QuickBarPanel: NSPanel {
-    /// The bar grows downwards: its top edge stays where it opened.
-    var pinnedTop: CGFloat?
     var onCancel: (() -> Void)?
 
     init() {
@@ -16,8 +14,8 @@ final class QuickBarPanel: NSPanel {
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         backgroundColor = .clear
         isOpaque = false
-        // The glow is the shadow; a window shadow would draw a grey box around the transparent margin.
-        hasShadow = false
+        // The window server draws the shadow from the rounded content; much cheaper than a shadow in SwiftUI.
+        hasShadow = true
         hidesOnDeactivate = false
         isReleasedWhenClosed = false
         animationBehavior = .none
@@ -26,12 +24,6 @@ final class QuickBarPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 
-    override func setFrame(_ frameRect: NSRect, display flag: Bool) {
-        var frame = frameRect
-        if let pinnedTop { frame.origin.y = pinnedTop - frame.height }
-        super.setFrame(frame, display: flag)
-    }
-
     override func cancelOperation(_ sender: Any?) { onCancel?() }
 }
 
@@ -39,14 +31,18 @@ final class QuickBarPanel: NSPanel {
 @MainActor
 final class QuickBarController: NSObject, NSWindowDelegate {
     static let shared = QuickBarController()
-    /// How long the bar takes to fade out before the panel goes.
-    static let hideDelay = 0.2
+    /// How long the panel fades in and out; the window fades as a whole, shadow included.
+    static let fadeDuration = 0.16
 
     /// Lets the bar open the main window when it is closed; set by the main window's view.
     var openWindow: OpenWindowAction?
 
     private var panel: QuickBarPanel?
     private weak var model: AppModel?
+    /// Where the person dragged the bar (top centre); it opens there again while the app runs.
+    private var movedTo: CGPoint?
+    /// The bar is resizing itself, not being dragged.
+    private var isFitting = false
 
     private var app: AppModel? { LibrarySession.shared?.app }
 
@@ -85,15 +81,28 @@ final class QuickBarController: NSObject, NSWindowDelegate {
             position(panel)
             app.quickBar.isShown = false
         }
+        let appearing = !panel.isVisible || panel.alphaValue < 1
+        if !panel.isVisible { panel.alphaValue = 0 }
         panel.makeKeyAndOrderFront(nil)
+        if appearing {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = Self.fadeDuration
+                panel.animator().alphaValue = 1
+            }
+        }
         // One turn later, so the view sees the change and plays its entrance.
         DispatchQueue.main.async { app.quickBar.isShown = true }
     }
 
     func hide() {
         guard let panel, panel.isVisible else { return }
+        if let app, app.isDictatingIntoQuickBar { Task { await app.stopDictation() } }
         app?.quickBar.isShown = false
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.hideDelay) { [weak self, weak panel] in
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = Self.fadeDuration
+            panel.animator().alphaValue = 0
+        } completionHandler: { [weak self, weak panel] in
+            // Opened again while fading: it stays.
             guard let panel, self?.app?.quickBar.isShown != true else { return }
             panel.orderOut(nil)
         }
@@ -112,20 +121,27 @@ final class QuickBarController: NSObject, NSWindowDelegate {
         NSApp.activate()
     }
 
-    /// The SwiftUI content reports its size; the panel follows, its top edge staying in place.
+    /// The SwiftUI content reports its size; the panel follows and grows downwards, its top edge staying in place.
     func fit(_ size: CGSize) {
         guard let panel, size.width > 0, size.height > 0 else { return }
         let frame = panel.frame
         guard abs(frame.width - size.width) > 0.5 || abs(frame.height - size.height) > 0.5 else { return }
-        panel.setFrame(NSRect(x: frame.midX - size.width / 2, y: frame.minY, width: size.width, height: size.height), display: true)
+        isFitting = true
+        panel.setFrame(NSRect(x: frame.midX - size.width / 2, y: frame.maxY - size.height, width: size.width, height: size.height), display: true)
+        isFitting = false
+        panel.invalidateShadow()
     }
 
     // MARK: Window delegate
 
-    /// Clicking elsewhere closes the bar, as Spotlight does; while it works it stays, glowing, so the person sees it.
+    /// Clicking elsewhere closes the bar, as Spotlight does. The answer or job goes on; opening the bar shows it again.
     func windowDidResignKey(_ notification: Notification) {
-        guard app?.isQuickBarGenerating != true else { return }
         hide()
+    }
+
+    func windowDidMove(_ notification: Notification) {
+        guard let panel, !isFitting, panel.isVisible else { return }
+        movedTo = CGPoint(x: panel.frame.midX, y: panel.frame.maxY)
     }
 
     // MARK: Private
@@ -149,14 +165,21 @@ final class QuickBarController: NSObject, NSWindowDelegate {
         return panel
     }
 
-    /// Upper third of the screen with the mouse, centred, as Spotlight sits.
+    /// Where it was dragged to, if that is still on a screen; otherwise the upper third of the screen with the mouse,
+    /// centred, as Spotlight sits.
     private func position(_ panel: QuickBarPanel) {
-        let mouse = NSEvent.mouseLocation
-        guard let screen = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) }) ?? NSScreen.main else { return }
-        let visible = screen.visibleFrame
         let size = panel.frame.size
-        let top = visible.maxY - visible.height * 0.16 + QuickBarView.glowMargin
-        panel.pinnedTop = top
-        panel.setFrame(NSRect(x: visible.midX - size.width / 2, y: top - size.height, width: size.width, height: size.height), display: false)
+        var anchor: CGPoint
+        if let movedTo, NSScreen.screens.contains(where: { $0.visibleFrame.insetBy(dx: -1, dy: -1).contains(movedTo) }) {
+            anchor = movedTo
+        } else {
+            let mouse = NSEvent.mouseLocation
+            guard let screen = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) }) ?? NSScreen.main else { return }
+            let visible = screen.visibleFrame
+            anchor = CGPoint(x: visible.midX, y: visible.maxY - visible.height * 0.16)
+        }
+        isFitting = true
+        panel.setFrame(NSRect(x: anchor.x - size.width / 2, y: anchor.y - size.height, width: size.width, height: size.height), display: false)
+        isFitting = false
     }
 }

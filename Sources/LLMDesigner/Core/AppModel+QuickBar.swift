@@ -61,6 +61,8 @@ final class QuickBar {
     /// Changes when the field should take the focus (each time the bar opens).
     var focusToken = UUID()
     var lastUsed: Date?
+    /// The running dictation writes into the bar's field.
+    var receivesDictation = false
 
     var isEnabled: Bool {
         didSet {
@@ -110,6 +112,8 @@ extension AppModel {
         !quickBar.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && quickBarModelId != nil && !isQuickBarGenerating
     }
 
+    var isDictatingIntoQuickBar: Bool { isDictating && quickBar.receivesDictation }
+
     /// Called each time the bar opens: after a pause it starts over, as a new search would.
     func prepareQuickBar(now: Date = Date()) {
         if let last = quickBar.lastUsed, now.timeIntervalSince(last) > QuickBar.freshAfter, !isQuickBarGenerating {
@@ -119,8 +123,10 @@ extension AppModel {
         quickBar.focusToken = UUID()
     }
 
+    /// The broom: an empty bar with a new chat. The old chat stays in the sidebar.
     func newQuickBarChat() {
         guard !isQuickBarGenerating else { return }
+        if isDictatingIntoQuickBar { Task { await stopDictation() } }
         quickBar.chatID = nil
         quickBar.draft = ""
         quickBar.focusToken = UUID()
@@ -152,6 +158,14 @@ extension AppModel {
     }
 
     func sendQuickBar() {
+        // Sending while dictating: wait for the last words first, then send everything.
+        if isDictatingIntoQuickBar {
+            Task {
+                await stopDictation()
+                sendQuickBar()
+            }
+            return
+        }
         let text = quickBar.draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard canSendQuickBar else { return }
         quickBar.draft = ""

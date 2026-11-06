@@ -259,15 +259,18 @@ struct ComposerToggle<Icon: View>: View {
     }
 }
 
-/// The microphone; `intoMiniChat` for the mini chat's composer. It shows the dictation only where the words go.
+/// The microphone; `intoMiniChat` for the mini chat's composer, `intoQuickBar` for the search bar. It shows the
+/// dictation only where the words go.
 struct DictationButton: View {
     @Environment(AppModel.self) private var app
     var intoMiniChat = false
+    var intoQuickBar = false
     @State private var hovering = false
 
     var body: some View {
-        let status = app.miniChat.receivesDictation == intoMiniChat ? app.dictationStatus : .idle
-        Button { app.toggleDictation(intoMiniChat: intoMiniChat) } label: {
+        let receives = app.quickBar.receivesDictation == intoQuickBar && (intoQuickBar || app.miniChat.receivesDictation == intoMiniChat)
+        let status = receives ? app.dictationStatus : .idle
+        Button { app.toggleDictation(intoMiniChat: intoMiniChat, intoQuickBar: intoQuickBar) } label: {
             ZStack {
                 switch status {
                 case .listening:
