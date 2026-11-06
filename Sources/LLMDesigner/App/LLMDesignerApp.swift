@@ -80,8 +80,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// The menu bar symbol stays usable without a window; quitting is in its menu and in the app menu.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        true
+        false
     }
 
     /// A library double-clicked in the Finder (or dropped on the app icon) opens in place of the current one.
