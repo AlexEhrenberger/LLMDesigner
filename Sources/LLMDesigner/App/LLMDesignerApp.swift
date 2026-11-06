@@ -43,6 +43,13 @@ struct LLMDesignerApp: App {
         .defaultSize(width: 820, height: 480)
         .restorationBehavior(.disabled)
 
+        // Quick starts from the menu bar, without looking for the window first.
+        MenuBarExtra("LLM Designer", systemImage: "wand.and.sparkles") {
+            MenuBarMenu()
+                .environment(session.app)
+                .environment(session)
+        }
+
         Settings {
             SettingsView()
                 .environment(session.app)

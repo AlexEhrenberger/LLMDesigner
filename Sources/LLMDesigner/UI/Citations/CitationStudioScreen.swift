@@ -7,6 +7,8 @@ enum CitationStudioCommand: Equatable {
     /// Sources or quotes with these tags: the search field's `#Schlagwort`.
     case filterTags([String])
     case select(source: UUID)
+    /// The sheet for a new quote, e.g. from the menu bar.
+    case quickAdd
 }
 
 /// What Citation Studio shows and what it is doing.
@@ -55,6 +57,8 @@ final class CitationStudioModel {
         case .select(let source):
             mode = .sources
             select(source, in: library)
+        case .quickAdd:
+            showsQuickAdd = true
         }
     }
     var searchText = ""
