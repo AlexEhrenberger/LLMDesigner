@@ -75,6 +75,17 @@ extension AppModel {
         editingSlideFieldID = field.id
     }
 
+    /// A free text box on the open slide, opened for writing; several in a row step apart.
+    func addTextBoxToOpenSlide(box: WriterBoxKind? = nil) {
+        guard let document = selectedPresentation, let slideID = currentSlideID(in: document),
+              let slide = document.deck?.slide(slideID) else { return }
+        let offset = slide.images.filter(\.isText).count % 5
+        let size = box == nil ? CGSize(width: 300, height: 90) : CGSize(width: 280, height: 110)
+        let field = SlideImage(text: box.map { "**\($0.label)**\n\n" } ?? "", box: box,
+                               frame: SlideImage.defaultTextFrame(width: size.width, height: size.height, offset: offset))
+        addSlideField(document.id, slideID, field, undoManager: NSApp.keyWindow?.undoManager, actionName: box == nil ? "Textbox" : "Kasten")
+    }
+
     /// A text field whose text needs more room gets taller (down to the slide's bottom); it never shrinks by itself.
     func growSlideField(_ id: WriterDocument.ID, _ slideID: PresentationSlide.ID, _ fieldID: SlideImage.ID, toHeight height: CGFloat) {
         guard let field = document(id)?.deck?.slide(slideID)?.images.first(where: { $0.id == fieldID }) else { return }
@@ -141,11 +152,13 @@ extension AppModel {
         }
     }
 
-    /// A new, empty slide after `slideID` (or at the end); it is opened right away.
+    /// A new, empty slide after `slideID` (or at the end); it is opened right away. A `blank` slide shows no hint
+    /// where its title goes: a page for pictures and free text fields.
     @discardableResult
-    func addSlide(to id: WriterDocument.ID, after slideID: PresentationSlide.ID?, role: SlideRole = .content, markdown: String = "") -> PresentationSlide.ID? {
+    func addSlide(to id: WriterDocument.ID, after slideID: PresentationSlide.ID?, role: SlideRole = .content, markdown: String = "", blank: Bool = false) -> PresentationSlide.ID? {
         writerFlush?()
-        let slide = PresentationSlide(role: role, markdown: markdown)
+        var slide = PresentationSlide(role: role, markdown: markdown)
+        slide.hidesPlaceholder = blank
         let added = modifyDeck(id) { deck in
             let index = slideID.flatMap { deck.index(of: $0) }.map { $0 + 1 } ?? deck.slides.count
             deck.slides.insert(slide, at: index)
@@ -154,6 +167,20 @@ extension AppModel {
         guard added else { return nil }
         selectedSlideID = slide.id
         return slide.id
+    }
+
+    /// Shows or hides the hint of an empty slide ("Folientitel"); undoable.
+    func setSlidePlaceholderHidden(_ id: WriterDocument.ID, _ slideID: PresentationSlide.ID, _ hidden: Bool, undoManager: UndoManager?) {
+        guard let current = document(id)?.deck?.slide(slideID), current.hidesPlaceholder != hidden else { return }
+        modifyDeck(id) { deck in
+            guard let index = deck.index(of: slideID) else { return false }
+            deck.slides[index].hidesPlaceholder = hidden
+            return true
+        }
+        undoManager?.registerUndo(withTarget: self) { app in
+            app.setSlidePlaceholderHidden(id, slideID, !hidden, undoManager: undoManager)
+        }
+        undoManager?.setActionName(hidden ? "Platzhalter entfernen" : "Platzhalter zeigen")
     }
 
     func duplicateSlide(_ id: WriterDocument.ID, _ slideID: PresentationSlide.ID) {

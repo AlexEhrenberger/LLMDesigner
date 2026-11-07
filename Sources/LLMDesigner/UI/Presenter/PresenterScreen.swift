@@ -545,6 +545,9 @@ private struct PresenterToolbar: View {
                 CitationMenu(controller: controller)
             }
             divider
+            ToolbarButton(symbol: "character.textbox", help: "Textbox – frei auf der Folie, mit der Maus verschieben und in der Größe ändern (⌥⌘T)", isActive: false) {
+                app.addTextBoxToOpenSlide()
+            }
             FreeElementMenu(controller: controller, document: document, slide: slide, hasSelection: state.hasSelection)
             divider
             HStack(spacing: 2) {
@@ -716,6 +719,7 @@ private struct NewSlideButton: View {
             .help("Neue Folie nach dieser (⇧⌘↩)")
             Menu {
                 Button("Neue Folie (⇧⌘↩)", systemImage: SlideRole.content.symbol) { add(.content) }
+                Button("Leere Folie", systemImage: "rectangle") { app.addSlide(to: document.id, after: slideID, blank: true) }
                 Button("Neue Kapitelfolie", systemImage: SlideRole.chapter.symbol) { add(.chapter) }
                 Button("Neue Titelfolie", systemImage: SlideRole.title.symbol) { add(.title) }
                 Divider()
@@ -978,6 +982,18 @@ private struct SlideStripRow: View {
         .help(slide.title.isEmpty ? "Folie \(number)" : slide.title)
         .contextMenu {
             Button("Neue Folie danach", systemImage: "plus") { app.addSlide(to: document.id, after: slide.id) }
+            Button("Leere Folie danach", systemImage: "rectangle") { app.addSlide(to: document.id, after: slide.id, blank: true) }
+            if slide.markdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                if slide.hidesPlaceholder {
+                    Button("Platzhalter wieder zeigen", systemImage: "character.cursor.ibeam") {
+                        app.setSlidePlaceholderHidden(document.id, slide.id, false, undoManager: NSApp.keyWindow?.undoManager)
+                    }
+                } else {
+                    Button("Platzhalter entfernen", systemImage: "eraser") {
+                        app.setSlidePlaceholderHidden(document.id, slide.id, true, undoManager: NSApp.keyWindow?.undoManager)
+                    }
+                }
+            }
             Button("Duplizieren", systemImage: "plus.square.on.square") { app.duplicateSlide(document.id, slide.id) }
             Menu("Art der Folie") {
                 ForEach(SlideRole.allCases) { role in

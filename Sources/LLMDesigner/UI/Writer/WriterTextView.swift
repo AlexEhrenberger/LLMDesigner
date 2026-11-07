@@ -187,6 +187,7 @@ final class WriterTextView: NSTextView {
 
         init(slide: PresentationSlide, images: [SlideImage]? = nil, textFrame: CGRect? = nil) {
             self.init(role: slide.role)
+            if slide.hidesPlaceholder { placeholder = "" }
             textRect = textFrame ?? slide.textFrame
             obstacles = (images ?? slide.images).filter { $0.placement == .wrap }.map(\.frame)
         }
@@ -452,7 +453,8 @@ final class WriterTextView: NSTextView {
     private func drawSlideBackground(in rect: NSRect) {
         let origin = textContainerOrigin
         guard let storage = textStorage else { return }
-        if storage.length == 0, let layout = slideLayout, !layout.placeholder.isEmpty {
+        // The hint is for writing: the presentation, the PDF and the slide list never show it.
+        if storage.length == 0, isEditable, let layout = slideLayout, !layout.placeholder.isEmpty {
             let style = NSMutableParagraphStyle()
             style.alignment = palette.alignment == .center ? .center : .natural
             let attributes: [NSAttributedString.Key: Any] = [
@@ -1131,7 +1133,17 @@ final class WriterTextView: NSTextView {
         performStructureEdit(in: NSRange(location: location, length: 0), with: empty)
     }
 
+    /// Delete on an empty slide removes its hint ("Folientitel"), which is not text and could not go otherwise.
+    var onClearPlaceholder: (() -> Void)?
+
+    private func clearsPlaceholder() -> Bool {
+        guard textStorage?.length == 0, slideLayout?.placeholder.isEmpty == false, let onClearPlaceholder else { return false }
+        onClearPlaceholder()
+        return true
+    }
+
     override func deleteForward(_ sender: Any?) {
+        if clearsPlaceholder() { return }
         if selectedEmbed != nil { return deleteEmbed() }
         // At the end of a cell there is nothing to join.
         if selectedRange().length == 0, let paragraph = currentParagraph, paragraph.block == .table,
@@ -1146,6 +1158,7 @@ final class WriterTextView: NSTextView {
     }
 
     override func deleteBackward(_ sender: Any?) {
+        if clearsPlaceholder() { return }
         if selectedEmbed != nil { return deleteEmbed() }
         guard let storage = textStorage, selectedRange().length == 0 else { return super.deleteBackward(sender) }
         let location = selectedRange().location

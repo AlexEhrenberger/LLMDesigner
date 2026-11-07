@@ -363,6 +363,12 @@ struct WriterEditor: NSViewRepresentable {
                 coordinator.selectSlideImage(image.id)
             }
             textView.onFocus = { [weak app] in app?.selectedSlideImageID = nil }
+            // Delete on the empty slide text takes its hint away; text fields keep theirs.
+            textView.onClearPlaceholder = { [weak app, weak coordinator, weak textView] in
+                guard let app, let coordinator, let id = coordinator.documentID, let slideID = coordinator.ownerSlideID,
+                      coordinator.slideID == slideID else { return }
+                app.setSlidePlaceholderHidden(id, slideID, true, undoManager: textView?.undoManager)
+            }
             textView.onTableBar = { [weak controller] bar in controller?.tableBar = bar }
             // A text field grows with its text instead of running over.
             textView.onSlideTextHeight = { [weak app, weak coordinator] height in

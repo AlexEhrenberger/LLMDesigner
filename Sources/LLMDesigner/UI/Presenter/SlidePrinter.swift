@@ -120,10 +120,12 @@ private enum PrintImages {
 
     static func reset() { cache = [:] }
 
-    static func image(_ source: String, size: CGSize) -> NSImage? {
-        let key = "\(source)|\(Int(size.width))x\(Int(size.height))"
+    static func image(_ source: String, size: CGSize, crop: SlideCrop? = nil) -> NSImage? {
+        let cut = crop.flatMap { $0.isEmpty ? nil : $0 }
+        let key = "\(source)|\(Int(size.width))x\(Int(size.height))" + (cut.map { "|\($0.left)|\($0.top)|\($0.right)|\($0.bottom)" } ?? "")
         if let image = cache[key] { return image }
-        guard let url = WriterImageStore.url(for: source), let image = NSImage(contentsOf: url) else { return nil }
+        guard let url = WriterImageStore.url(for: source), var image = NSImage(contentsOf: url) else { return nil }
+        if let cut, let part = SlideImageCache.cropped(image, cut) { image = part }
         return compact(image, key: key, size: size)
     }
 
@@ -226,11 +228,30 @@ private final class SlidePrintLayer: NSView {
 
     private func draw(_ image: SlideImage) {
         let frame = image.frame
-        if let picture = PrintImages.image(image.source, size: frame.size) {
+        if image.shadow {
+            // The shadow of a filled rectangle under the picture, as on the screen.
+            NSGraphicsContext.saveGraphicsState()
+            let shadow = NSShadow()
+            shadow.shadowColor = NSColor.black.withAlphaComponent(0.45)
+            shadow.shadowBlurRadius = 9
+            // NSShadow measures in the base coordinates, where down is negative even in a flipped view.
+            shadow.shadowOffset = NSSize(width: 0, height: -5)
+            shadow.set()
+            NSColor.black.setFill()
+            frame.insetBy(dx: 1, dy: 1).fill()
+            NSGraphicsContext.restoreGraphicsState()
+        }
+        if let picture = PrintImages.image(image.source, size: frame.size, crop: image.crop) {
             drawFilling(picture, in: frame)
         } else {
             NSColor(hex: 0x2A2740).setFill()
             frame.fill()
+        }
+        if image.borderWidth > 0 {
+            let path = NSBezierPath(rect: frame.insetBy(dx: image.borderWidth / 2, dy: image.borderWidth / 2))
+            path.lineWidth = image.borderWidth
+            NSColor(hex: image.borderColor).setStroke()
+            path.stroke()
         }
     }
 

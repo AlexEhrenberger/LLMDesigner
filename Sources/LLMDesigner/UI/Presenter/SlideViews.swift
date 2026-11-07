@@ -241,6 +241,25 @@ enum SlideImageCache {
         images[source] = image
         return image
     }
+
+    /// The picture with its cut applied; the file stays whole, so a cut can always be undone or changed.
+    static func image(_ source: String, crop: SlideCrop?) -> NSImage? {
+        guard let crop, !crop.isEmpty else { return image(source) }
+        let key = "\(source)|\(crop.left)|\(crop.top)|\(crop.right)|\(crop.bottom)"
+        if let image = images[key] { return image }
+        guard let whole = image(source), let cut = cropped(whole, crop) else { return image(source) }
+        images[key] = cut
+        return cut
+    }
+
+    /// The kept part of a picture (CGImage counts from the top left, like the cut).
+    static func cropped(_ image: NSImage, _ crop: SlideCrop) -> NSImage? {
+        guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
+        let kept = crop.kept(in: CGSize(width: cgImage.width, height: cgImage.height)).integral
+        guard kept.width >= 1, kept.height >= 1, let part = cgImage.cropping(to: kept) else { return nil }
+        let points = crop.kept(in: image.size).size
+        return NSImage(cgImage: part, size: points)
+    }
 }
 
 // MARK: Text
@@ -445,13 +464,23 @@ struct SlideImageView: View {
         let phase = image.isText ? nil : app.imageGeneration.phase(for: image.source)
         if image.isText {
             if let look { SlideFieldView(field: image, look: look) }
-        } else if phase == nil, let picture = SlideImageCache.image(image.source) {
-            Image(nsImage: picture)
-                .resizable()
-                .interpolation(.high)
-                .aspectRatio(contentMode: .fill)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .clipped()
+        } else if phase == nil, let picture = SlideImageCache.image(image.source, crop: image.crop) {
+            GeometryReader { geometry in
+                // Border and shadow are measured on the canvas; the view is the canvas scaled.
+                let scale = image.frame.width > 0 ? geometry.size.width / image.frame.width : 1
+                Image(nsImage: picture)
+                    .resizable()
+                    .interpolation(.high)
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .clipped()
+                    .overlay {
+                        if image.borderWidth > 0 {
+                            Rectangle().strokeBorder(Color(hex: image.borderColor), lineWidth: image.borderWidth * scale)
+                        }
+                    }
+                    .shadow(color: .black.opacity(image.shadow ? 0.45 : 0), radius: 9 * scale, x: 0, y: 5 * scale)
+            }
         } else {
             GeometryReader { geometry in
                 let size = max(7, min(geometry.size.width, geometry.size.height * 1.6) / 22)

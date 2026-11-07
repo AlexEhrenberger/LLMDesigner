@@ -200,6 +200,13 @@ struct SlideImage: Identifiable, Hashable, Codable, Sendable {
     var placement: Placement = .wrap
     /// Made with Draw Things; until its file exists, a placeholder shows its progress.
     var generated = false
+    /// Pictures only: the part of the picture that is cut away on each side.
+    var crop: SlideCrop?
+    /// Pictures only: a line around the picture, in points of the canvas (0: none), and its colour.
+    var borderWidth: Double = 0
+    var borderColor: UInt32 = 0xFFFFFF
+    /// Pictures only: a drop shadow below the picture.
+    var shadow = false
 
     /// The smallest side, in fractions of the slide's width.
     static let minimumWidth = 0.04
@@ -271,6 +278,7 @@ struct SlideImage: Identifiable, Hashable, Codable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case id, source = "quelle", caption = "text", x, y, width = "b", height = "h", placement = "lage", generated = "generiert"
         case content = "inhalt", box = "kasten", boxFrame = "rahmen"
+        case crop = "zuschnitt", borderWidth = "rand", borderColor = "randfarbe", shadow = "schatten"
     }
 
     init(from decoder: Decoder) throws {
@@ -287,6 +295,10 @@ struct SlideImage: Identifiable, Hashable, Codable, Sendable {
         height = max(Self.minimumWidth, (try? container.decodeIfPresent(Double.self, forKey: .height)) ?? 0.4)
         placement = (try? container.decodeIfPresent(Placement.self, forKey: .placement)) ?? .wrap
         generated = (try? container.decodeIfPresent(Bool.self, forKey: .generated)) ?? false
+        crop = (try? container.decodeIfPresent(SlideCrop.self, forKey: .crop)) ?? nil
+        borderWidth = max(0, (try? container.decodeIfPresent(Double.self, forKey: .borderWidth)) ?? 0)
+        borderColor = (try? container.decodeIfPresent(String.self, forKey: .borderColor)).flatMap { $0.flatMap(SlideBackground.hex) } ?? 0xFFFFFF
+        shadow = (try? container.decodeIfPresent(Bool.self, forKey: .shadow)) ?? false
     }
 
     func encode(to encoder: Encoder) throws {
@@ -308,6 +320,52 @@ struct SlideImage: Identifiable, Hashable, Codable, Sendable {
         try container.encode(rounded(height), forKey: .height)
         if placement != .wrap { try container.encode(placement, forKey: .placement) }
         if generated { try container.encode(true, forKey: .generated) }
+        if let crop, !crop.isEmpty { try container.encode(crop, forKey: .crop) }
+        if borderWidth > 0 {
+            try container.encode(borderWidth, forKey: .borderWidth)
+            try container.encode(String(format: "%06X", borderColor), forKey: .borderColor)
+        }
+        if shadow { try container.encode(true, forKey: .shadow) }
+    }
+}
+
+/// What is cut away from a picture on each side, in fractions of its width and height.
+struct SlideCrop: Hashable, Codable, Sendable {
+    var left = 0.0
+    var top = 0.0
+    var right = 0.0
+    var bottom = 0.0
+
+    /// Each side keeps at least this much of the picture between the cuts.
+    static let minimumKept = 0.05
+
+    var isEmpty: Bool { left <= 0 && top <= 0 && right <= 0 && bottom <= 0 }
+
+    /// Sides in 0…1 that leave some of the picture.
+    var clamped: SlideCrop {
+        func side(_ value: Double) -> Double { min(max(0, value.isFinite ? value : 0), 1 - Self.minimumKept) }
+        var crop = SlideCrop(left: side(left), top: side(top), right: side(right), bottom: side(bottom))
+        if crop.left + crop.right > 1 - Self.minimumKept { crop.right = 1 - Self.minimumKept - crop.left }
+        if crop.top + crop.bottom > 1 - Self.minimumKept { crop.bottom = 1 - Self.minimumKept - crop.top }
+        return crop
+    }
+
+    /// The part that stays, in pixels of a picture of `size`, top left origin.
+    func kept(in size: CGSize) -> CGRect {
+        let crop = clamped
+        return CGRect(x: size.width * crop.left, y: size.height * crop.top,
+                      width: size.width * (1 - crop.left - crop.right), height: size.height * (1 - crop.top - crop.bottom))
+    }
+
+    /// The cut for a wanted aspect (width / height), taken from the middle of a picture of `aspect`.
+    static func centered(aspect wanted: Double, of aspect: Double) -> SlideCrop {
+        guard wanted > 0, aspect > 0, abs(wanted - aspect) > 0.001 else { return SlideCrop() }
+        if wanted < aspect {
+            let cut = (1 - wanted / aspect) / 2
+            return SlideCrop(left: cut, right: cut)
+        }
+        let cut = (1 - aspect / wanted) / 2
+        return SlideCrop(top: cut, bottom: cut)
     }
 }
 
@@ -364,6 +422,9 @@ struct PresentationSlide: Identifiable, Hashable, Codable, Sendable {
     var images: [SlideImage] = []
     /// Where the slide's own text runs, in fractions of the slide; nil: inside the standard margins.
     var textArea: SlideArea?
+    /// The editor shows no hint ("Folientitel") while the slide's text is empty: a blank slide, or one whose hint
+    /// the person deleted.
+    var hidesPlaceholder = false
 
     /// The text's room on the canvas.
     var textFrame: CGRect {
@@ -480,6 +541,7 @@ struct PresentationDeck: Hashable, Sendable {
             if let background = slide.background, let object = Self.jsonObject(background) { meta["hintergrund"] = object }
             if !slide.images.isEmpty, let object = Self.jsonObject(slide.images) { meta["bilder"] = object }
             if let area = slide.textArea, let object = Self.jsonObject(area) { meta["textbereich"] = object }
+            if slide.hidesPlaceholder { meta["ohnePlatzhalter"] = true }
             var parts = ["<!-- folie \(Self.jsonLine(meta)) -->"]
             let text = slide.markdown.trimmingCharacters(in: .whitespacesAndNewlines)
             if !text.isEmpty { parts.append(text) }
@@ -562,6 +624,7 @@ struct PresentationDeck: Hashable, Sendable {
         if let area = object["textbereich"], let data = try? JSONSerialization.data(withJSONObject: area) {
             slide.textArea = try? JSONDecoder().decode(SlideArea.self, from: data)
         }
+        slide.hidesPlaceholder = object["ohnePlatzhalter"] as? Bool ?? false
         return slide
     }
 

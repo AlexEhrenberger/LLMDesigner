@@ -17,6 +17,9 @@ extension ActionRegistry {
         register(PresenterFieldOrderAction.self)
         register(PresenterFieldBoxAction.self)
         register(PresenterFieldCaptionAction.self)
+        register(PresenterFieldCropAction.self)
+        register(PresenterFieldPictureStyleAction.self)
+        register(PresenterSlidePlaceholderAction.self)
         register(PresenterFieldEditAction.self)
         register(PresenterFieldEndEditAction.self)
         register(PresenterFieldToSlideAction.self)
@@ -492,4 +495,108 @@ struct PresenterFieldToSlideAction: LLMDAction {
     )
     static func preflight(_ args: Args, context: ActionContext) throws -> ActionPreflight { try WriterImageToSlideAction.preflight(args, context: context) }
     static func run(_ args: Args, context: ActionContext) async throws -> Output { try await WriterImageToSlideAction.run(args, context: context) }
+}
+
+struct PresenterFieldCropAction: LLMDAction {
+    struct Args: Decodable, Sendable {
+        var deck: String
+        var field: String
+        var left: Double?
+        var top: Double?
+        var right: Double?
+        var bottom: Double?
+        var aspect: String?
+        var reset: Bool?
+    }
+    static let descriptor = ActionDescriptor(
+        id: "presenter.field.crop", summary: "Beschneidet ein Bild: Anteile je Seite oder ein Format aus der Mitte; die Datei bleibt ganz", kind: .write, security: .localWrite,
+        input: .object([
+            "deck": presenterDeckProperty, "field": fieldProperty,
+            "left": .number("Links weg, Anteil 0–0,9", minimum: 0, maximum: 0.95), "top": .number("Oben weg", minimum: 0, maximum: 0.95),
+            "right": .number("Rechts weg", minimum: 0, maximum: 0.95), "bottom": .number("Unten weg", minimum: 0, maximum: 0.95),
+            "aspect": .string("Format aus der Mitte, z. B. 1:1, 16:9, 4:3"), "reset": .boolean("Beschnitt entfernen"),
+        ], required: ["deck", "field"]),
+        output: .freeObject(), example: "llmd presenter field crop Vortrag --field <id> --aspect 1:1"
+    )
+    static func run(_ args: Args, context: ActionContext) async throws -> OKOutput {
+        try changeField(args.deck, args.field, context: context) { field in
+            guard !field.isText else { throw RPCError.invalidTarget("Nur Bilder lassen sich beschneiden.") }
+            let natural = WriterImageStore.url(for: field.source).flatMap { WriterImageStore.naturalSize(of: $0) }
+            var crop = args.reset == true ? SlideCrop() : (field.crop ?? SlideCrop())
+            if let aspect = args.aspect {
+                let parts = aspect.split(separator: ":").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
+                guard parts.count == 2, parts[1] > 0, let natural, natural.height > 0 else { throw RPCError.invalidParams("Format wie 16:9 angeben; das Bild muss lesbar sein.") }
+                crop = SlideCrop.centered(aspect: parts[0] / parts[1], of: natural.width / natural.height)
+            }
+            if let left = args.left { crop.left = left }
+            if let top = args.top { crop.top = top }
+            if let right = args.right { crop.right = right }
+            if let bottom = args.bottom { crop.bottom = bottom }
+            crop = crop.clamped
+            field.crop = crop.isEmpty ? nil : crop
+            // The frame takes the shape of what is left, keeping its width and middle.
+            if let natural, natural.width > 0, natural.height > 0 {
+                let kept = crop.kept(in: natural)
+                var frame = field.frame
+                let middle = frame.midY
+                frame.size.height = min(SlideImage.canvas.height, frame.width * kept.height / kept.width)
+                frame.origin.y = min(max(0, middle - frame.height / 2), SlideImage.canvas.height - frame.height)
+                field.frame = frame
+            }
+        }
+        return OKOutput()
+    }
+}
+
+struct PresenterFieldPictureStyleAction: LLMDAction {
+    struct Args: Decodable, Sendable {
+        var deck: String
+        var field: String
+        var border: Double?
+        var borderColor: String?
+        var shadow: Bool?
+    }
+    static let descriptor = ActionDescriptor(
+        id: "presenter.field.pictureStyle", summary: "Gibt einem Bild einen Rahmen und einen Schlagschatten", kind: .write, security: .localWrite,
+        input: .object([
+            "deck": presenterDeckProperty, "field": fieldProperty,
+            "border": .number("Rahmenbreite in Punkten der Folie (720 breit); 0 nimmt ihn weg", minimum: 0, maximum: 30),
+            "borderColor": .string("Farbe als Hex, z. B. FFFFFF"), "shadow": .boolean("Schlagschatten"),
+        ], required: ["deck", "field"]),
+        output: .freeObject(), example: "llmd presenter field picture-style Vortrag --field <id> --border 4 --border-color FFFFFF --shadow"
+    )
+    static func run(_ args: Args, context: ActionContext) async throws -> OKOutput {
+        let color = try args.borderColor.map { text -> UInt32 in
+            guard let value = SlideBackground.hex(text) else { throw RPCError.invalidParams("Farbe „\(text)“ ist kein Hex-Wert.") }
+            return value
+        }
+        try changeField(args.deck, args.field, context: context) { field in
+            guard !field.isText else { throw RPCError.invalidTarget("Rahmen und Schatten gibt es für Bilder; Textfelder nehmen presenter.field.box.") }
+            if let border = args.border { field.borderWidth = max(0, border) }
+            if let color { field.borderColor = color }
+            if let shadow = args.shadow { field.shadow = shadow }
+        }
+        return OKOutput()
+    }
+}
+
+struct PresenterSlidePlaceholderAction: LLMDAction {
+    struct Args: Decodable, Sendable {
+        var deck: String
+        var slide: String?
+        var slideIndex: Int?
+        var visible: Bool
+    }
+    static let descriptor = ActionDescriptor(
+        id: "presenter.slide.placeholder", summary: "Zeigt oder entfernt den Hinweis einer leeren Folie (Folientitel …)", kind: .write, security: .localWrite,
+        input: .object(presenterSlideProperties.merging(["visible": .boolean("Hinweis zeigen")]) { _, new in new }, required: ["deck", "visible"]),
+        output: .freeObject()
+    )
+    static func run(_ args: Args, context: ActionContext) async throws -> OKOutput {
+        _ = try changeDeck(args.deck, context: context) { deck in
+            let slide = try deck.actionSlide(id: args.slide, index: args.slideIndex)
+            deck.slides[deck.index(of: slide.id)!].hidesPlaceholder = !args.visible
+        }
+        return OKOutput()
+    }
 }

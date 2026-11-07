@@ -21,6 +21,8 @@ struct SlideImageEditor: View {
     @State private var dragStart: SlideImage?
     @State private var areaStart: CGRect?
     @State private var guides: Guides = []
+    /// The picture whose cut is being set.
+    @State private var cropping: SlideImage?
 
     struct Guides: OptionSet {
         let rawValue: Int
@@ -56,6 +58,9 @@ struct SlideImageEditor: View {
             .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
             // Drags are measured on the slide, not on the picture that moves under the pointer.
             .coordinateSpace(name: Self.space)
+            .sheet(item: $cropping) { image in
+                SlideCropSheet(image: image) { crop in setCrop(crop, of: image) }
+            }
         }
         .onAppear(perform: installMonitor)
         .onDisappear(perform: removeMonitor)
@@ -273,6 +278,8 @@ struct SlideImageEditor: View {
             IconButton(systemName: "square.3.layers.3d.bottom.filled", help: "Ganz nach hinten", size: 11.5, frameSize: 24) { reorder(image, toFront: false) }
             if !image.isText {
                 IconButton(systemName: "aspectratio", help: "Ursprüngliches Seitenverhältnis", size: 11.5, frameSize: 24) { restoreAspect(image) }
+                IconButton(systemName: "crop", help: "Beschneiden …", size: 11.5, frameSize: 24) { cropping = image }
+                pictureStyleMenu(image)
             }
             if image.generated {
                 IconButton(systemName: "wand.and.stars", help: "Mit Draw Things neu generieren …", size: 11.5, frameSize: 24) { onRegenerate(image) }
@@ -286,6 +293,67 @@ struct SlideImageEditor: View {
         .shadow(color: Theme.shade.opacity(0.35), radius: 8, y: 3)
         .fixedSize()
         .position(x: x, y: y)
+    }
+
+    /// Border and drop shadow of a picture.
+    private func pictureStyleMenu(_ image: SlideImage) -> some View {
+        Menu {
+            pictureStyleItems(image)
+        } label: {
+            Image(systemName: image.borderWidth > 0 || image.shadow ? "square.fill.on.square" : "square.on.square")
+                .font(.system(size: 11.5, weight: .medium))
+                .foregroundStyle(image.borderWidth > 0 || image.shadow ? Theme.textPrimary : Theme.textSecondary)
+                .frame(width: 24, height: 24)
+                .contentShape(Rectangle())
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Rahmen und Schlagschatten")
+    }
+
+    static let borderWidths: [(String, Double)] = [("Kein Rahmen", 0), ("Dünn", 1.5), ("Mittel", 4), ("Dick", 8)]
+    static let borderColors: [(String, UInt32)] = [("Weiß", 0xFFFFFF), ("Schwarz", 0x111111), ("Grau", 0x8A8A8A), ("Gold", 0xC9A227), ("Blau", 0x3B7DD8)]
+
+    @ViewBuilder
+    private func pictureStyleItems(_ image: SlideImage) -> some View {
+        Section("Rahmen") {
+            ForEach(Self.borderWidths, id: \.1) { name, width in
+                Button { update(image.id, "Rahmen") { images, index in images[index].borderWidth = width } } label: {
+                    if image.borderWidth == width { Label(name, systemImage: "checkmark") } else { Text(name) }
+                }
+            }
+        }
+        if image.borderWidth > 0 {
+            Section("Farbe des Rahmens") {
+                ForEach(Self.borderColors, id: \.1) { name, color in
+                    Button { update(image.id, "Rahmenfarbe") { images, index in images[index].borderColor = color } } label: {
+                        if image.borderColor == color { Label(name, systemImage: "checkmark") } else { Text(name) }
+                    }
+                }
+            }
+        }
+        Divider()
+        Button { update(image.id, "Schlagschatten") { images, index in images[index].shadow.toggle() } } label: {
+            if image.shadow { Label("Schlagschatten", systemImage: "checkmark") } else { Text("Schlagschatten") }
+        }
+    }
+
+    /// Sets the cut; the frame takes the new shape, keeping its width and middle.
+    private func setCrop(_ crop: SlideCrop, of image: SlideImage) {
+        let cut = crop.clamped
+        update(image.id, cut.isEmpty ? "Beschnitt entfernen" : "Bild beschneiden") { images, index in
+            images[index].crop = cut.isEmpty ? nil : cut
+            if let url = WriterImageStore.url(for: image.source), let size = WriterImageStore.naturalSize(of: url), size.width > 0, size.height > 0 {
+                let kept = cut.kept(in: size)
+                var frame = images[index].frame
+                let middle = frame.midY
+                frame.size.height = frame.width * kept.height / kept.width
+                frame.origin.y = middle - frame.height / 2
+                images[index].frame = clamp(frame)
+            }
+        }
     }
 
     /// Plain text or a box of some kind, and how the box is drawn.
@@ -352,6 +420,8 @@ struct SlideImageEditor: View {
         Button("Ganz nach hinten", systemImage: "square.3.layers.3d.bottom.filled") { reorder(image, toFront: false) }
         if !image.isText {
             Button("Ursprüngliches Seitenverhältnis", systemImage: "aspectratio") { restoreAspect(image) }
+            Button("Beschneiden …", systemImage: "crop") { cropping = image }
+            Menu("Rahmen und Schatten") { pictureStyleItems(image) }
         }
         Button("Auf der Folie zentrieren", systemImage: "align.horizontal.center") {
             update(image.id, "Bild zentrieren") { images, index in
@@ -430,7 +500,9 @@ struct SlideImageEditor: View {
     }
 
     private func restoreAspect(_ image: SlideImage) {
-        guard let url = WriterImageStore.url(for: image.source), let size = WriterImageStore.naturalSize(of: url), size.height > 0 else { return }
+        guard let url = WriterImageStore.url(for: image.source), let natural = WriterImageStore.naturalSize(of: url), natural.height > 0 else { return }
+        // A cut picture keeps the shape of what is left of it.
+        let size = (image.crop ?? SlideCrop()).kept(in: natural).size
         update(image.id, "Seitenverhältnis") { images, index in
             var frame = images[index].frame
             let middle = frame.midY
@@ -681,5 +753,92 @@ struct SlideImageEditor: View {
     private func removeMonitor() {
         if let monitor { NSEvent.removeMonitor(monitor) }
         monitor = nil
+    }
+}
+
+
+/// Sets how much of a picture is cut away on each side, with the picture and the kept part in view. The file stays
+/// whole; the cut can be changed or taken back at any time.
+struct SlideCropSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let image: SlideImage
+    let onApply: (SlideCrop) -> Void
+    @State private var crop = SlideCrop()
+
+    private var picture: NSImage? { SlideImageCache.image(image.source) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Bild beschneiden")
+                .font(.system(size: 15, weight: .semibold))
+            if let picture {
+                let aspect = picture.size.height > 0 ? picture.size.width / picture.size.height : 1.5
+                GeometryReader { geometry in
+                    let size = geometry.size
+                    let kept = crop.kept(in: size)
+                    ZStack(alignment: .topLeading) {
+                        Image(nsImage: picture).resizable().frame(width: size.width, height: size.height)
+                        // The parts that are cut away, darkened.
+                        Path { path in
+                            path.addRect(CGRect(origin: .zero, size: size))
+                            path.addRect(kept)
+                        }
+                        .fill(Color.black.opacity(0.6), style: FillStyle(eoFill: true))
+                        Rectangle()
+                            .strokeBorder(Color.white, lineWidth: 1.5)
+                            .frame(width: kept.width, height: kept.height)
+                            .offset(x: kept.minX, y: kept.minY)
+                    }
+                }
+                .aspectRatio(aspect, contentMode: .fit)
+                .frame(maxWidth: 520, maxHeight: 320)
+                .frame(maxWidth: .infinity)
+                HStack(spacing: 6) {
+                    Text("Format:").foregroundStyle(.secondary)
+                    ForEach([("1:1", 1.0), ("4:3", 4.0 / 3), ("3:2", 1.5), ("16:9", 16.0 / 9), ("3:4", 0.75)], id: \.0) { name, wanted in
+                        Button(name) { crop = SlideCrop.centered(aspect: wanted, of: aspect) }
+                    }
+                    Button("Ganzes Bild") { crop = SlideCrop() }
+                }
+                .font(.system(size: 12))
+                Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 6) {
+                    side("Links", \.left)
+                    side("Rechts", \.right)
+                    side("Oben", \.top)
+                    side("Unten", \.bottom)
+                }
+            } else {
+                Text("Das Bild fehlt.").foregroundStyle(.secondary)
+            }
+            HStack {
+                Spacer()
+                Button("Abbrechen", role: .cancel) { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                Button("Beschneiden") {
+                    onApply(crop)
+                    dismiss()
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(picture == nil)
+            }
+        }
+        .padding(20)
+        .frame(width: 560)
+        .onAppear { crop = image.crop ?? SlideCrop() }
+    }
+
+    private func side(_ title: String, _ key: WritableKeyPath<SlideCrop, Double>) -> some View {
+        GridRow {
+            Text(title).frame(width: 52, alignment: .leading)
+            Slider(value: Binding(get: { crop[keyPath: key] }, set: { value in
+                var next = crop
+                next[keyPath: key] = value
+                crop = next.clamped
+            }), in: 0...0.9)
+            Text("\(Int((crop[keyPath: key] * 100).rounded())) %")
+                .monospacedDigit()
+                .frame(width: 44, alignment: .trailing)
+        }
+        .font(.system(size: 12))
     }
 }

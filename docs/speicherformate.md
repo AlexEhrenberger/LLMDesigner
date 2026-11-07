@@ -125,6 +125,9 @@ Was der Vortragende sagt.
 | `x`, `y`, `b`, `h` | Rahmen in Anteilen der Folienbreite/-höhe (Ursprung oben links) |
 | `lage` | `umfliessen` (Vorgabe), `vorne`, `hinten` |
 
+
+Zusätzliche Felder (seit 2026-11-07, alle optional): Eine Folie trägt `"ohnePlatzhalter": true`, wenn ihr Hinweis („Folientitel“) ausgeblendet ist. Ein Bild in `bilder` kann `zuschnitt` (`{"left","top","right","bottom"}`, Anteile, die je Seite wegfallen; die Datei bleibt ganz), `rand` (Breite in Punkten der 720-pt-Folie), `randfarbe` (Hex, z. B. `"FFFFFF"`) und `schatten` (`true`) haben.
+
 ## Zitate
 
 `Zitate/Quellen/<id>.json` enthält eine Quelle mit ihren Wissensbausteinen:

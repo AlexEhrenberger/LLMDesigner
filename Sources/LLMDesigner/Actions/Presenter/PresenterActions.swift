@@ -284,6 +284,7 @@ struct PresenterSlideAddAction: LLMDAction {
         var markdown: String?
         var notes: String?
         var splitOverflow: Bool?
+        var blank: Bool?
     }
     struct Output: Encodable, Sendable {
         var id: String
@@ -299,12 +300,14 @@ struct PresenterSlideAddAction: LLMDAction {
             "role": .choice(SlideRole.allCases.map(\.rawValue), "Standard: folie"),
             "markdown": .string("Text der Folie: Überschrift und höchstens 5–6 kurze Punkte; Einzelheiten gehören in notes"), "notes": .string("Moderatorenkarte"),
             "splitOverflow": .boolean("Was nicht auf die Folie passt, auf Folgefolien „(Forts.)“ verteilen"),
+            "blank": .boolean("Leere Folie ohne Hinweis auf einen Titel, für Bilder und freie Textfelder"),
         ], required: ["deck"]),
         output: .freeObject(), example: "llmd presenter slide add Vortrag --markdown '# Titel\n- Punkt'", groups: ["core", "presenter.core"]
     )
     static func run(_ args: Args, context: ActionContext) async throws -> Output {
         var slide = PresentationSlide(role: args.role.flatMap(SlideRole.init(rawValue:)) ?? .content, markdown: args.markdown ?? "")
         slide.notes = args.notes ?? ""
+        slide.hidesPlaceholder = args.blank == true
         let made = slide
         var position = 0
         _ = try changeDeck(args.deck, context: context) { deck in

@@ -141,6 +141,9 @@ Präsentationen sind Dokumente einer eigenen Art: jede Folie hat Text (derselbe 
 
 - **Alles aus Writer**: hoch-/tiefgestellt, durchgestrichen, Code im Text, Tabellen mit Formeln (die Formelleiste steht über der Folie), Diagramme, Zeichnungen, Mermaid, Formeln, Zitate.
 - **Frei verschiebbar**: Bilder, **Textfelder**, **Kästen**, **Tabellen**, **Code** und Abbildungen liegen als eigene Elemente auf der Folie. Ein Klick wählt, Ziehen verschiebt (mit Einrasten an Mitte und Rändern), die Ecken ändern die Größe, ein **Doppelklick öffnet ein Textfeld zum Schreiben** – der Editor wandert dann in das Feld, die Werkzeugleiste wirkt dort. Esc kehrt zum Folientext zurück. Jedes Element kann den Text umfließen lassen, davor oder dahinter liegen.
+- **Textbox** (Symbol in der Werkzeugleiste, Einfügen → „Textbox auf der Folie“, ⌥⌘T): ein freies Textfeld, sofort zum Schreiben offen, mit der Maus verschieb- und skalierbar.
+- **Leere Folie** (Pfeil neben „+ Folie“ oder Kontextmenü der Folienliste): ohne Hinweis „Folientitel“, für Bilder und freie Elemente. Auf einer leeren Folie nimmt Löschen (⌫) den Hinweis weg; das Kontextmenü holt ihn zurück. Präsentation, PDF und Folienliste zeigen den Hinweis nie.
+- **Bilder** lassen sich **beschneiden** (Zuschneide-Symbol: je Seite oder Format 1:1, 4:3, 3:2, 16:9, 3:4 aus der Mitte; die Datei bleibt ganz) und bekommen einen **Rahmen** (dünn, mittel, dick; weiß, schwarz, grau, gold, blau) und einen **Schlagschatten**.
 - Auch der **Textbereich der Folie** selbst lässt sich verschieben und in der Größe ändern („Frei platzieren → Textbereich der Folie verschieben“).
 - „Markierung als Textfeld herauslösen“ nimmt markierten Text aus der Folie und legt ihn als freies Feld ab.
 - Die KI erstellt ganze Präsentationen aus einer Anweisung, schreibt Moderatorenkarten und trägt vor (Vollbild auf dem zweiten Bildschirm, Vorlesen, automatisches Weiterschalten).

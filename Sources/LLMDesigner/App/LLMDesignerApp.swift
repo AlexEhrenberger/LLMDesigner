@@ -266,6 +266,10 @@ struct AppCommands: Commands {
                 Button("Zeichnung …") { app.formatText { $0.newFigure(.drawing) } }
             }
             .disabled(!app.canFormatText || app.selectedDocument?.isPresentation == true)
+            Divider()
+            Button("Textbox auf der Folie") { app.addTextBoxToOpenSlide() }
+                .keyboardShortcut("t", modifiers: [.command, .option])
+                .disabled(app.selectedPresentation == nil)
         }
         // Stop, regenerate, dictation, pictures and thinking act on the mini chat while its window is in front.
         CommandMenu("Chat") {
