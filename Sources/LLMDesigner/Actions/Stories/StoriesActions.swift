@@ -21,6 +21,7 @@ extension ActionRegistry {
         register(StoriesElementDeleteAction.self)
         register(StoriesElementUsagesAction.self)
         registerStoriesMoreActions()
+        registerStoriesLinkActions()
     }
 }
 
@@ -319,6 +320,9 @@ struct StoriesPartReadAction: LLMDAction {
         var notes: String
         var focus: [String: String]
         var links: [String: [String]]
+        /// "Dazugehörige Dokumente": ids of documents and presentations.
+        var documents: [String]
+        var galleryImages: Int
         var children: [StoriesPartTreeAction.Node]
     }
     static let descriptor = ActionDescriptor(
@@ -340,7 +344,9 @@ struct StoriesPartReadAction: LLMDAction {
                       status: part.status.rawValue, bookKind: part.level == .book ? part.bookKind.rawValue : nil,
                       pov: part.povFigureID.flatMap { world.name(of: StoryRef(kind: .figure, id: $0)) },
                       manuscript: part.manuscriptID.flatMap { context.app.document($0) }?.id.uuidString, notes: part.notes,
-                      focus: focus, links: links, children: StoriesPartTreeAction.nodes(part.children, in: world))
+                      focus: focus, links: links,
+                      documents: part.linkedDocuments.filter { context.app.document($0) != nil }.map(\.uuidString), galleryImages: part.gallery.count,
+                      children: StoriesPartTreeAction.nodes(part.children, in: world))
     }
 }
 

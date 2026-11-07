@@ -74,7 +74,11 @@ enum SidebarEntry: Identifiable {
 struct FolderSection<Item>: Identifiable {
     let folder: Folder
     let items: [Item]
+    /// Subfolders with their items (chat folders only).
+    var children: [FolderSection<Item>] = []
     var id: Folder.ID { folder.id }
+    /// Everything in it, subfolders included.
+    var totalCount: Int { items.count + children.reduce(0) { $0 + $1.items.count } }
 }
 
 @MainActor
@@ -335,6 +339,14 @@ final class AppModel {
 
     var sidebarMode: SidebarMode = .chats
     var chatFolders: [Folder] = []
+    /// Stacks for what lies outside the folders (see AppModel+Stacks.swift).
+    var sidebarArrangement: SidebarArrangement = .date
+    var stackMode: StackMode = .types
+    var sidebarStacks = SidebarStackFile()
+    /// The model is sorting the topic stacks.
+    var isTidyingStacks = false
+    var stackTidyError: String?
+    @ObservationIgnored var stackIdleTask: Task<Void, Never>?
     var skills: [Skill] = []
     var skillFolders: [Folder] = []
     var selectedSkillID: Skill.ID?
@@ -585,6 +597,7 @@ final class AppModel {
         chats = store.loadAll()
         documents = documentStore.loadAll()
         chatFolders = library.loadChatFolders()
+        loadSidebarStacks()
         let skillLibrary = library.loadSkills()
         skills = skillLibrary.skills
         skillFolders = skillLibrary.folders
@@ -912,6 +925,7 @@ final class AppModel {
         closeDocument()
         showChats()
         selectedChatID = id
+        noteSidebarActivity(id)
         editingMessageID = nil
         if isPanelShown { refreshOutlineIfNeeded(id) }
         // Leaving a chat catches up on a memory that gave way to typing.

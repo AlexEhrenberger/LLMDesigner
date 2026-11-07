@@ -136,6 +136,7 @@ struct ActionSettings: View {
                 }
             }
             Button("Aktivität anzeigen …") { openWindow(id: ActivityWindow.id) }
+            Button("Action-Katalog …") { openWindow(id: ActionCatalogWindow.id) }
         } header: {
             Text("Terminal und Agenten")
         } footer: {

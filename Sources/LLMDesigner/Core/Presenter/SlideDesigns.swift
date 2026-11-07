@@ -100,6 +100,7 @@ final class SlideDesignLibrary {
     private(set) var designs: [SlideDesign] = []
     @ObservationIgnored private var loadedFolder: URL?
     @ObservationIgnored private var loadedStamp: Date?
+    @ObservationIgnored private var loadedBuiltIn: URL?
 
     /// Where the app's own designs are: next to its other resources (see scripts/build-app.sh).
     nonisolated static var builtInFolder: URL? {
@@ -126,9 +127,12 @@ final class SlideDesignLibrary {
     func reloadIfNeeded() {
         let folder = Self.userFolder
         let stamp = (try? FileManager.default.attributesOfItem(atPath: folder.path)[.modificationDate]) as? Date
-        guard designs.isEmpty || loadedFolder != folder || loadedStamp != stamp else { return }
+        // The app's own folder only moves in tests, which point it at the repository.
+        let builtIn = Self.builtInFolder
+        guard designs.isEmpty || loadedFolder != folder || loadedStamp != stamp || loadedBuiltIn != builtIn else { return }
         loadedFolder = folder
         loadedStamp = stamp
+        loadedBuiltIn = builtIn
         var result = Self.load(from: Self.builtInFolder, isBuiltIn: true)
         let own = Self.load(from: folder, isBuiltIn: false)
         // A library's design with the same name replaces the app's.

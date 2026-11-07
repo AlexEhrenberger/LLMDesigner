@@ -1,9 +1,12 @@
 import Foundation
 
-/// A folder in the sidebar. Chats and skills each have their own folders; folders don't nest.
+/// A folder in the sidebar. Chats and skills each have their own folders. Chat folders can hold subfolders, one
+/// level deep: a deeper tree would push the names out of the narrow sidebar.
 struct Folder: Identifiable, Codable, Hashable, Sendable {
     var id = UUID()
     var name: String
+    /// The folder this one lies in; nil for a folder at the top. Only ever a top-level folder.
+    var parentID: Folder.ID?
     var createdAt = Date()
     var isCollapsed: Bool?
     /// nil: the plain grey folder.
@@ -184,6 +187,15 @@ struct LibraryStore {
 
     private var chatFoldersURL: URL { directory.appendingPathComponent("ChatFolders.json") }
     private var skillsURL: URL { directory.appendingPathComponent("Skills.json") }
+    private var stacksURL: URL { directory.appendingPathComponent("SidebarStacks.json") }
+
+    func loadSidebarStacks() -> SidebarStackFile {
+        load(SidebarStackFile.self, from: stacksURL) ?? SidebarStackFile()
+    }
+
+    func saveSidebarStacks(_ file: SidebarStackFile) {
+        save(file, to: stacksURL)
+    }
 
     func loadChatFolders() -> [Folder] {
         load([Folder].self, from: chatFoldersURL) ?? []

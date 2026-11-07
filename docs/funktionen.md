@@ -35,6 +35,16 @@ flowchart LR
 
 Das Stift-Symbol oben in der Seitenleiste (und in den Titelleisten, wenn die Seitenleiste zu ist) öffnet ein Menü: **Neuer Chat** und alle Applikationen – Writer Studio (neues Dokument), Citation Studio, Presenter Studio (neue Präsentation), Stories Studio; Notes folgt. Darunter „Präsentation aus Dokument …“.
 
+**Ordner** haben eine zweite Ebene: „Neuer Unterordner“ im Menü eines Ordners, oder einen Ordner auf einen anderen ziehen. Ein Unterordner, der nach draußen gezogen wird, kommt wieder nach oben. Löscht man einen Unterordner und behält den Inhalt, wandert er in den Ordner darüber.
+
+Was in keinem Ordner liegt, steht normal nach Datum. Das Stapel-Symbol neben der Suche schaltet auf **automatisches Stapeln** (eigenes Symbol, kein Ordner; nichts lässt sich hineinziehen):
+
+- **Nach Typen**: Dokumente, Präsentationen und Chats getrennt.
+- **Nach Relevanz**: „Gerade in Arbeit“ (an drei Tagen der letzten zwei Wochen oder zwei der letzten drei geöffnet oder geändert), „Ab und zu“ (letzter Monat), „Ruht seit Wochen“ (bis ein halbes Jahr), „Seit Ewigkeiten unberührt“.
+- **Nach Themen**: Das Modell sortiert nach Inhalt (Titel und ein kurzer Anfang). Es läuft im Leerlauf – drei Minuten ohne Eingabe am Mac, kein anderer Auftrag, höchstens alle 15 Minuten – und sortiert dann nur Neues ein; „Jetzt aufräumen“ und „Alle Themen neu bilden“ stehen im Menü. Ein Themenstapel lässt sich umbenennen oder als echter Ordner anlegen.
+
+Fenster → **Action-Katalog für Agenten** (auch unter Einstellungen → Terminal und Agenten) listet alle Actions nach Modul, mit Suche, Parametern, A/B/Wirkung und dem `llmd`-Aufruf. Er führt nichts aus.
+
 ## Chat
 
 - Antworten werden gestreamt (`/v1/chat/completions` mit `include_usage`), Denkprozesse (Gemma `<|think|>`, Qwen `enable_thinking`) aufklappbar angezeigt.
@@ -134,6 +144,7 @@ Präsentationen sind Dokumente einer eigenen Art: jede Folie hat Text (derselbe 
 - Auch der **Textbereich der Folie** selbst lässt sich verschieben und in der Größe ändern („Frei platzieren → Textbereich der Folie verschieben“).
 - „Markierung als Textfeld herauslösen“ nimmt markierten Text aus der Folie und legt ihn als freies Feld ab.
 - Die KI erstellt ganze Präsentationen aus einer Anweisung, schreibt Moderatorenkarten und trägt vor (Vollbild auf dem zweiten Bildschirm, Vorlesen, automatisches Weiterschalten).
+- **Text passt auf die Folie**: Läuft der Text über, zeigt der Editor einen Hinweis. Agenten erfahren es im Ergebnis jeder Folien-Action (`fit`), `presenter.slides.checkFit` prüft eine ganze Präsentation, `splitOverflow` bzw. `presenter.slide.split` verteilen die Punkte auf Folgefolien „(Forts.)“. Die eigene Folienerzeugung teilt überlaufende Folien selbst.
 - Export als PDF (Text bleibt Text) und Handout.
 
 ```mermaid
@@ -156,7 +167,7 @@ Ein persönliches Citavi: **Quellen** (Bücher, Artikel, Webseiten …) mit Ziti
 
 Romanwelten mit Büchern → Akten → Kapiteln → Abschnitten. Jeder Teil beschreibt **Was / Mit wem / Wo / Warum / Wozu**. Die Welt verwaltet Figuren (ausführliches Profil, Szenenbuch), Orte (verschachtelt), Events (Ursachenketten, Folgen, Wissen), Reasons (Argumente mit Annahmen und Prämissen) und Purposes (literarische Funktion, Setup/Payoff). Jede Ebene hat eine Zeitleiste im Gantt-Stil.
 
-Dazu kommen **Spezies** (Wesen der Welt: Gestalt, Fähigkeiten und Schwächen, Lebensraum mit verknüpften Orten, Kultur; Figuren gehören einer Spezies an) und **Fakten** (einfache Notizen mit Schlagworten, Bildern, Quelle und Verknüpfungen zu Figuren, Spezies, Orten und Events; die Liste durchsucht Titel, Text und Quelle; Schlagworte werden in einem Dropdown mit Mehrfachauswahl angekreuzt – auf der Faktseite zum Vergeben und Anlegen, in der Liste zum Filtern). Figuren haben einen Tab **Videocards** für kurze Videos, die in der Karte abspielen. Die Romanwelt und jedes Buch haben eine **Galerie**: Bilder mit kurzer Beschreibung, groß ansehbar mit Pfeiltasten.
+Dazu kommen **Spezies** (Wesen der Welt: Gestalt, Fähigkeiten und Schwächen, Lebensraum mit verknüpften Orten, Kultur; Figuren gehören einer Spezies an) und **Fakten** (einfache Notizen mit Schlagworten, Bildern, Quelle und Verknüpfungen zu Figuren, Spezies, Orten und Events; die Liste durchsucht Titel, Text und Quelle; Schlagworte werden in einem Dropdown mit Mehrfachauswahl angekreuzt – auf der Faktseite zum Vergeben und Anlegen, in der Liste zum Filtern). Figuren haben einen Tab **Videocards** für kurze Videos, die in der Karte abspielen. Die Romanwelt und jedes Buch, jeder Akt, jedes Kapitel und jeder Abschnitt haben eine **Galerie**: Bilder mit kurzer Beschreibung, groß ansehbar mit Pfeiltasten. Unter „Dazugehörige Dokumente“ verknüpft man Writer-Dokumente und Präsentationen mit der Welt oder einem Teil (Recherche, Entwürfe, ein Vortrag); ein Klick öffnet sie, die Dokumente bleiben in ihren Ordnern.
 
 Getippter Text geht zuerst in einen Entwurf und erst nach einer kurzen Pause (350 ms) in die Romanwelt; so muss das Studio nicht bei jedem Tastendruck neu gezeichnet werden. Gespeichert wird im Hintergrund. Die Textfelder wachsen mit dem Text (ohne Obergrenze, die Seite scrollt); Return beginnt eine neue Zeile, in Namen und Titeln beendet es die Eingabe; Tab springt ins nächste Feld. Kopf und Tabs einer Figur bleiben beim Scrollen stehen.
 

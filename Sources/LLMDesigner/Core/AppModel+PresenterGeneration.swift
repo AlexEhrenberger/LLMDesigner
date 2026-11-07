@@ -116,7 +116,7 @@ extension AppModel {
                     if let titleSlide { deck.slides = [titleSlide] + slides } else { deck.slides += slides }
                     return true
                 }
-                let created = (titleSlide.map { [$0.id] } ?? []) + slides.map(\.id)
+                var created = (titleSlide.map { [$0.id] } ?? []) + slides.map(\.id)
                 self.deckGeneration?.created = created
                 if self.selectedDocumentID == id { self.selectedSlideID = created.first }
 
@@ -140,6 +140,19 @@ extension AppModel {
                         guard let index = deck.index(of: item.id) else { return false }
                         deck.slides[index].markdown = markdown
                         return true
+                    }
+                    // Points that run over the slide go onto a slide "(Forts.)" right after it.
+                    if let current = self.document(id), let deck = current.deck, let filled = deck.slide(item.id) {
+                        let parts = SlideFit.split(filled, in: deck, family: current.font)
+                        if parts.count > 1 {
+                            self.modifyDeck(id) { deck in
+                                guard let index = deck.index(of: item.id) else { return false }
+                                deck.slides.replaceSubrange(index...index, with: parts)
+                                return true
+                            }
+                            if let at = created.firstIndex(of: item.id) { created.insert(contentsOf: parts.dropFirst().map(\.id), at: at + 1) }
+                            self.deckGeneration?.created = created
+                        }
                     }
                 }
                 self.deckGeneration?.phase = .finished

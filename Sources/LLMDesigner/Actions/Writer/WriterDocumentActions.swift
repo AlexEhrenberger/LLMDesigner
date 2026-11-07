@@ -104,6 +104,8 @@ struct OKOutput: Encodable, Sendable {
     var ok = true
     var id: String?
     var message: String?
+    /// Presenter: whether the slide's text fits on the slide after the change.
+    var fit: SlideFitReport?
 }
 
 private let docProperty: [String: JSONSchema] = ["doc": .string("Dokument (ID oder Titel)")]

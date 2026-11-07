@@ -47,6 +47,7 @@ final class MCPAdapter {
     LLM Designer: Dokumente, Präsentationen, Quellen, Romanwelten und Chats mit dem lokalen Modell. \
     Lesen liefert eine version; Schreiben nimmt sie als ifVersion, damit nichts überschrieben wird. \
     Heikles fragt die App den Menschen, und private Daten sind über diesen Weg gesperrt. \
+    Folien-Actions melden in fit, ob der Text auf die Folie passt; bei fits false kürzen oder splitOverflow setzen. \
     llmd_search_actions findet weitere Actions, llmd_run_action führt sie aus.
     """
 

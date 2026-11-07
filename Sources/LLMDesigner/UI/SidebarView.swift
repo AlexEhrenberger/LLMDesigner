@@ -43,9 +43,13 @@ struct SidebarView: View {
 
             switch app.sidebarMode {
             case .chats:
-                SearchField(text: $app.searchText, prompt: "Chats durchsuchen")
-                    .padding(.horizontal, 10)
-                    .padding(.bottom, 6)
+                HStack(spacing: 4) {
+                    SearchField(text: $app.searchText, prompt: "Chats durchsuchen")
+                    ArrangementMenu()
+                }
+                .padding(.leading, 10)
+                .padding(.trailing, 6)
+                .padding(.bottom, 6)
                 ChatList()
             case .skills:
                 SearchField(text: $app.skillSearchText, prompt: "Skills durchsuchen")
@@ -140,7 +144,9 @@ private struct ChatList: View {
 
     var body: some View {
         let sections = app.chatFolderSections
-        let groups = app.chatGroups
+        let stacked = app.sidebarArrangement == .stacks
+        let groups = stacked ? [] : app.chatGroups
+        let stacks = stacked ? app.sidebarStackList : []
         let searching = !app.chatSearchQuery.isEmpty
 
         ScrollView {
@@ -148,31 +154,21 @@ private struct ChatList: View {
                 if !sections.isEmpty {
                     SectionHeader(title: "Ordner")
                     ForEach(sections) { section in
-                        FolderBlock(
-                            folder: section.folder,
-                            count: section.items.count,
-                            isExpanded: searching || section.folder.isCollapsed != true,
-                            dragPrefix: SidebarDrag.chat,
-                            onDrop: { app.moveSidebarItem($0, to: section.folder.id) },
-                            emptyHint: "Leer – Chats oder Dokumente hierher ziehen",
-                            menu: {
-                                Button("Neuer Chat in diesem Ordner", systemImage: "square.and.pencil") {
-                                    app.newChat(inFolder: section.folder.id)
-                                }
-                                Button("Neues Dokument in diesem Ordner", systemImage: StudioApplication.writer.symbol) {
-                                    app.newDocument(inFolder: section.folder.id)
-                                }
-                                Button("Neue Präsentation in diesem Ordner", systemImage: StudioApplication.presenter.symbol) {
-                                    app.newPresentation(inFolder: section.folder.id)
-                                }
-                                Divider()
-                                FolderColorMenu(folder: section.folder)
-                                Button("Umbenennen", systemImage: "pencil") { app.renamingID = section.folder.id }
-                                Button("Ordner löschen …", systemImage: "trash", role: .destructive) { pendingFolderDelete = section.folder }
+                        folderBlock(section, searching: searching) {
+                            ForEach(section.children) { child in
+                                folderBlock(child, searching: searching) { EmptyView() }
                             }
-                        ) {
-                            ForEach(section.items) { entry in
-                                row(for: entry, in: section.folder)
+                        }
+                    }
+                }
+                if stacked {
+                    if !stacks.isEmpty || app.isTidyingStacks {
+                        StackHeader()
+                    }
+                    ForEach(stacks) { stack in
+                        StackBlock(stack: stack, isExpanded: searching || app.isStackExpanded(stack.id)) {
+                            ForEach(stack.entries) { entry in
+                                row(for: entry, in: nil, indent: 18)
                             }
                         }
                     }
@@ -192,10 +188,13 @@ private struct ChatList: View {
         .dropDestination(for: String.self) { items, _ in
             let ids = SidebarDrag.ids(in: items, prefix: SidebarDrag.chat)
             ids.forEach { app.moveSidebarItem($0, to: nil) }
-            return !ids.isEmpty
+            // A subfolder dropped outside every folder goes to the top.
+            let folders = SidebarDrag.ids(in: items, prefix: SidebarDrag.folder)
+            folders.forEach { app.moveFolder($0, into: nil) }
+            return !ids.isEmpty || !folders.isEmpty
         }
         .overlay {
-            if sections.isEmpty && groups.isEmpty {
+            if sections.isEmpty && groups.isEmpty && stacks.isEmpty {
                 Text(searching ? "Keine Treffer" : "Noch keine Chats")
                     .font(.system(size: 12.5))
                     .foregroundStyle(Theme.textTertiary)
@@ -225,29 +224,90 @@ private struct ChatList: View {
         } message: { folder in
             let chats = app.chats.filter { $0.folderID == folder.id }.count
             let documents = app.documents.filter { $0.folderID == folder.id }.count
+            let subfolders = app.subfolders(of: folder.id).count
             let parts = [
                 chats > 0 ? "\(chats) \(chats == 1 ? "Chat" : "Chats")" : nil,
                 documents > 0 ? "\(documents) \(documents == 1 ? "Dokument" : "Dokumente")" : nil,
+                subfolders > 0 ? "\(subfolders) \(subfolders == 1 ? "Unterordner" : "Unterordner")" : nil,
             ].compactMap { $0 }
-            Text(parts.isEmpty ? "Der Ordner ist leer." : "Er enthält \(parts.joined(separator: " und ")). Behaltenes erscheint wieder in der Liste.")
+            let kept = folder.parentID != nil ? "Behaltenes kommt in den übergeordneten Ordner." : "Behaltenes erscheint wieder in der Liste, Unterordner werden zu Ordnern."
+            Text(parts.isEmpty ? "Der Ordner ist leer." : "Er enthält \(parts.joined(separator: ", ")). \(kept)")
         }
+    }
+
+    /// A folder with its subfolders (`nested`) and then its chats and documents.
+    private func folderBlock<Nested: View>(_ section: FolderSection<SidebarEntry>, searching: Bool, @ViewBuilder nested: () -> Nested) -> some View {
+        let folder = section.folder
+        let isSub = folder.parentID != nil
+        return FolderBlock(
+            folder: folder,
+            count: section.totalCount,
+            isEmpty: section.totalCount == 0 && section.children.isEmpty,
+            isExpanded: searching || folder.isCollapsed != true,
+            indent: isSub ? 18 : 0,
+            dragPrefix: SidebarDrag.chat,
+            onDrop: { app.moveSidebarItem($0, to: folder.id) },
+            onFolderDrop: isSub ? nil : { app.moveFolder($0, into: folder.id) },
+            emptyHint: "Leer – Chats oder Dokumente hierher ziehen",
+            menu: {
+                Button("Neuer Chat in diesem Ordner", systemImage: "square.and.pencil") {
+                    app.newChat(inFolder: folder.id)
+                }
+                Button("Neues Dokument in diesem Ordner", systemImage: StudioApplication.writer.symbol) {
+                    app.newDocument(inFolder: folder.id)
+                }
+                Button("Neue Präsentation in diesem Ordner", systemImage: StudioApplication.presenter.symbol) {
+                    app.newPresentation(inFolder: folder.id)
+                }
+                if !isSub {
+                    Button("Neuer Unterordner", systemImage: "folder.badge.plus") { app.createFolder(for: .chats, parent: folder.id) }
+                }
+                Divider()
+                FolderColorMenu(folder: folder)
+                Button("Umbenennen", systemImage: "pencil") { app.renamingID = folder.id }
+                if isSub {
+                    Button("Zum Ordner auf oberster Ebene machen", systemImage: "arrow.up.forward.square") { app.moveFolder(folder.id, into: nil) }
+                } else if section.children.isEmpty {
+                    let targets = app.chatFolders.filter { app.canMoveFolder(folder.id, into: $0.id) }
+                    if !targets.isEmpty {
+                        Menu("In Ordner verschieben", systemImage: "folder") {
+                            ForEach(Folder.sorted(targets)) { target in
+                                Button(target.name) { app.moveFolder(folder.id, into: target.id) }
+                            }
+                        }
+                    }
+                }
+                Button("Ordner löschen …", systemImage: "trash", role: .destructive) { pendingFolderDelete = folder }
+            }
+        ) {
+            nested()
+            ForEach(section.items) { entry in
+                row(for: entry, in: folder)
+            }
+        }
+    }
+
+    private func indent(in folder: Folder?) -> CGFloat {
+        guard let folder else { return 0 }
+        return folder.parentID == nil ? 18 : 36
     }
 
     /// `folder`: the folder the row is shown in; its colour tints the symbol.
+    /// `indent`: set for rows in a stack, which has no folder.
     @ViewBuilder
-    private func row(for entry: SidebarEntry, in folder: Folder?) -> some View {
+    private func row(for entry: SidebarEntry, in folder: Folder?, indent: CGFloat? = nil) -> some View {
         switch entry {
-        case .chat(let chat): row(for: chat, in: folder)
-        case .document(let document): row(for: document, in: folder)
+        case .chat(let chat): row(for: chat, in: folder, indent: indent ?? self.indent(in: folder))
+        case .document(let document): row(for: document, in: folder, indent: indent ?? self.indent(in: folder))
         }
     }
 
-    private func row(for document: WriterDocument, in folder: Folder?) -> some View {
+    private func row(for document: WriterDocument, in folder: Folder?, indent: CGFloat) -> some View {
         SidebarRow(
             id: document.id,
             title: document.displayTitle,
             isSelected: app.selectedDocumentID == document.id,
-            indent: folder != nil ? 18 : 0,
+            indent: indent,
             dragPayload: SidebarDrag.payload(SidebarDrag.chat, document.id),
             onSelect: { app.selectDocument(document.id) },
             onRename: { app.renameDocument(document.id, to: $0) },
@@ -276,12 +336,12 @@ private struct ChatList: View {
         )
     }
 
-    private func row(for chat: Chat, in folder: Folder?) -> some View {
+    private func row(for chat: Chat, in folder: Folder?, indent: CGFloat) -> some View {
         SidebarRow(
             id: chat.id,
             title: chat.title,
             isSelected: app.selectedChatID == chat.id && app.selectedDocumentID == nil,
-            indent: folder != nil ? 18 : 0,
+            indent: indent,
             dragPayload: SidebarDrag.payload(SidebarDrag.chat, chat.id),
             onSelect: { app.selectChat(chat.id) },
             onRename: { app.renameChat(chat.id, to: $0) },
@@ -329,6 +389,122 @@ private struct ChatList: View {
     }
 }
 
+/// Chooses how the chats and documents outside folders are shown: by date, or in stacks of one of three kinds.
+private struct ArrangementMenu: View {
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        IconMenu(systemName: app.sidebarArrangement == .stacks ? "square.stack.3d.up.fill" : "square.stack.3d.up",
+                 help: "Ordnung der Liste: nach Datum oder automatisch gestapelt", size: 13, frameSize: 30) {
+            Toggle(isOn: choice(.date, nil)) { Label("Nach Datum", systemImage: "calendar") }
+            Section("Automatisch stapeln") {
+                ForEach(StackMode.allCases) { mode in
+                    Toggle(isOn: choice(.stacks, mode)) {
+                        Label { Text(mode.label); Text(mode.hint) } icon: { Image(systemName: mode.symbol) }
+                    }
+                }
+            }
+            if app.sidebarArrangement == .stacks && app.stackMode == .topics {
+                Divider()
+                Button("Jetzt aufräumen", systemImage: "wand.and.sparkles") { app.tidySidebarStacks(everything: false) }
+                    .disabled(app.isTidyingStacks)
+                Button("Alle Themen neu bilden", systemImage: "arrow.triangle.2.circlepath") { app.tidySidebarStacks(everything: true) }
+                    .disabled(app.isTidyingStacks)
+            }
+        }
+    }
+
+    private func choice(_ arrangement: SidebarArrangement, _ mode: StackMode?) -> Binding<Bool> {
+        Binding(get: { app.sidebarArrangement == arrangement && (mode == nil || app.stackMode == mode) },
+                set: { _ in app.setSidebarArrangement(arrangement, mode: mode) })
+    }
+}
+
+/// "Stapel", with what the model is doing when it sorts by topic.
+private struct StackHeader: View {
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text("Stapel · \(app.stackMode.label)")
+                .font(.system(size: 11.5, weight: .semibold))
+                .foregroundStyle(Theme.textTertiary)
+            Spacer(minLength: 0)
+            if app.isTidyingStacks {
+                ProgressView().controlSize(.mini)
+                Text("sortiert …")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.textTertiary)
+            } else if let error = app.stackTidyError {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(Theme.warning)
+                    .help(error)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.top, 14)
+        .padding(.bottom, 4)
+    }
+}
+
+/// A stack: like a folder it opens and closes, but it is made by the app, so nothing can be dropped on it and it has
+/// a symbol of its own.
+private struct StackBlock<Rows: View>: View {
+    @Environment(AppModel.self) private var app
+    let stack: SidebarStack
+    let isExpanded: Bool
+    @ViewBuilder let rows: Rows
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            SidebarRow(
+                id: UUID(uuidString: stack.id) ?? Self.fixedID(stack.id),
+                title: stack.title,
+                isSelected: false,
+                indent: 0,
+                dragPayload: nil,
+                onSelect: { withAnimation(.snappy(duration: 0.2)) { app.toggleStack(stack.id) } },
+                onRename: { app.renameTopicStack(stack.id, to: $0) },
+                leading: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(Theme.textTertiary)
+                            .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                            .frame(width: 10)
+                        Image(systemName: stack.symbol)
+                            .font(.system(size: 12))
+                            .foregroundStyle(Theme.accent.opacity(0.8))
+                            .frame(width: 18)
+                    }
+                },
+                trailing: {
+                    Text("\(stack.entries.count)")
+                        .font(.system(size: 11, weight: .medium).monospacedDigit())
+                        .foregroundStyle(Theme.textTertiary)
+                },
+                menu: {
+                    Button(isExpanded ? "Zuklappen" : "Aufklappen", systemImage: "chevron.down") { app.toggleStack(stack.id) }
+                    Button("Als Ordner anlegen", systemImage: "folder.badge.plus") { app.makeFolder(fromStack: stack.id) }
+                    if stack.isTopic {
+                        Button("Umbenennen", systemImage: "pencil") { app.renamingID = UUID(uuidString: stack.id) }
+                    }
+                }
+            )
+            if isExpanded { rows }
+        }
+    }
+
+    /// The fixed stacks (types, relevance) have no UUID of their own; one from the key keeps the row's identity stable.
+    static func fixedID(_ key: String) -> UUID {
+        var bytes = [UInt8](repeating: 0, count: 16)
+        for (index, byte) in key.utf8.enumerated() { bytes[index % 16] = bytes[index % 16] &+ byte &* UInt8(truncatingIfNeeded: index + 1) }
+        return UUID(uuid: (bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
+                           bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]))
+    }
+}
+
 // MARK: Skills
 
 private struct SkillList: View {
@@ -346,9 +522,12 @@ private struct SkillList: View {
                     FolderBlock(
                         folder: section.folder,
                         count: section.items.count,
+                        isEmpty: section.items.isEmpty,
                         isExpanded: searching || section.folder.isCollapsed != true,
+                        indent: 0,
                         dragPrefix: SidebarDrag.skill,
                         onDrop: { app.moveSkill($0, to: section.folder.id, reveal: false) },
+                        onFolderDrop: nil,
                         emptyHint: "Leer – Skills hierher ziehen",
                         menu: {
                             Button("Neuer Skill in diesem Ordner", systemImage: "plus") { app.createSkill(inFolder: section.folder.id) }
@@ -547,6 +726,7 @@ enum PersonaDeleteText {
 private enum SidebarDrag {
     static let chat = "llmdesigner-chat:"
     static let skill = "llmdesigner-skill:"
+    static let folder = "llmdesigner-folder:"
 
     static func payload(_ prefix: String, _ id: UUID) -> String { prefix + id.uuidString }
 
@@ -571,7 +751,7 @@ private struct SectionHeader: View {
     }
 }
 
-/// "In Ordner verschieben" submenu for a chat or a skill.
+/// "In Ordner verschieben" submenu for a chat or a skill. A folder with subfolders becomes a submenu of its own.
 private struct MoveToFolderMenu: View {
     let folders: [Folder]
     let current: Folder.ID?
@@ -580,12 +760,16 @@ private struct MoveToFolderMenu: View {
 
     var body: some View {
         Menu("In Ordner verschieben", systemImage: "folder") {
-            ForEach(Folder.sorted(folders)) { folder in
-                if folder.id == current {
-                    Button(folder.name, systemImage: "checkmark") {}
-                        .disabled(true)
+            ForEach(Folder.sorted(folders.filter { $0.parentID == nil || !folders.map(\.id).contains($0.parentID!) })) { folder in
+                let children = Folder.sorted(folders.filter { $0.parentID == folder.id })
+                if children.isEmpty {
+                    target(folder)
                 } else {
-                    Button(folder.name) { onMove(folder.id) }
+                    Menu(folder.name) {
+                        target(folder)
+                        Divider()
+                        ForEach(children) { target($0) }
+                    }
                 }
             }
             if !folders.isEmpty { Divider() }
@@ -593,6 +777,16 @@ private struct MoveToFolderMenu: View {
             if current != nil {
                 Button("Aus dem Ordner nehmen", systemImage: "arrow.up.forward.square") { onMove(nil) }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func target(_ folder: Folder) -> some View {
+        if folder.id == current {
+            Button(folder.name, systemImage: "checkmark") {}
+                .disabled(true)
+        } else {
+            Button(folder.name) { onMove(folder.id) }
         }
     }
 }
@@ -635,14 +829,18 @@ private struct FolderColorMenu: View {
     }
 }
 
-/// A folder row that opens and closes, with its chats or skills below. Chats or skills dropped on it move in.
+/// A folder row that opens and closes, with its chats or skills below. Chats or skills dropped on it move in; a
+/// top-level chat folder also takes a dropped folder as its subfolder.
 private struct FolderBlock<Rows: View, MenuItems: View>: View {
     @Environment(AppModel.self) private var app
     let folder: Folder
     let count: Int
+    let isEmpty: Bool
     let isExpanded: Bool
+    let indent: CGFloat
     let dragPrefix: String
     let onDrop: (UUID) -> Void
+    let onFolderDrop: ((UUID) -> Void)?
     let emptyHint: String
     @ViewBuilder let menu: MenuItems
     @ViewBuilder let rows: Rows
@@ -658,8 +856,9 @@ private struct FolderBlock<Rows: View, MenuItems: View>: View {
                 id: folder.id,
                 title: folder.name,
                 isSelected: false,
-                indent: 0,
-                dragPayload: nil,
+                indent: indent,
+                // Chat folders can be dragged into another folder; skill folders don't nest.
+                dragPayload: dragPrefix == SidebarDrag.chat ? SidebarDrag.payload(SidebarDrag.folder, folder.id) : nil,
                 onSelect: { withAnimation(.snappy(duration: 0.2)) { app.toggleFolderCollapsed(folder.id) } },
                 onRename: { app.renameFolder(folder.id, to: $0) },
                 leading: {
@@ -686,11 +885,11 @@ private struct FolderBlock<Rows: View, MenuItems: View>: View {
                 menu: { menu }
             )
             if isExpanded {
-                if count == 0 {
+                if isEmpty {
                     Text(emptyHint)
                         .font(.system(size: 12))
                         .foregroundStyle(Theme.textTertiary)
-                        .padding(.leading, 43)
+                        .padding(.leading, 43 + indent)
                         .frame(height: 28)
                 }
                 rows
@@ -704,8 +903,13 @@ private struct FolderBlock<Rows: View, MenuItems: View>: View {
         .dropDestination(for: String.self) { items, _ in
             let ids = SidebarDrag.ids(in: items, prefix: dragPrefix)
             ids.forEach(onDrop)
-            if !ids.isEmpty { swallowed += 1 }
-            return !ids.isEmpty
+            var folders: [UUID] = []
+            if let onFolderDrop {
+                folders = SidebarDrag.ids(in: items, prefix: SidebarDrag.folder).filter { app.canMoveFolder($0, into: folder.id) }
+                folders.forEach(onFolderDrop)
+            }
+            if !ids.isEmpty || !folders.isEmpty { swallowed += 1 }
+            return !ids.isEmpty || !folders.isEmpty
         } isTargeted: { targeted in
             withAnimation(.easeOut(duration: 0.12)) { isTargeted = targeted }
         }

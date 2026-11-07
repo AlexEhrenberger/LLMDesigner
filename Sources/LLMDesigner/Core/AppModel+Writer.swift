@@ -83,6 +83,7 @@ extension AppModel {
         showChats()
         writerTab = .document
         selectedDocumentID = id
+        noteSidebarActivity(id)
     }
 
     /// Citation Studio takes the main area; choosing a chat or a document closes it again. `showing` selects a

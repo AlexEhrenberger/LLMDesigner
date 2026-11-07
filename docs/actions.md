@@ -89,6 +89,11 @@ flowchart TB
 - **LaTeX:** Formeln, die Dateien lesen oder Befehle zusammenbauen könnten, werden als Code gesetzt (`LaTeXSafety`).
 - **Immer mit Rückfrage außerhalb der Oberfläche:** Mikrofon, Bildschirmfoto, Vollbild und Vortrag mit Stimme, Modellserver umstellen, Bibliothek wechseln, Anhang in einem anderen Programm öffnen. Über Chat und MCP auch jede Datei, deren Pfad der Aufrufer nennt.
 - **Protokoll:** Fenster → „Aktivität von Terminal und Agenten“ zeigt Zeit, Kanal, Lauf, Action, A/B, Entscheidung und Ergebnis, aber keine Inhalte.
+- **Katalog:** Fenster → „Action-Katalog für Agenten“ zeigt alle Actions mit Parametern, Art, A/B, Wirkung und Aufruf.
+
+## Folien, die passen
+
+Folien-Actions (`presenter.slide.add`, `setText`, `addFromText`, `field.addText`) messen den Text wie der Editor und liefern `fit`: `fits`, `overflowPercent`, `overflowingFields` und einen Hinweis. Mit `splitOverflow` wandert, was nicht passt, auf Folgefolien „(Forts.)“; `presenter.slide.split` tut das nachträglich, `presenter.slides.checkFit` prüft alle Folien. Hintergründe wählt man nach Namen (`design`) oder nur nach Helligkeit (`background: hell|dunkel`) in `presenter.deck.create`, `presenter.design.apply`, `presenter.ai.createDeck` und `presenter.fromDocument`; `presenter.designs.list` zeigt die Helligkeit jedes Designs. `presenter.ai.createDeck --with-notes --present` schreibt Folien und Karten und trägt danach selbst vor (fragt außerhalb der Oberfläche nach).
 
 ## MCP
 

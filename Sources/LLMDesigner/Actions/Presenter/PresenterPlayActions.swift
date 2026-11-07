@@ -28,7 +28,7 @@ private func preparedPlayer(_ app: AppModel) throws -> PresentationPlayer {
 }
 
 private let fullScreenConsent = "Ein Vortrag im Vollbild nimmt den ganzen Bildschirm ein."
-private let speakingConsent = "Der Vortrag nimmt den ganzen Bildschirm ein und spricht laut."
+let speakingConsent = "Der Vortrag nimmt den ganzen Bildschirm ein und spricht laut."
 
 struct PresenterPlayStartAction: LLMDAction {
     struct Args: Decodable, Sendable {

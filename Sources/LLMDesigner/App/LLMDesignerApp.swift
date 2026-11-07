@@ -43,6 +43,14 @@ struct LLMDesignerApp: App {
         .defaultSize(width: 820, height: 480)
         .restorationBehavior(.disabled)
 
+        // What agents can do: every action with its parameters and safety properties.
+        Window("Action-Katalog", id: ActionCatalogWindow.id) {
+            ActionCatalogView()
+                .tint(Theme.accent)
+        }
+        .defaultSize(width: 1100, height: 640)
+        .restorationBehavior(.disabled)
+
         // Quick starts from the menu bar, without looking for the window first.
         MenuBarExtra("LLM Designer", systemImage: "wand.and.sparkles") {
             MenuBarMenu()
@@ -112,6 +120,7 @@ struct ActivityCommands: Commands {
     var body: some Commands {
         CommandGroup(after: .windowArrangement) {
             Button("Aktivität von Terminal und Agenten") { openWindow(id: ActivityWindow.id) }
+            Button("Action-Katalog für Agenten") { openWindow(id: ActionCatalogWindow.id) }
         }
     }
 }

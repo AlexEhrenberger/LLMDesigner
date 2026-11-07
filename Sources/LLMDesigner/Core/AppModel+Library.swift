@@ -20,17 +20,22 @@ extension AppModel {
     // MARK: Folders (chats and skills alike)
 
     /// Creates a folder in the chat or skill list and lets the user name it right away.
+    /// `parent`: a top-level chat folder the new one goes into as a subfolder.
     @discardableResult
-    func createFolder(for kind: SidebarMode) -> Folder.ID {
-        var folder = Folder(name: "Neuer Ordner")
+    func createFolder(for kind: SidebarMode, parent: Folder.ID? = nil) -> Folder.ID {
+        var folder = Folder(name: parent == nil ? "Neuer Ordner" : "Neuer Unterordner")
         // A search would hide the new folder before it has a name.
         searchText = ""
         skillSearchText = ""
         switch kind {
         case .chats, .personas:
-            folder.name = Self.uniqueName(folder.name, among: chatFolders.map(\.name))
+            // Subfolders go one level deep: a subfolder's subfolder lands beside it.
+            let parentID = parent.flatMap { id in chatFolders.first { $0.id == id } }.map { $0.parentID ?? $0.id }
+            folder.parentID = parentID
+            folder.name = Self.uniqueName(folder.name, among: chatFolders.filter { $0.parentID == parentID }.map(\.name))
             chatFolders.append(folder)
             library.saveChatFolders(chatFolders)
+            if let parentID { expandFolder(parentID) }
         case .skills:
             folder.name = Self.uniqueName(folder.name, among: skillFolders.map(\.name))
             skillFolders.append(folder)
@@ -56,12 +61,22 @@ extension AppModel {
 
     /// Deletes a folder. Its chats or skills go back to the plain list, or are deleted with it.
     func deleteFolder(_ id: Folder.ID, includingContents: Bool) {
-        if chatFolders.contains(where: { $0.id == id }) {
+        if let folder = chatFolders.first(where: { $0.id == id }) {
+            // What a subfolder held stays in its parent; a top-level folder's subfolders move up a level.
+            let keepIn = folder.parentID
             for chat in chats where chat.folderID == id {
-                if includingContents { deleteChat(chat.id) } else { modifyChat(chat.id) { $0.folderID = nil } }
+                if includingContents { deleteChat(chat.id) } else { modifyChat(chat.id) { $0.folderID = keepIn } }
             }
             for document in documents where document.folderID == id {
-                if includingContents { deleteDocument(document.id) } else { moveDocument(document.id, to: nil) }
+                if includingContents { deleteDocument(document.id) } else { moveDocument(document.id, to: keepIn) }
+            }
+            for child in chatFolders where child.parentID == id {
+                if includingContents {
+                    deleteFolder(child.id, includingContents: true)
+                } else if let index = chatFolders.firstIndex(where: { $0.id == child.id }) {
+                    chatFolders[index].parentID = nil
+                    chatFolders[index].name = Self.uniqueName(child.name, among: chatFolders.filter { $0.parentID == nil && $0.id != id }.map(\.name))
+                }
             }
             chatFolders.removeAll { $0.id == id }
             library.saveChatFolders(chatFolders)
@@ -106,17 +121,49 @@ extension AppModel {
     // MARK: Chat folders
 
     /// Folders with their chats and documents (newest first). While searching, folders without a hit are left out.
+    /// Top-level folders carry their subfolders as `children`.
     var chatFolderSections: [FolderSection<SidebarEntry>] {
         let query = chatSearchQuery
         let all = (chats.map(SidebarEntry.chat) + documents.map(SidebarEntry.document)).sorted { $0.updatedAt > $1.updatedAt }
         let hits = sidebarEntries
-        return Folder.sorted(chatFolders).compactMap { folder in
+        let topIDs = Set(chatFolders.filter { $0.parentID == nil }.map(\.id))
+        func section(_ folder: Folder, children: [FolderSection<SidebarEntry>]) -> FolderSection<SidebarEntry>? {
             if query.isEmpty || folder.name.localizedStandardContains(query) {
-                return FolderSection(folder: folder, items: all.filter { $0.folderID == folder.id })
+                return FolderSection(folder: folder, items: all.filter { $0.folderID == folder.id }, children: children)
             }
             let inFolder = hits.filter { $0.folderID == folder.id }
-            return inFolder.isEmpty ? nil : FolderSection(folder: folder, items: inFolder)
+            return inFolder.isEmpty && children.isEmpty ? nil : FolderSection(folder: folder, items: inFolder, children: children)
         }
+        return Folder.sorted(chatFolders.filter { $0.parentID == nil }).compactMap { folder in
+            // A subfolder whose parent is gone (a hand-edited file) shows at the top.
+            let children = Folder.sorted(chatFolders.filter { $0.parentID == folder.id }).compactMap { section($0, children: []) }
+            return section(folder, children: children)
+        } + Folder.sorted(chatFolders.filter { $0.parentID.map { !topIDs.contains($0) } ?? false }).compactMap { section($0, children: []) }
+    }
+
+    func subfolders(of id: Folder.ID) -> [Folder] {
+        Folder.sorted(chatFolders.filter { $0.parentID == id })
+    }
+
+    /// Puts a chat folder into another (nil: to the top). Two levels at most: a folder with subfolders stays at the top,
+    /// and nothing goes into a subfolder.
+    func moveFolder(_ id: Folder.ID, into parent: Folder.ID?) {
+        guard let index = chatFolders.firstIndex(where: { $0.id == id }), chatFolders[index].parentID != parent, parent != id else { return }
+        if let parent {
+            guard let target = chatFolders.first(where: { $0.id == parent }), target.parentID == nil,
+                  !chatFolders.contains(where: { $0.parentID == id }) else { return }
+        }
+        chatFolders[index].parentID = parent
+        chatFolders[index].name = Self.uniqueName(chatFolders[index].name, among: chatFolders.filter { $0.parentID == parent && $0.id != id }.map(\.name))
+        library.saveChatFolders(chatFolders)
+        if let parent { expandFolder(parent) }
+    }
+
+    /// Whether `id` may go into `parent`; the menus and drops ask first.
+    func canMoveFolder(_ id: Folder.ID, into parent: Folder.ID) -> Bool {
+        guard id != parent, let target = chatFolders.first(where: { $0.id == parent }), target.parentID == nil,
+              let folder = chatFolders.first(where: { $0.id == id }), folder.parentID != parent else { return false }
+        return !chatFolders.contains { $0.parentID == id }
     }
 
     /// Moves a chat into a folder (nil: out of its folder). With `reveal` the folder opens, so the chat stays in view;
@@ -137,7 +184,9 @@ extension AppModel {
         newChatFolderID = folderID
     }
 
+    /// Opens the folder, and its parent, so what lies in it is in view.
     func expandFolder(_ id: Folder.ID) {
+        if let parent = chatFolders.first(where: { $0.id == id })?.parentID { expandFolder(parent) }
         guard (chatFolders + skillFolders).first(where: { $0.id == id })?.isCollapsed == true else { return }
         updateFolder(id) { $0.isCollapsed = nil }
     }

@@ -20,6 +20,7 @@ extension ActionRegistry {
         register(PresenterTextAreaResetAction.self)
         registerPresenterFieldActions()
         registerPresenterStyleActions()
+        registerPresenterFitActions()
         registerPresenterPlayActions()
     }
 }
@@ -253,7 +254,7 @@ struct PresenterSlideAddFromTextAction: LLMDAction {
             let index = try args.after.map { try deck.index(of: deck.actionSlide(id: $0, index: nil).id).map { $0 + 1 } ?? deck.slides.count } ?? deck.slides.count
             deck.slides.insert(slide, at: index)
         }
-        return OKOutput(id: slide.id.uuidString)
+        return OKOutput(id: slide.id.uuidString, fit: SlideFit.report(slideID: slide.id, in: try context.app.actionDocument(args.deck, presentation: true)))
     }
 }
 

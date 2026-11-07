@@ -81,6 +81,9 @@ struct StoryWorldPage: View {
                 StoryTextArea(title: "Themen & Motive", placeholder: "Macht und ihre Kosten, Familie, Ehre gegen Überleben …",
                               text: library.binding(world.id, \.themes), lines: 2...8)
                 calendar
+                StoryLinkedDocumentsCard(ids: world.linkedDocuments, ownerLabel: "zur ganzen Romanwelt") { ids in
+                    library.update(world.id) { $0.linkedDocuments = ids }
+                }
                 books
                 stats
             }
@@ -202,7 +205,7 @@ struct StoryPartPage: View {
                 if model.partTab == .timeline, part.level.hasTimeline {
                     StoryTimelineView(owner: .part(partID), world: world, model: model, library: library)
                         .id(TimelineOwner.part(partID))
-                } else if model.partTab == .gallery, part.level == .book {
+                } else if model.partTab == .gallery {
                     StoryGalleryView(title: "Galerie zu „\(world.displayTitle(of: part))“", worldID: world.id, images: part.gallery, library: library) { image in
                         library.draftBinding(world.id, field: [AnyHashable(partID), AnyHashable("gallery"), AnyHashable(image.fileName)], fallback: "",
                                              get: { [partID] in $0.part(partID)?.gallery.first { $0.fileName == image.fileName }?.caption },
@@ -222,10 +225,15 @@ struct StoryPartPage: View {
     }
 
     private func tabs(_ part: StoryPart) -> [StoriesStudioModel.PartTab] {
-        switch part.level {
-        case .book: [.content, .timeline, .gallery]
-        case .act, .chapter: [.content, .timeline]
-        case .section: []
+        part.level.hasTimeline ? [.content, .timeline, .gallery] : [.content, .gallery]
+    }
+
+    static func ownerLabel(_ level: StoryPartLevel) -> String {
+        switch level {
+        case .book: "zu diesem Buch"
+        case .act: "zu diesem Akt"
+        case .chapter: "zu diesem Kapitel"
+        case .section: "zu diesem Abschnitt"
         }
     }
 
@@ -268,6 +276,9 @@ struct StoryPartPage: View {
                 }
                 StoryTextArea(title: "Notizen", placeholder: "Was sonst noch dazugehört – Ideen, offene Fragen, Recherche …",
                               text: library.partBinding(world.id, partID, \.notes), lines: 3...20)
+                StoryLinkedDocumentsCard(ids: part.linkedDocuments, ownerLabel: Self.ownerLabel(part.level)) { ids in
+                    library.update(world.id) { $0.updatePart(partID) { $0.linkedDocuments = ids } }
+                }
                 if let child = part.level.child {
                     children(part, level: child)
                 }

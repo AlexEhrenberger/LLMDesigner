@@ -236,8 +236,11 @@ struct StoryPart: Identifiable, Hashable, Codable, Sendable {
     var manuscriptID: UUID?
     var notes = ""
     var timeline = StoryTimeline()
-    /// Books only: pictures with a short description.
+    /// Pictures with a short description.
     var gallery: [StoryImage] = []
+    /// Writer documents and presentations that belong to this part (research, drafts, a talk about it), besides
+    /// the manuscript. Only the ids: the documents stay where they are in the sidebar.
+    var linkedDocuments: [UUID] = []
     var children: [StoryPart] = []
     var createdAt = Date()
     var updatedAt = Date()
@@ -274,6 +277,8 @@ struct StoryWorld: Identifiable, Hashable, Codable, Sendable {
     var facts: [StoryFact] = []
     /// Pictures of the world with a short description each.
     var gallery: [StoryImage] = []
+    /// Documents and presentations that belong to the world as a whole.
+    var linkedDocuments: [UUID] = []
     var createdAt = Date()
     var updatedAt = Date()
 
@@ -335,6 +340,7 @@ extension StoryPart {
         notes = c.lenient(.notes, notes)
         timeline = c.lenient(.timeline, timeline)
         gallery = c.lenient(.gallery, gallery)
+        linkedDocuments = c.lenient(.linkedDocuments, linkedDocuments)
         children = c.lenient(.children, children)
         createdAt = c.lenient(.createdAt, createdAt)
         updatedAt = c.lenient(.updatedAt, createdAt)
@@ -363,6 +369,7 @@ extension StoryWorld {
         species = c.lenient(.species, species)
         facts = c.lenient(.facts, facts)
         gallery = c.lenient(.gallery, gallery)
+        linkedDocuments = c.lenient(.linkedDocuments, linkedDocuments)
         createdAt = c.lenient(.createdAt, createdAt)
         updatedAt = c.lenient(.updatedAt, createdAt)
     }

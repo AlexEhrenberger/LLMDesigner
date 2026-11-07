@@ -43,6 +43,8 @@ extension ActionRegistry {
         register(FolderColorAction.self)
         register(FolderCollapseAction.self)
         register(FolderDeleteAction.self)
+        register(FolderMoveAction.self)
+        register(FolderListAction.self)
         registerChatLibraryActions()
         registerChatDeviceActions()
     }
@@ -884,12 +886,22 @@ struct FolderArgs: Decodable, Sendable {
     var color: String?
     var collapsed: Bool?
     var includingContents: Bool?
+    var parent: String?
 }
 
 extension AppModel {
+    /// A folder by ID, name or, for a subfolder, "Ordner/Unterordner".
     func actionAnyFolder(_ reference: String) throws -> Folder {
         let all = chatFolders + skillFolders
         if let id = UUID(uuidString: reference), let folder = all.first(where: { $0.id == id }) { return folder }
+        if let slash = reference.firstIndex(of: "/") {
+            let parentName = reference[..<slash].trimmingCharacters(in: .whitespaces)
+            let childName = reference[reference.index(after: slash)...].trimmingCharacters(in: .whitespaces)
+            let parents = chatFolders.filter { $0.parentID == nil && $0.name.localizedCaseInsensitiveCompare(parentName) == .orderedSame }.map(\.id)
+            let found = chatFolders.filter { $0.parentID.map(parents.contains) == true && $0.name.localizedCaseInsensitiveCompare(childName) == .orderedSame }
+            if found.count == 1 { return found[0] }
+            if found.isEmpty { throw RPCError.notFound("Ordner „\(reference)“ gibt es nicht.") }
+        }
         let found = all.filter { $0.name.localizedCaseInsensitiveCompare(reference) == .orderedSame }
         if found.count == 1 { return found[0] }
         if found.isEmpty { throw RPCError.notFound("Ordner „\(reference)“ gibt es nicht.") }
@@ -902,17 +914,27 @@ struct FolderCreateAction: LLMDAction {
     typealias Output = OKOutput
     static let descriptor = ActionDescriptor(
         id: "folder.create", summary: "Legt einen Ordner für Chats oder Skills an", kind: .write, security: .localWrite,
-        input: .object(["section": .choice(["chats", "skills"], "Wofür"), "name": .string("Name"), "color": .choice(FolderColor.allCases.map(\.rawValue), "Farbe")], required: ["section", "name"]), output: .freeObject()
+        input: .object(["section": .choice(["chats", "skills"], "Wofür"), "name": .string("Name"), "color": .choice(FolderColor.allCases.map(\.rawValue), "Farbe"),
+                        "parent": .string("Nur Chats: als Unterordner dieses Ordners (ID oder Name)")], required: ["section", "name"]), output: .freeObject(),
+        example: "llmd folder create chats Kapitel --parent Roman"
     )
     static func run(_ args: Args, context: ActionContext) async throws -> Output {
         let app = context.app
-        let id = app.createFolder(for: args.section == "skills" ? .skills : .chats)
+        var parentID: UUID?
+        if let parent = args.parent, !parent.isEmpty {
+            guard args.section != "skills" else { throw RPCError.invalidParams("Skill-Ordner haben keine Unterordner.") }
+            let folder = try app.actionAnyFolder(parent)
+            guard app.chatFolders.contains(where: { $0.id == folder.id }) else { throw RPCError.invalidTarget("„\(folder.name)“ ist kein Chat-Ordner.") }
+            guard folder.parentID == nil else { throw RPCError.invalidTarget("„\(folder.name)“ ist schon ein Unterordner; tiefer geht es nicht.") }
+            parentID = folder.id
+        }
+        let id = app.createFolder(for: args.section == "skills" ? .skills : .chats, parent: parentID)
         // The new folder isn't waiting for someone to type its name.
         app.renamingID = nil
         app.renameFolder(id, to: args.name ?? "")
         if let color = args.color.flatMap(FolderColor.init(rawValue:)) { app.setFolderColor(id, to: color) }
         context.undoGroup.add(UndoStep(label: "Ordner anlegen", undo: { app.deleteFolder(id, includingContents: false) }, redo: {
-            let again = app.createFolder(for: args.section == "skills" ? .skills : .chats)
+            let again = app.createFolder(for: args.section == "skills" ? .skills : .chats, parent: parentID)
             app.renamingID = nil
             app.renameFolder(again, to: args.name ?? "")
         }))
@@ -982,5 +1004,58 @@ struct FolderDeleteAction: LLMDAction {
         let folder = try context.app.actionAnyFolder(args.folder ?? "")
         context.app.deleteFolder(folder.id, includingContents: args.includingContents == true)
         return OKOutput(id: folder.id.uuidString)
+    }
+}
+
+struct FolderMoveAction: LLMDAction {
+    typealias Args = FolderArgs
+    typealias Output = OKOutput
+    static let descriptor = ActionDescriptor(
+        id: "folder.move", summary: "Macht einen Chat-Ordner zum Unterordner eines anderen; ohne parent kommt er nach oben", kind: .write, security: .localWrite,
+        input: .object(["folder": .string("Ordner (ID, Name oder Ordner/Unterordner)"), "parent": .string("Übergeordneter Ordner; leer: oberste Ebene")], required: ["folder"]),
+        output: .freeObject(), example: "llmd folder move Kapitel --parent Roman"
+    )
+    static func run(_ args: Args, context: ActionContext) async throws -> Output {
+        let app = context.app
+        let folder = try app.actionAnyFolder(args.folder ?? "")
+        guard app.chatFolders.contains(where: { $0.id == folder.id }) else { throw RPCError.invalidTarget("Nur Chat-Ordner haben Unterordner.") }
+        var parentID: UUID?
+        if let parent = args.parent, !parent.isEmpty {
+            let target = try app.actionAnyFolder(parent)
+            guard app.canMoveFolder(folder.id, into: target.id) else {
+                throw RPCError.invalidTarget("„\(folder.name)“ kann nicht in „\(target.name)“: Unterordner gehen eine Ebene tief, und ein Ordner mit Unterordnern bleibt oben.")
+            }
+            parentID = target.id
+        }
+        let before = folder.parentID
+        app.moveFolder(folder.id, into: parentID)
+        context.undoGroup.add(UndoStep(label: "Ordner verschieben", undo: { app.moveFolder(folder.id, into: before) }, redo: { app.moveFolder(folder.id, into: parentID) }))
+        return OKOutput(id: folder.id.uuidString)
+    }
+}
+
+struct FolderListAction: LLMDAction {
+    struct Item: Encodable, Sendable {
+        var id: String
+        var name: String
+        var parent: String?
+        var color: String?
+        var chats: Int
+        var documents: Int
+    }
+    struct Output: Encodable, Sendable {
+        var folders: [Item]
+    }
+    static let descriptor = ActionDescriptor(
+        id: "folder.list", summary: "Listet die Ordner der Seitenleiste mit Unterordnern und Inhalt", kind: .read, security: .plainRead,
+        output: .freeObject(), example: "llmd folder list --json"
+    )
+    static func run(_ args: NoArgs, context: ActionContext) async throws -> Output {
+        let app = context.app
+        let ordered = Folder.sorted(app.chatFolders.filter { $0.parentID == nil }).flatMap { [$0] + app.subfolders(of: $0.id) }
+        return Output(folders: ordered.map { folder in
+            Item(id: folder.id.uuidString, name: folder.name, parent: folder.parentID.map(\.uuidString), color: folder.color?.rawValue,
+                 chats: app.chats.filter { $0.folderID == folder.id }.count, documents: app.documents.filter { $0.folderID == folder.id }.count)
+        })
     }
 }

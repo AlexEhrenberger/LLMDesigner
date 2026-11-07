@@ -45,9 +45,10 @@ extension AppModel {
 }
 
 extension AppModel {
-    /// A folder of the chat and document list by id or name.
+    /// A folder of the chat and document list by id, name or "Ordner/Unterordner".
     func actionChatFolder(_ reference: String) throws -> Folder {
         if let id = UUID(uuidString: reference), let folder = chatFolders.first(where: { $0.id == id }) { return folder }
+        if reference.contains("/"), let folder = try? actionAnyFolder(reference), chatFolders.contains(where: { $0.id == folder.id }) { return folder }
         let found = chatFolders.filter { $0.name.localizedCaseInsensitiveCompare(reference) == .orderedSame }
         if found.count == 1 { return found[0] }
         if found.isEmpty { throw RPCError.notFound("Ordner „\(reference)“ gibt es nicht.") }

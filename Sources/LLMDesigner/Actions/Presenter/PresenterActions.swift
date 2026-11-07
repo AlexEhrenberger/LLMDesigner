@@ -127,19 +127,24 @@ struct PresenterDeckListAction: LLMDAction {
 struct PresenterDeckCreateAction: LLMDAction {
     struct Args: Decodable, Sendable {
         var title: String?
+        var design: String?
+        var background: String?
     }
     struct Output: Encodable, Sendable {
         var id: String
         var title: String
         var firstSlide: String?
+        var design: String?
     }
     static let descriptor = ActionDescriptor(
-        id: "presenter.deck.create", summary: "Legt eine Präsentation mit Titelfolie an", kind: .write, security: .localWrite,
-        input: .object(["title": .string("Titel")]), output: .freeObject(), example: "llmd presenter deck create --title Vortrag --json",
+        id: "presenter.deck.create", summary: "Legt eine Präsentation mit Titelfolie an, auf Wunsch mit Design oder hellem bzw. dunklem Hintergrund", kind: .write, security: .localWrite,
+        input: .object(["title": .string("Titel"), "design": PresenterBackgroundWish.designProperty, "background": PresenterBackgroundWish.brightnessProperty]),
+        output: .freeObject(), example: "llmd presenter deck create --title Vortrag --background hell --json",
         groups: ["core", "presenter.core"]
     )
     static func run(_ args: Args, context: ActionContext) async throws -> Output {
         let app = context.app
+        let design = try PresenterBackgroundWish.design(named: args.design, brightness: args.background)
         var document = WriterDocument.newPresentation()
         if let title = args.title, !title.isEmpty {
             document.title = title
@@ -154,8 +159,10 @@ struct PresenterDeckCreateAction: LLMDAction {
         app.reinsertDocumentForActionRedo(document)
         let made = document
         context.undoGroup.documents.insert(made.id)
-        context.undoGroup.add(UndoStep(label: "Präsentation anlegen", undo: { app.removeDocumentForActionUndo(made.id) }, redo: { app.reinsertDocumentForActionRedo(made) }))
-        return Output(id: made.id.uuidString, title: made.displayTitle, firstSlide: made.deck?.slides.first?.id.uuidString)
+        if let design { app.setPresentationBackground(made.id, .design(design)) }
+        let stored = app.document(made.id) ?? made
+        context.undoGroup.add(UndoStep(label: "Präsentation anlegen", undo: { app.removeDocumentForActionUndo(stored.id) }, redo: { app.reinsertDocumentForActionRedo(stored) }))
+        return Output(id: made.id.uuidString, title: made.displayTitle, firstSlide: made.deck?.slides.first?.id.uuidString, design: design)
     }
 }
 
@@ -252,6 +259,23 @@ func changeDeck(_ reference: String, context: ActionContext, _ change: (inout Pr
     return document
 }
 
+/// How a slide fits after a change; with `split`, the points that don't fit go onto slides after it (one undo step
+/// with the change, since both go through `changeDeck`).
+@MainActor
+func fitOrSplit(_ slideID: UUID, deck reference: String, split: Bool, context: ActionContext) throws -> (SlideFitReport?, [String]?) {
+    let document = try context.app.actionDocument(reference, presentation: true)
+    guard let fit = SlideFit.report(slideID: slideID, in: document) else { return (nil, nil) }
+    guard split, !fit.fits, let deck = document.deck, let slide = deck.slide(slideID) else { return (fit, nil) }
+    let parts = SlideFit.split(slide, in: deck, family: document.font)
+    guard parts.count > 1 else { return (fit, nil) }
+    _ = try changeDeck(reference, context: context) { deck in
+        guard let index = deck.index(of: slideID) else { return }
+        deck.slides.replaceSubrange(index...index, with: parts)
+    }
+    let after = context.app.document(document.id)
+    return (SlideFit.report(slideID: slideID, in: after), parts.dropFirst().map(\.id.uuidString))
+}
+
 struct PresenterSlideAddAction: LLMDAction {
     struct Args: Decodable, Sendable {
         var deck: String
@@ -259,16 +283,22 @@ struct PresenterSlideAddAction: LLMDAction {
         var role: String?
         var markdown: String?
         var notes: String?
+        var splitOverflow: Bool?
     }
     struct Output: Encodable, Sendable {
         var id: String
         var index: Int
+        var fit: SlideFitReport?
+        /// Slides that took the points that didn't fit (with `splitOverflow`).
+        var continuations: [String]?
     }
     static let descriptor = ActionDescriptor(
-        id: "presenter.slide.add", summary: "Fügt eine Folie hinzu, mit Text in einem Aufruf", kind: .write, security: .localWrite,
+        id: "presenter.slide.add", summary: "Fügt eine Folie hinzu, mit Text in einem Aufruf; meldet, ob der Text auf die Folie passt", kind: .write, security: .localWrite,
         input: .object([
             "deck": deckProperty, "after": .string("Hinter dieser Folie (ID); sonst am Ende"),
-            "role": .choice(SlideRole.allCases.map(\.rawValue), "Standard: folie"), "markdown": .string("Text der Folie"), "notes": .string("Moderatorenkarte"),
+            "role": .choice(SlideRole.allCases.map(\.rawValue), "Standard: folie"),
+            "markdown": .string("Text der Folie: Überschrift und höchstens 5–6 kurze Punkte; Einzelheiten gehören in notes"), "notes": .string("Moderatorenkarte"),
+            "splitOverflow": .boolean("Was nicht auf die Folie passt, auf Folgefolien „(Forts.)“ verteilen"),
         ], required: ["deck"]),
         output: .freeObject(), example: "llmd presenter slide add Vortrag --markdown '# Titel\n- Punkt'", groups: ["core", "presenter.core"]
     )
@@ -286,7 +316,8 @@ struct PresenterSlideAddAction: LLMDAction {
             }
             deck.slides.insert(made, at: position)
         }
-        return Output(id: made.id.uuidString, index: position + 1)
+        let (fit, continuations) = try fitOrSplit(made.id, deck: args.deck, split: args.splitOverflow == true, context: context)
+        return Output(id: made.id.uuidString, index: position + 1, fit: fit, continuations: continuations)
     }
 }
 
@@ -296,18 +327,26 @@ struct PresenterSlideSetTextAction: LLMDAction {
         var slide: String?
         var slideIndex: Int?
         var markdown: String
+        var splitOverflow: Bool?
     }
     static let descriptor = ActionDescriptor(
-        id: "presenter.slide.setText", summary: "Setzt den ganzen Text einer Folie", kind: .write, security: .localWrite,
-        input: .object(slideProperties.merging(["markdown": .string("Text der Folie")]) { _, new in new }, required: ["deck", "markdown"]),
+        id: "presenter.slide.setText", summary: "Setzt den ganzen Text einer Folie; meldet, ob er auf die Folie passt", kind: .write, security: .localWrite,
+        input: .object(slideProperties.merging([
+            "markdown": .string("Text der Folie: Überschrift und höchstens 5–6 kurze Punkte"),
+            "splitOverflow": .boolean("Was nicht passt, auf Folgefolien „(Forts.)“ verteilen"),
+        ]) { _, new in new }, required: ["deck", "markdown"]),
         output: .freeObject(), groups: ["presenter.core"]
     )
     static func run(_ args: Args, context: ActionContext) async throws -> OKOutput {
+        var changed: UUID?
         _ = try changeDeck(args.deck, context: context) { deck in
             let slide = try deck.actionSlide(id: args.slide, index: args.slideIndex)
             deck.slides[deck.index(of: slide.id)!].markdown = args.markdown
+            changed = slide.id
         }
-        return OKOutput()
+        guard let changed else { return OKOutput() }
+        let (fit, continuations) = try fitOrSplit(changed, deck: args.deck, split: args.splitOverflow == true, context: context)
+        return OKOutput(id: changed.uuidString, message: continuations.map { "Fortgesetzt auf \($0.count) weiteren Folie(n): \($0.joined(separator: ", "))" }, fit: fit)
     }
 }
 
@@ -465,43 +504,52 @@ struct PresenterNotesSetAction: LLMDAction {
 }
 
 struct PresenterDesignsListAction: LLMDAction {
+    struct Args: Decodable, Sendable {
+        var background: String?
+    }
     struct Item: Encodable, Sendable {
         var id: String
         var name: String
         var summary: String
+        /// "hell" or "dunkel": how the background looks.
+        var background: String
+        var animated: Bool
         var builtIn: Bool
     }
     struct Output: Encodable, Sendable {
         var designs: [Item]
     }
     static let descriptor = ActionDescriptor(
-        id: "presenter.designs.list", summary: "Listet die Folien-Designs", kind: .read, security: .plainRead,
-        output: .freeObject(), groups: ["presenter.core"]
+        id: "presenter.designs.list", summary: "Listet die Folien-Designs mit Helligkeit des Hintergrunds", kind: .read, security: .plainRead,
+        input: .object(["background": .choice(["hell", "dunkel"], "Nur helle oder nur dunkle")]),
+        output: .freeObject(), example: "llmd presenter designs list --background hell", groups: ["presenter.core"]
     )
-    static func run(_ args: NoArgs, context: ActionContext) async throws -> Output {
-        Output(designs: SlideDesignLibrary.shared.all.map { Item(id: $0.id, name: $0.name, summary: $0.summary, builtIn: $0.isBuiltIn) })
+    static func run(_ args: Args, context: ActionContext) async throws -> Output {
+        Output(designs: SlideDesignLibrary.shared.all
+            .filter { args.background == nil || $0.backgroundBrightness == args.background }
+            .map { Item(id: $0.id, name: $0.name, summary: $0.summary, background: $0.backgroundBrightness, animated: $0.isAnimated, builtIn: $0.isBuiltIn) })
     }
 }
 
 struct PresenterDesignApplyAction: LLMDAction {
     struct Args: Decodable, Sendable {
         var deck: String
-        var design: String
+        var design: String?
+        var background: String?
     }
     static let descriptor = ActionDescriptor(
-        id: "presenter.design.apply", summary: "Gibt der ganzen Präsentation ein Design", kind: .write, security: .localWrite,
-        input: .object(["deck": deckProperty, "design": .string("Design, z. B. aurora; presenter.designs.list zeigt alle")], required: ["deck", "design"]),
-        output: .freeObject(), example: "llmd presenter design apply Vortrag aurora", groups: ["core", "presenter.core"]
+        id: "presenter.design.apply", summary: "Gibt der ganzen Präsentation ein Design, nach Namen oder nur hell bzw. dunkel", kind: .write, security: .localWrite,
+        input: .object(["deck": deckProperty, "design": PresenterBackgroundWish.designProperty, "background": PresenterBackgroundWish.brightnessProperty], required: ["deck"]),
+        output: .freeObject(), example: "llmd presenter design apply Vortrag --design papier", groups: ["core", "presenter.core"]
     )
     static func run(_ args: Args, context: ActionContext) async throws -> OKOutput {
-        guard SlideDesignLibrary.shared.design(args.design) != nil else {
-            let names = SlideDesignLibrary.shared.all.map(\.id).joined(separator: ", ")
-            throw RPCError.notFound("Design „\(args.design)“ gibt es nicht. Vorhanden: \(names).")
+        guard let design = try PresenterBackgroundWish.design(named: args.design, brightness: args.background) else {
+            throw RPCError.invalidParams("Bitte design oder background (hell, dunkel) angeben.")
         }
         let document = try context.app.actionDocument(args.deck, presentation: true)
-        context.app.setPresentationBackground(document.id, .design(args.design))
+        context.app.setPresentationBackground(document.id, .design(design))
         context.noteChange(of: document.id, before: document)
-        return OKOutput()
+        return OKOutput(id: design)
     }
 }
 
@@ -534,16 +582,19 @@ struct PresenterFieldAddTextAction: LLMDAction {
     )
     static func run(_ args: Args, context: ActionContext) async throws -> OKOutput {
         var made: UUID?
-        _ = try changeDeck(args.deck, context: context) { deck in
+        var onSlide: UUID?
+        let document = try changeDeck(args.deck, context: context) { deck in
             let slide = try deck.actionSlide(id: args.slide, index: args.slideIndex)
             let canvas = SlideImage.canvas
             let frame = CGRect(x: (args.x ?? 0.1) * canvas.width, y: (args.y ?? 0.3) * canvas.height,
                                width: (args.width ?? 0.4) * canvas.width, height: (args.height ?? 0.25) * canvas.height)
             let field = SlideImage(text: args.markdown, box: args.box.flatMap(WriterBoxKind.init(rawValue:)), frame: frame)
             made = field.id
+            onSlide = slide.id
             deck.slides[deck.index(of: slide.id)!].images.append(field)
         }
-        return OKOutput(id: made?.uuidString)
+        let fit = onSlide.flatMap { SlideFit.report(slideID: $0, in: context.app.document(document.id)) }
+        return OKOutput(id: made?.uuidString, fit: fit)
     }
 }
 
@@ -690,24 +741,42 @@ struct PresenterAICreateDeckAction: LLMDAction {
         var deck: String
         var instruction: String
         var withNotes: Bool?
+        var present: Bool?
+        var design: String?
+        var background: String?
     }
     static let descriptor = ActionDescriptor(
-        id: "presenter.ai.createDeck", summary: "Lässt das lokale Modell Folien schreiben; läuft im Hintergrund", kind: .write, security: .localWrite,
-        input: .object(["deck": deckProperty, "instruction": .string("Auftrag, z. B. Predictive Coding, 8 Folien"), "withNotes": .boolean("Auch Moderatorenkarten")], required: ["deck", "instruction"]),
-        output: .freeObject(), example: "llmd presenter ai create-deck Vortrag 'Predictive Coding, 8 Folien'", groups: ["presenter.core"]
+        id: "presenter.ai.createDeck", summary: "Lässt das lokale Modell Folien schreiben, auf Wunsch mit Moderatorenkarten und anschließendem Vortrag; läuft im Hintergrund", kind: .write, security: .localWrite,
+        input: .object([
+            "deck": deckProperty, "instruction": .string("Auftrag, z. B. Predictive Coding, 8 Folien"),
+            "withNotes": .boolean("Auch Moderatorenkarten"),
+            "present": .boolean("Danach trägt das Modell die Karten im Vollbild selbst vor (automatische Präsentation); schließt withNotes ein, fragt nach"),
+            "design": PresenterBackgroundWish.designProperty, "background": PresenterBackgroundWish.brightnessProperty,
+        ], required: ["deck", "instruction"]),
+        output: .freeObject(), example: "llmd presenter ai create-deck Vortrag 'Predictive Coding, 8 Folien' --with-notes --present --background hell", groups: ["presenter.core"]
     )
+    static func preflight(_ args: Args, context: ActionContext) throws -> ActionPreflight {
+        var check = ActionPreflight(target: try context.app.actionDocument(args.deck, presentation: true).displayTitle)
+        // Presenting speaks aloud in full screen, like presenter.play.withAI.
+        if args.present == true, context.channel != .ui { check.needsConsent = speakingConsent }
+        return check
+    }
     static func run(_ args: Args, context: ActionContext) async throws -> OKOutput {
         let app = context.app
         let document = try app.actionDocument(args.deck, presentation: true)
         guard app.deckGeneration?.isRunning != true else { throw RPCError.unavailable("Es läuft schon eine Folienerzeugung.") }
+        if let design = try PresenterBackgroundWish.design(named: args.design, brightness: args.background) {
+            app.setPresentationBackground(document.id, .design(design))
+        }
         // The model works on what the run told it: its text counts as the run's, so the origin carries over now.
         if let origin = context.mergedProvenance(document.provenance), origin != document.provenance {
             var marked = document
             marked.provenance = origin
             app.restoreDocument(marked)
         }
-        app.generatePresentation(document.id, instruction: args.instruction, withNotes: args.withNotes == true, presents: false)
-        return OKOutput(id: document.id.uuidString, message: "Läuft. Stand: presenter.ai.status")
+        let presents = args.present == true
+        app.generatePresentation(document.id, instruction: args.instruction, withNotes: args.withNotes == true || presents, presents: presents)
+        return OKOutput(id: document.id.uuidString, message: presents ? "Läuft; danach beginnt der Vortrag. Stand: presenter.ai.status, presenter.play.status" : "Läuft. Stand: presenter.ai.status")
     }
 }
 
@@ -758,10 +827,13 @@ struct PresenterFromDocumentAction: LLMDAction {
         var doc: String
         var notes: Bool?
         var carryObjects: Bool?
+        var design: String?
+        var background: String?
     }
     static let descriptor = ActionDescriptor(
         id: "presenter.fromDocument", summary: "Macht aus einem Dokument eine Präsentation; läuft im Hintergrund und öffnet sie", kind: .write, security: .localWrite,
-        input: .object(["doc": .string("Dokument (ID oder Titel)"), "notes": .boolean("Moderatorenkarten; Standard an"), "carryObjects": .boolean("Formeln, Code, Tabellen, Bilder übernehmen; Standard an")], required: ["doc"]),
+        input: .object(["doc": .string("Dokument (ID oder Titel)"), "notes": .boolean("Moderatorenkarten; Standard an"), "carryObjects": .boolean("Formeln, Code, Tabellen, Bilder übernehmen; Standard an"),
+                        "design": PresenterBackgroundWish.designProperty, "background": PresenterBackgroundWish.brightnessProperty], required: ["doc"]),
         output: .freeObject(), example: "llmd presenter from-document Bericht", groups: ["core", "presenter.core"]
     )
     static func preflight(_ args: Args, context: ActionContext) throws -> ActionPreflight {
@@ -772,12 +844,14 @@ struct PresenterFromDocumentAction: LLMDAction {
         let app = context.app
         let document = try app.actionDocument(args.doc)
         guard app.deckGeneration?.isRunning != true else { throw RPCError.unavailable("Es läuft schon eine Folienerzeugung.") }
+        let design = try PresenterBackgroundWish.design(named: args.design, brightness: args.background)
         var options = DeckSourceOptions()
         options.notes = args.notes ?? true
         options.carriesObjects = args.carryObjects ?? true
         app.createPresentation(from: app.deckMaterial(from: document), options: options)
         // `createPresentation` opens the new deck, which is how we learn its id.
         guard let id = app.selectedDocumentID else { throw RPCError.internal("Die Präsentation wurde nicht angelegt.") }
+        if let design { app.setPresentationBackground(id, .design(design)) }
         if let made = app.document(id), let origin = context.mergedProvenance(document.provenance) {
             var marked = made
             marked.provenance = origin
