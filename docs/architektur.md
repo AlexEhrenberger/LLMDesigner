@@ -139,6 +139,7 @@ flowchart LR
 - Strukturierte Antworten laufen über **JSON-Schema mit fester Reihenfolge** (`complete(orderedSchema:)`), weil kleine Modelle in der Reihenfolge der Eigenschaften schreiben.
 - Diagramme der Inhaltsanalyse baut die App selbst aus JSON – das Modell schreibt nie Mermaid-Code für sie, damit die Diagramme immer gültig sind. (Nur das Mermaid-Werkzeug in Writer lässt Qwen Mermaid schreiben, mit Syntax-Beispiel und Reparaturrunden.)
 - Eigenheit von LM Studio: Ein unbekannter Modellname fällt still auf das geladene Modell zurück. Die App vertraut deshalb dem `model`-Feld im Stream.
+- **Der Anfang einer Anfrage bleibt gleich.** Kapitsa und LM Studio heben den Anfang eines Prompts auf (Präfix-Cache) und lesen nur Neues. Ändert sich im System-Prompt ein einziges Zeichen, liest Kapitsa den ganzen Chat neu (gemessen: 11 s statt 0,3 s bei 2 200 Token). Darum steht im System-Prompt nur, was für den ganzen Chat gilt (Datum ohne Uhrzeit, Erinnerungen nach Kalendertagen); was zu einer Runde gehört (Erinnerungen der Runde, Hinweis für gesprochene Antworten), kommt gerahmt vor die neueste Nachricht (`ChatPayloadBuilder`). Anfragen gehen mit sortierten Schlüsseln hinaus, weil Swift die Reihenfolge sonst bei jedem Start neu würfelt. Unter jeder Antwort steht, wie viele Token aus dem Cache kamen; `PromptPrefixTests` hält die Regel fest.
 
 ## Action-Schicht
 

@@ -10,6 +10,19 @@ struct GenerationStats: Codable, Hashable, Sendable {
     var tokensPerSecond: Double?
     var timeToFirstToken: Double?
     var reasoningSeconds: Double?
+    /// Prompt tokens of the answer's first request that the server took from its prefix cache. The first request is
+    /// the one the user waits for; later tool rounds only add to the end and hit the cache anyway.
+    var cachedPromptTokens: Int?
+
+    /// For the line under the answer. `promptTokens` is the last request's, so the share only fits an answer that took
+    /// a single request (no tool rounds).
+    func cacheSummary(singleRequest: Bool) -> String? {
+        guard let cached = cachedPromptTokens else { return nil }
+        if singleRequest, let prompt = promptTokens, prompt > 0 {
+            return "Prompt \(prompt.formatted()) Tokens, davon \(cached.formatted()) aus dem Cache"
+        }
+        return "\(cached.formatted()) Prompt-Tokens aus dem Cache"
+    }
 }
 
 struct ChatMessage: Identifiable, Codable, Hashable, Sendable {

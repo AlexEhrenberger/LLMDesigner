@@ -78,7 +78,7 @@ struct LMModel: Identifiable, Hashable, Decodable, Sendable {
 
 struct ChatPayloadMessage: Encodable, Sendable {
     let role: String
-    let content: String
+    var content: String
     /// Pictures as `data:` URLs (role "user"). With pictures, `content` is sent as a list of parts.
     var images: [String]? = nil
     /// Functions the assistant called in this turn (role "assistant").
@@ -175,7 +175,8 @@ struct ToolDefinition: Encodable, Sendable {
 enum StreamEvent: Sendable {
     case content(String)
     case reasoning(String)
-    case usage(prompt: Int?, completion: Int?)
+    /// `cached`: prompt tokens the server took from its prefix cache instead of reading them again (Kapitsa reports it).
+    case usage(prompt: Int?, completion: Int?, cached: Int?)
     /// The model that actually answered; LM Studio may silently fall back to a loaded one.
     case model(String)
     /// Functions the model wants to call; sent once, after the last chunk.
@@ -243,6 +244,15 @@ struct LLMClient: Sendable {
         provider.switchesThinking ? TemplateOptions(enable_thinking: thinking) : nil
     }
 
+    /// A request as JSON with sorted keys. Without sorting, `JSONEncoder` writes keys in the hash order of the process,
+    /// which Swift picks anew at every launch; the tool schemas then came out differently after each start of the app,
+    /// and Kapitsa, which keeps the order, read the whole chat again instead of taking it from its prefix cache.
+    static func requestBody(_ value: some Encodable) throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        return try encoder.encode(value)
+    }
+
     /// `thinking` switches the model's thinking where the server allows it (Kapitsa); Qwen thinks there unless told not to.
     func streamChat(
         model: String,
@@ -265,7 +275,7 @@ struct LLMClient: Sendable {
         return AsyncThrowingStream { continuation in
             let task = Task {
                 do {
-                    let body = try JSONEncoder().encode(Body(
+                    let body = try Self.requestBody(Body(
                         model: model, messages: messages, temperature: temperature, tools: tools,
                         chat_template_kwargs: templateOptions(thinking: thinking)
                     ))
@@ -316,7 +326,7 @@ struct LLMClient: Sendable {
                             }
                         }
                         if let usage = chunk.usage {
-                            continuation.yield(.usage(prompt: usage.promptTokens, completion: usage.completionTokens))
+                            continuation.yield(.usage(prompt: usage.promptTokens, completion: usage.completionTokens, cached: usage.promptTokensDetails?.cachedTokens))
                         }
                     }
                     if !pendingCalls.isEmpty {
@@ -360,7 +370,8 @@ struct LLMClient: Sendable {
                 "json_schema": ["name": schema.0, "strict": true, "schema": schema.1],
             ]
         }
-        var requestBody = try JSONSerialization.data(withJSONObject: body)
+        // Sorted for the same reason as `requestBody`; the ordered schema goes in afterwards and keeps its order.
+        var requestBody = try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
         if jsonSchema == nil, let orderedSchema, let text = String(data: requestBody, encoding: .utf8) {
             requestBody = Data(text.replacingOccurrences(of: "\"\(placeholder)\"", with: orderedSchema.json).utf8)
         }
@@ -536,8 +547,10 @@ private struct StreamChunk: Decodable {
         let delta: Delta?
     }
     struct Usage: Decodable {
+        struct PromptDetails: Decodable { let cachedTokens: Int? }
         let promptTokens: Int?
         let completionTokens: Int?
+        let promptTokensDetails: PromptDetails?
     }
     let model: String?
     let choices: [Choice]?

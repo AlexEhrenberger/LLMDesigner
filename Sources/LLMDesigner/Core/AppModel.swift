@@ -1111,31 +1111,27 @@ final class AppModel {
         let tools = offeredTools.isEmpty ? nil : offeredTools
         let maxRounds = actionTools == nil ? WebTools.maxRounds : ChatActionTools.maxRounds
         let maxCalls = actionTools == nil ? WebTools.maxCallsPerRound : ChatActionTools.maxCallsPerRound
-        // The strong memory sorts the question first; the moments it recalls join the system prompt.
+        // The strong memory sorts the question first; the moments it recalls go with the question (see
+        // `ChatPayloadBuilder` for why not into the system prompt).
         let thalamusJob = thalamusJob(for: chats[index], model: modelId)
-        var payload: [ChatPayloadMessage] = []
-        var system = systemPrompt(for: chats[index])
-        for hint in [sources.isEmpty ? nil : WebTools.systemHint(for: sources), fileTools?.systemHint, actionTools?.systemHint].compactMap({ $0 }) {
-            system = system.isEmpty ? hint : system + "\n\n" + hint
-        }
-        // The answer will be read aloud: short, spoken sentences without Markdown.
-        if spoken {
-            system = system.isEmpty ? ConversationSession.systemHint : system + "\n\n" + ConversationSession.systemHint
-        }
         // Kapitsa switches thinking per request. In LM Studio, Gemma 4 thinks only with its token at the very start of
         // the system prompt; Qwen 3.5 always thinks there.
         let thinking = chats[index].thinking == true
-        if thinking, !client.provider.switchesThinking, (model ?? LMModel(id: modelId)).thinksOnThinkToken {
-            system = "<|think|>" + system
-        }
-        if !system.isEmpty { payload.append(ChatPayloadMessage(role: "system", content: system)) }
-        for message in chats[index].messages where message.error == nil && message.hasContent {
+        let history = chats[index].messages.filter { $0.error == nil && $0.hasContent }.map { message in
             var entry = ChatPayloadMessage(role: message.role.rawValue, content: WebTools.historyContent(of: message))
             if message.role == .user, let images = message.images {
                 entry.images = images.compactMap(AttachmentStore.dataURL)
             }
-            payload.append(entry)
+            return entry
         }
+        let payload = ChatPayloadBuilder.messages(
+            system: systemPrompt(for: chats[index]),
+            hints: [sources.isEmpty ? nil : WebTools.systemHint(for: sources), fileTools?.systemHint, actionTools?.systemHint].compactMap { $0 },
+            thinkToken: thinking && !client.provider.switchesThinking && (model ?? LMModel(id: modelId)).thinksOnThinkToken,
+            history: history
+        )
+        // The answer will be read aloud: short, spoken sentences without Markdown.
+        let spokenNote = spoken ? [ConversationSession.systemHint] : []
 
         // Search results must leave room for the chat and the answer (roughly 3–4 characters per token).
         let contextTokens = contextLength(of: chats[index])
@@ -1168,6 +1164,9 @@ final class AppModel {
             var roundEvents = 0
             var roundCompletion: Int?
             var promptTokens: Int?
+            // Only the first request's: whether the chat's beginning was still cached decides the wait.
+            var cachedPromptTokens: Int?
+            var sawUsage = false
             var completionTokens = 0
             var timedTokens = 0
             var streamingSeconds = 0.0
@@ -1223,9 +1222,11 @@ final class AppModel {
                 if let reloadContext {
                     try await self?.loadModel(modelId, contextLength: reloadContext)
                 }
+                var notes = spokenNote
                 if let thalamusJob, let recall = await self?.runThalamus(thalamusJob, answerID: messageID) {
-                    conversation = Self.adding(recall, toSystemOf: conversation)
+                    notes.insert(recall, at: 0)
                 }
+                conversation = ChatPayloadBuilder.adding(notes: notes, toNewestOf: conversation)
                 try Task.checkCancellation()
                 for round in 0... {
                     // The last round goes without tools, so the model answers with what it found so far.
@@ -1246,9 +1247,13 @@ final class AppModel {
                             if roundStart == nil { roundStart = now }
                             reasoningField += text
                             roundEvents += 1
-                        case .usage(let prompt, let completion):
+                        case .usage(let prompt, let completion, let cached):
                             promptTokens = prompt
                             roundCompletion = completion
+                            if !sawUsage {
+                                sawUsage = true
+                                cachedPromptTokens = cached
+                            }
                         case .model(let answering):
                             self?.updateMessage(chatID, messageID) { $0.model = answering }
                         case .toolCalls(let requested):
@@ -1308,6 +1313,7 @@ final class AppModel {
                 if let firstToken {
                     var stats = GenerationStats()
                     stats.promptTokens = promptTokens
+                    stats.cachedPromptTokens = cachedPromptTokens
                     stats.completionTokens = completionTokens
                     stats.timeToFirstToken = firstToken.timeIntervalSince(started)
                     if streamingSeconds > 0.05 { stats.tokensPerSecond = Double(timedTokens) / streamingSeconds }
@@ -1405,17 +1411,6 @@ final class AppModel {
         alert.addButton(withTitle: "Nicht erlauben")
         alert.addButton(withTitle: "Erlauben")
         return alert.runModal() == .alertSecondButtonReturn
-    }
-
-    /// The messages with `text` added to the end of the system prompt (or as one, if there is none).
-    private nonisolated static func adding(_ text: String, toSystemOf messages: [ChatPayloadMessage]) -> [ChatPayloadMessage] {
-        var messages = messages
-        if let first = messages.first, first.role == "system" {
-            messages[0] = ChatPayloadMessage(role: "system", content: first.content + "\n\n" + text)
-        } else {
-            messages.insert(ChatPayloadMessage(role: "system", content: text), at: 0)
-        }
-        return messages
     }
 
     private nonisolated static func joined(_ first: String, _ second: String) -> String {

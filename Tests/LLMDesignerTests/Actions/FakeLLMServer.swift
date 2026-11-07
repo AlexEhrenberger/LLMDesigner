@@ -27,6 +27,10 @@ final class FakeLLMServer: @unchecked Sendable {
     var completions: [String] = []
     /// The requests without streaming.
     private(set) var seenCompletions: [JSONValue] = []
+    /// The same as sent, for checking the order of keys.
+    private(set) var rawCompletions: [String] = []
+    /// What streamed answers report after their last chunk, as Kapitsa does (`usage` with `prompt_tokens_details`).
+    var usage: JSONValue?
 
     init(script: [Turn] = []) throws {
         self.script = script
@@ -97,10 +101,11 @@ final class FakeLLMServer: @unchecked Sendable {
             if request["stream"] == true {
                 lock.withLock { seen.append(request) }
                 if delay > 0 { Thread.sleep(forTimeInterval: delay) }
-                reply = ("text/event-stream", Self.stream(nextTurn(), substitute: substitute))
+                reply = ("text/event-stream", Self.stream(nextTurn(), substitute: substitute, usage: lock.withLock { usage }))
             } else {
                 let content: String = lock.withLock {
                     seenCompletions.append(request)
+                    rawCompletions.append(String(decoding: body, as: UTF8.self))
                     return completions.isEmpty ? "{}" : completions.removeFirst()
                 }
                 let answer: JSONValue = ["choices": [["message": ["role": "assistant", "content": .string(content)]]]]
@@ -111,7 +116,7 @@ final class FakeLLMServer: @unchecked Sendable {
         _ = UnixSocket.writeAll(Data(response.utf8), to: client)
     }
 
-    private static func stream(_ turn: Turn, substitute: (String, String)?) -> String {
+    private static func stream(_ turn: Turn, substitute: (String, String)?, usage: JSONValue?) -> String {
         func event(_ delta: JSONValue, finish: JSONValue = nil) -> String {
             let value: JSONValue = ["model": "fake", "choices": [["index": 0, "delta": delta, "finish_reason": finish]]]
             return "data: \(value.jsonLine())\n\n"
@@ -127,6 +132,10 @@ final class FakeLLMServer: @unchecked Sendable {
             }
             text += event(["tool_calls": .array(list)])
             text += event([:], finish: "tool_calls")
+        }
+        if let usage {
+            let value: JSONValue = ["model": "fake", "choices": [], "usage": usage]
+            text += "data: \(value.jsonLine())\n\n"
         }
         return text + "data: [DONE]\n\n"
     }

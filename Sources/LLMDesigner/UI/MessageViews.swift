@@ -372,6 +372,9 @@ private struct AssistantMessageView: View {
             if let ttft = stats.timeToFirstToken {
                 parts.append("\(ttft.formatted(.number.precision(.fractionLength(2)))) s bis zum ersten Token")
             }
+            if let cache = stats.cacheSummary(singleRequest: (message.toolSteps ?? []).isEmpty) {
+                parts.append(cache)
+            }
         }
         if message.stopped == true { parts.append("gestoppt") }
         return parts.joined(separator: "  ·  ")

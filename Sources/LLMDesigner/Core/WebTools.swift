@@ -81,10 +81,11 @@ enum WebTools {
     }
 
     /// Added to the system prompt when tools are offered; small models need the date to judge what is "current".
+    /// Only the date: with the time of day the system prompt changed every minute, and the server read the whole chat
+    /// again instead of taking it from its prefix cache (see `ChatPayloadBuilder`).
     static func systemHint(for sources: Sources, now: Date = Date()) -> String {
         let date = now.formatted(date: .complete, time: .omitted)
-        let time = now.formatted(date: .omitted, time: .shortened)
-        var lines = ["Heute ist \(date), \(time) Uhr.", "Du kannst nachschlagen:"]
+        var lines = ["Heute ist \(date).", "Du kannst nachschlagen:"]
         if sources.contains(.wikipedia) {
             lines.append("- \(wikiSearchName)(query, language): sucht Artikel in Wikipedia (Standard \"\(WikipediaClient.defaultLanguage)\", für internationale Themen auch \"en\").")
             lines.append("- \(wikiArticleName)(title, language, section): liest einen Artikel; ohne section kommen der Anfang und die Liste der Abschnitte, mit section ein bestimmter Abschnitt.")

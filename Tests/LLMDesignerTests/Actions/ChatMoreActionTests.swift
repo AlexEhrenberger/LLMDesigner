@@ -131,6 +131,50 @@ struct ChatMoreActionTests {
 
     // MARK: Messages
 
+    /// The prefix cache is measured per answer: what the server reports for the first request lands in the stats.
+    @Test func cachedPromptTokens() async throws {
+        try await withServer([.text("Neu.")]) { server in
+            server.usage = ["prompt_tokens": 900, "completion_tokens": 2, "prompt_tokens_details": ["cached_tokens": 850]]
+            let id = try await talked()
+            h.app.updateChat(UUID(uuidString: id)!) {
+                $0.modelId = "fake"
+                $0.contextLength = 16384
+            }
+            try await h.call("chat.regenerate", ["chat": .string(id)])
+            _ = try await h.call("chat.wait", ["chat": .string(id)])
+            let stats = try #require(value(id).messages.last?.stats)
+            #expect(stats.promptTokens == 900)
+            #expect(stats.cachedPromptTokens == 850)
+            #expect(stats.cacheSummary(singleRequest: true) == "Prompt 900 Tokens, davon 850 aus dem Cache")
+            #expect(stats.cacheSummary(singleRequest: false) == "850 Prompt-Tokens aus dem Cache")
+        }
+        #expect(GenerationStats(promptTokens: 900).cacheSummary(singleRequest: true) == nil)
+    }
+
+    /// What belongs to one turn goes with the newest question, so the system prompt stays the same for the cache.
+    @Test func turnNotesGoWithTheQuestion() async throws {
+        try await withServer([.text("Kurz gesagt: ja.")]) { server in
+            let id = try await talked()
+            let chatID = UUID(uuidString: id)!
+            h.app.updateChat(chatID) {
+                $0.modelId = "fake"
+                $0.contextLength = 16384
+                $0.messages.append(ChatMessage(role: .user, content: "Fließt er in die Nordsee?"))
+            }
+            h.app.generate(in: chatID, spoken: true)
+            _ = try await h.call("chat.wait", ["chat": .string(id)])
+            let messages = try #require(server.requests.last?["messages"]?.arrayValue)
+            let system = messages.first { $0["role"] == "system" }?["content"]?.stringValue ?? ""
+            #expect(!system.contains("gesprochenes Gespräch"))
+            let newest = try #require(messages.last?["content"]?.stringValue)
+            #expect(newest.hasPrefix(ChatPayloadBuilder.noteStart) && newest.contains("gesprochenes Gespräch"))
+            #expect(newest.hasSuffix("Fließt er in die Nordsee?"))
+            #expect(messages.first { $0["role"] == "user" }?["content"] == "Wie heißt der Fluss?")
+            // Nothing of it is stored.
+            #expect(value(id).messages.first { $0.content.contains(ChatPayloadBuilder.noteStart) } == nil)
+        }
+    }
+
     @Test func regenerateEditFollowUp() async throws {
         try await withServer([.text("Neu."), .text("Anders."), .text("Lang.")]) { _ in
             let id = try await talked()

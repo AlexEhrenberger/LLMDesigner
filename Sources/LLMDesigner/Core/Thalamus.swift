@@ -546,10 +546,19 @@ enum ThalamusRecall {
     /// The persona should show feelings, not report them.
     private static let feelingsRule = "Die Gefühle und ihre Stärke sind nur für dich: Nenne nie Zahlen, Skalen oder Stärkeangaben, sondern lass sie in deine eigenen Worte einfließen (z. B. „Du warst so stolz!“)."
 
-    private static func relative(_ date: Date, now: Date) -> String {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.locale = Locale(identifier: "de_DE")
-        formatter.unitsStyle = .full
-        return formatter.localizedString(for: date, relativeTo: now)
+    /// In calendar days, never minutes or hours: these lines sit in the system prompt, and "vor 20 Minuten" turning
+    /// into "vor 21 Minuten" made the server read the whole chat again instead of taking it from its prefix cache
+    /// (see `ChatPayloadBuilder`). The exact date is written next to it anyway.
+    static func relative(_ date: Date, now: Date, calendar: Calendar = .current) -> String {
+        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: date), to: calendar.startOfDay(for: now)).day ?? 0
+        switch days {
+        case ..<1: return "heute"
+        case 1: return "gestern"
+        case 2: return "vorgestern"
+        case 3..<14: return "vor \(days) Tagen"
+        case 14..<60: return "vor \(days / 7) Wochen"
+        case 60..<730: return "vor \(days / 30) Monaten"
+        default: return "vor \(days / 365) Jahren"
+        }
     }
 }
