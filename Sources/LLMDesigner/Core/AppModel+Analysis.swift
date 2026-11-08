@@ -3,10 +3,12 @@ import Foundation
 /// Writer Studio's two views of a document; a presentation also has the view that plays it.
 enum WriterTab: String, CaseIterable, Identifiable {
     case document, play, analysis
+    /// The document's Markdown and the LaTeX of its PDF, to read and change by hand (WriterCodeView).
+    case code
 
     var id: String { rawValue }
 
-    static let writerTabs: [WriterTab] = [.document, .analysis]
+    static let writerTabs: [WriterTab] = [.document, .code, .analysis]
     static let presenterTabs: [WriterTab] = [.document, .play, .analysis]
 
     func label(presentation: Bool) -> String {
@@ -14,6 +16,7 @@ enum WriterTab: String, CaseIterable, Identifiable {
         case .document: presentation ? "Folien" : "Dokument"
         case .play: "Abspielen"
         case .analysis: "Inhaltsanalyse"
+        case .code: "Code"
         }
     }
 
@@ -22,6 +25,7 @@ enum WriterTab: String, CaseIterable, Identifiable {
         case .document: presentation ? "rectangle.stack" : "doc.text"
         case .play: "play.rectangle"
         case .analysis: "chart.bar.doc.horizontal"
+        case .code: "chevron.left.forwardslash.chevron.right"
         }
     }
 }

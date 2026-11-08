@@ -191,6 +191,9 @@ extension WriterTextView {
         if let tocLocation { selectEmbed(at: tocLocation) }
         let citationLocation = pictureLocation == nil && formulaLocation == nil && tocLocation == nil ? self.citationLocation(at: point) : nil
         if let citationLocation { selectCitation(at: citationLocation) }
+        let footnoteLocation = pictureLocation == nil && formulaLocation == nil && tocLocation == nil && citationLocation == nil
+            ? self.footnoteLocation(at: point) : nil
+        if let footnoteLocation { setSelectedRange(NSRange(location: footnoteLocation, length: 1)) }
         let menu = super.menu(for: event) ?? NSMenu()
         // The system's font and layout submenus would format past the Markdown meaning; the toolbar does that.
         let foreign: Set<Selector> = [#selector(NSFontManager.orderFrontFontPanel(_:)), #selector(NSTextView.alignLeft(_:)), #selector(NSResponder.makeBaseWritingDirectionNatural(_:)), #selector(NSTextView.changeLayoutOrientation(_:))]
@@ -221,6 +224,7 @@ extension WriterTextView {
         if let formulaLocation { own += formulaMenuItems(at: formulaLocation) }
         if let tocLocation { own += tableOfContentsMenuItems(at: tocLocation) }
         if let citationLocation { own += citationMenuItems(at: citationLocation) }
+        if let footnoteLocation { own += footnoteMenuItems(at: footnoteLocation) }
         if let table = tableMenu() { own += [table, .separator()] }
         own += codeMenuItems()
         own += insertMenuItems(hasSelection: hasSelection)
@@ -267,6 +271,7 @@ extension WriterTextView {
             return []
         }
         items += commentMenuItems()
+        if slideLayout == nil, currentParagraph?.block != .code, currentParagraph?.block != .raw { items.append(footnoteInsertMenuItem()) }
         items += boxMenuItems()
         if let bookmark = bookmarkAtCaret, !hasSelection {
             let remove = ClosureMenuItem(title: "Lesezeichen „\(bookmark.title)“ entfernen") { [weak self] in self?.removeBookmark(bookmark.id) }

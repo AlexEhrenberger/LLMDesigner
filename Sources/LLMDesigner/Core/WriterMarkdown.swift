@@ -775,6 +775,18 @@ enum WriterMarkdown {
                 let inWord = (before.isLetter || before.isNumber) && (after.isLetter || after.isNumber)
                 if !inWord, toggle(.italic, token: "_") { continue }
             }
+            // A footnote: `^[Text]` (Pandoc's inline note). It keeps the passage's font and colour but no underline or
+            // strike, which LaTeX can't carry over a footnote.
+            if character == "^", let (note, end) = WriterFootnotes.note(in: characters, at: index) {
+                flush()
+                let footnote = NSMutableAttributedString(attachment: WriterFootnoteAttachment(text: note))
+                footnote.addAttributes(attributes(marks.subtracting([.underline, .strikethrough, .superscript, .subscript, .code]), link: nil,
+                                                  bookmark: bookmark, comment: comment, style: style),
+                                       range: NSRange(location: 0, length: footnote.length))
+                result.append(footnote)
+                index = end
+                continue
+            }
             // A citation: `[@key, S. 12]`, `[vgl. @a; @b]` (Pandoc), but not a link `[…](…)`.
             if character == "[", let close = characters[(index + 1)...].firstIndex(where: { $0 == "]" || $0 == "[" || $0 == "\n" }),
                characters[close] == "]", close + 1 >= characters.count || characters[close + 1] != "(",
@@ -1124,11 +1136,13 @@ enum WriterMarkdown {
             // `[@key, S. 12]`.
             let formula = attributes[.attachment] as? WriterMathAttachment
             let citation = attributes[.attachment] as? WriterCitationAttachment
-            guard attributes[.attachment] == nil || formula != nil || citation != nil else { return }
-            let raw = formula.map { "$" + $0.latex + "$" } ?? citation?.markdown ?? (text.string as NSString).substring(with: range)
-            let isObject = formula != nil || citation != nil
-            let marks = WriterInline(attributes)
-            let link: String? = (attributes[.link] as? URL)?.absoluteString ?? attributes[.link] as? String
+            let footnote = attributes[.attachment] as? WriterFootnoteAttachment
+            guard attributes[.attachment] == nil || formula != nil || citation != nil || footnote != nil else { return }
+            let raw = formula.map { "$" + $0.latex + "$" } ?? citation?.markdown ?? footnote?.markdown ?? (text.string as NSString).substring(with: range)
+            let isObject = formula != nil || citation != nil || footnote != nil
+            // A footnote closes an underline or strike around it (LaTeX can't carry them over a footnote) and a link.
+            let marks = footnote == nil ? WriterInline(attributes) : WriterInline(attributes).subtracting([.underline, .strikethrough, .superscript, .subscript])
+            let link: String? = footnote != nil ? nil : (attributes[.link] as? URL)?.absoluteString ?? attributes[.link] as? String
             let bookmark = attributes[.writerBookmark] as? WriterBookmark
             let comment = attributes[.writerComment] as? WriterComment
             let spanStyle = WriterSpanStyle(attributes)

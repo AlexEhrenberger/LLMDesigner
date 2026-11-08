@@ -73,6 +73,7 @@ struct WriterTabSwitch: View {
             switch tab {
             case .document: isPresentation ? "Die Folien bearbeiten (⌥⌘A wechselt zur Inhaltsanalyse)" : "Das Dokument bearbeiten (⌥⌘A wechselt)"
             case .play: "Die Präsentation abspielen – selbst oder von der KI vorgetragen"
+            case .code: "Markdown und LaTeX des Dokuments ansehen und von Hand korrigieren – mit PDF-Vorschau"
             case .analysis:
                 switch badge {
                 case .running: "Inhaltsanalyse – wird gerade erstellt (⌥⌘A wechselt)"

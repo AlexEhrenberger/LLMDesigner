@@ -252,6 +252,8 @@ struct AppCommands: Commands {
             Group {
                 Button("Kommentar") { app.formatText { $0.addComment() } }
                     .keyboardShortcut("m", modifiers: [.command, .option])
+                Button("Fußnote …") { app.formatText { $0.insertFootnote() } }
+                    .keyboardShortcut("f", modifiers: [.command, .option])
                 Menu("Kasten") {
                     ForEach(WriterBoxKind.allCases) { kind in
                         Button(kind.label) { app.formatText { $0.insertBox(kind) } }

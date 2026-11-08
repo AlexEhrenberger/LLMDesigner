@@ -8,6 +8,7 @@ struct WriterScreen: View {
     @State private var controller = WriterEditorController()
     @State private var assistant = WriterAssistant()
     @State private var analysisScrollTarget: ContentAnalysisModule?
+    @State private var code = WriterCodeModel()
 
     var body: some View {
         if let document = app.selectedDocument {
@@ -123,11 +124,16 @@ struct WriterScreen: View {
 
     private func main(_ document: WriterDocument) -> some View {
             let showsAnalysis = app.writerTab == .analysis
+            let showsCode = app.writerTab == .code
+            // Analysis and code lie over the editor, which stays with its caret, selection and undo.
+            let hidesEditor = showsAnalysis || showsCode
             return VStack(spacing: 0) {
                 WriterTopBar(document: document, pageCount: controller.pageCount)
                 Group {
                     if showsAnalysis {
                         ContentAnalysisToolbar(document: document, scrollTarget: $analysisScrollTarget)
+                    } else if showsCode {
+                        WriterCodeToolbar(model: code, document: document)
                     } else {
                         WriterToolbar(controller: controller, document: document)
                     }
@@ -145,8 +151,12 @@ struct WriterScreen: View {
                             isReadingAloud: app.speakingDocumentID != nil,
                             isDictating: app.dictationIntoDocument
                         )
-                        .opacity(showsAnalysis ? 0 : 1)
-                        .allowsHitTesting(!showsAnalysis)
+                        .opacity(hidesEditor ? 0 : 1)
+                        .allowsHitTesting(!hidesEditor)
+                        if showsCode {
+                            WriterCodeView(model: code, document: document)
+                                .transition(.opacity)
+                        }
                         // The editor stays while the analysis is shown, with its caret, selection and undo.
                         if showsAnalysis {
                             ContentAnalysisView(
@@ -161,13 +171,13 @@ struct WriterScreen: View {
                         VStack(spacing: 10) {
                             HandoutActivityCard(document: document)
                             WriterAudioStatus(controller: controller)
-                            if !showsAnalysis {
+                            if !hidesEditor {
                                 WriterAssistantDock(assistant: assistant, state: controller.state)
                             }
                         }
                         .frame(maxHeight: .infinity, alignment: .bottom)
                         .padding(.bottom, 16)
-                        if controller.find.isShown, !showsAnalysis {
+                        if controller.find.isShown, !hidesEditor {
                             DocumentFindBar(find: controller.find)
                                 .padding(.top, 10)
                                 .padding(.trailing, 18)
@@ -175,17 +185,17 @@ struct WriterScreen: View {
                                 .transition(.move(edge: .top).combined(with: .opacity))
                         }
                     }
-                    if assistant.isPanelShown, !showsAnalysis {
+                    if assistant.isPanelShown, !hidesEditor {
                         WriterCheckPanel(assistant: assistant)
                             .frame(width: 320)
                             .transition(.move(edge: .trailing).combined(with: .opacity))
                     }
                 }
                 .animation(.spring(response: 0.38, dampingFraction: 0.88), value: assistant.isPanelShown)
-                .animation(.easeInOut(duration: 0.2), value: showsAnalysis)
+                .animation(.easeInOut(duration: 0.2), value: app.writerTab)
                 .animation(.spring(response: 0.3, dampingFraction: 0.86), value: controller.find.isShown)
             }
-            .onChange(of: showsAnalysis) { _, isShown in
+            .onChange(of: hidesEditor) { _, isShown in
                 // The hidden editor must not keep the keyboard.
                 if isShown { NSApp.keyWindow?.makeFirstResponder(nil) } else { controller.focus() }
             }
@@ -648,6 +658,12 @@ private struct WriterToolbar: View {
                         help: "Kommentar (⌥⌘M) – zur Markierung, von dir oder der KI; steht am Rand und kommt nicht in den Druck",
                         isActive: controller.activeCommentID != nil
                     ) { controller.addComment() }
+                }
+                group(19) {
+                    ToolbarButton(symbol: "textformat.superscript", help: "Fußnote (⌥⌘F) – Nummer im Text, der Text steht im PDF unten auf der Seite", isActive: false) {
+                        controller.insertFootnote()
+                    }
+                    .disabled(state.block == .code || state.block == .raw || state.block.isEmbed)
                 }
                 group(20) {
                     ToolbarButton(symbol: "minus", help: "Trennlinie / Abschnittsmarke", isActive: false) { controller.insertRule() }

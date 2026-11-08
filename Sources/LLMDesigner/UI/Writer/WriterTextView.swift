@@ -107,6 +107,8 @@ final class WriterTextView: NSTextView {
     var citations: CitationLibrary?
     var citationStyleCache: CitationStyle?
     var lastCitedKeys: [String] = []
+    /// The number of each footnote in the text, counted in order (see WriterTextView+Footnotes.swift).
+    var footnoteNumbers: [ObjectIdentifier: Int] = [:]
     var onShowSource: ((UUID) -> Void)?
     /// The model's table of contents of the document; a dynamic table of contents block shows it.
     var dynamicOutline: DocumentOutline? {
@@ -494,6 +496,7 @@ final class WriterTextView: NSTextView {
         layoutManager?.removeTemporaryAttribute(.foregroundColor, forCharacterRange: NSRange(location: 0, length: storage.length))
         WriterStyler.restyleAll(storage, family: family, palette: palette)
         restyler.isLoading = false
+        footnoteNumbers = countFootnotes()
         outlineCache = nil
         lastOutlineSignature = outline.signature
         onOutlineChange?()
@@ -518,6 +521,7 @@ final class WriterTextView: NSTextView {
         restyler.isLoading = true
         WriterStyler.restyleAll(storage, family: family, palette: palette)
         restyler.isLoading = false
+        footnoteNumbers = countFootnotes()
         outlineCache = nil
         layoutManager?.invalidateLayout(forCharacterRange: NSRange(location: 0, length: storage.length), actualCharacterRange: nil)
         resetTypingAttributes()
@@ -1314,6 +1318,7 @@ final class WriterTextView: NSTextView {
             case is WriterTOCAttachment: text = "[Inhaltsverzeichnis]"
             case is WriterBibliographyAttachment: text = "[Literaturverzeichnis]"
             case let citation as WriterCitationAttachment: text = citationStyle.inText(citation.items)
+            case let footnote as WriterFootnoteAttachment: text = " [Fußnote: \(WriterMarkdown.inline(footnote.text).string)]"
             default: text = "———"
             }
             plain.replaceCharacters(in: attachmentRange, with: text)

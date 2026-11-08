@@ -46,6 +46,13 @@ extension AppModel {
 
     func findInDocument(_ command: DocumentFind.Command) {
         guard canFindInDocument else { return }
+        // The code view searches its own text with the system's find bar.
+        if writerTab == .code {
+            let item = NSMenuItem()
+            item.tag = Int((command == .show ? NSTextFinder.Action.showFindInterface : command == .next ? .nextMatch : .previousMatch).rawValue)
+            NSApp.sendAction(#selector(NSResponder.performTextFinderAction(_:)), to: nil, from: item)
+            return
+        }
         if writerTab != .document { showWriterTab(.document) }
         documentFind?.perform(command)
     }

@@ -76,6 +76,7 @@ Writer erweitert Markdown Pandoc-kompatibel:
 | Bild, Plot, Abbildung | `![Unterschrift](Bilder/x.png){width=50%}`, `{.plot …}`, `{.chart}`, `{.drawing}`, `{.mermaid}` |
 | Tabelle mit Formeln | Tabelle in `::: {#tab-… calc-3-1="SUMME(B2:B3)"}`; Spaltenbreiten als Anzahl der Striche |
 | Zitation | `[@schluessel, S. 12]`, Literaturverzeichnis `[Literatur]` |
+| Fußnote | `^[Text der Fußnote]` (Pandoc-Inline-Fußnote, Text als Inline-Markdown; nummeriert in der Reihenfolge im Text) |
 | Inhaltsverzeichnis | `[TOC]` oder `[TOC]{.dynamic}` |
 | Seitenumbruch | `\newpage` |
 

@@ -805,8 +805,9 @@ enum LaTeXWriter {
         // Writer Studio stores underline as <u>…</u>, colours and fonts of passages as <span style="…">, and line
         // breaks in table cells as <br>. Placeholders made of letters carry them through the Markdown parser and
         // the escaping (it drops private-use characters); they are set again run by run, so braces always balance.
-        // Bookmarks only matter in the editor.
-        let (spanned, styles) = convertSpans(source)
+        // Bookmarks only matter in the editor. Footnotes (`^[…]`) are taken out first, so their text is set on its own.
+        let (withoutNotes, notes) = WriterFootnotes.extract(source)
+        let (spanned, styles) = convertSpans(withoutNotes)
         let source = spanned
             .replacingOccurrences(of: "<u>", with: Self.underlineOpen).replacingOccurrences(of: "</u>", with: Self.underlineClose)
             .replacingOccurrences(of: "<sup>", with: Self.superOpen).replacingOccurrences(of: "</sup>", with: Self.superClose)
@@ -845,13 +846,15 @@ enum LaTeXWriter {
                 let color = styleStack.reversed().compactMap(\.color).first
                 let font = styleStack.reversed().compactMap(\.font).first
                 let size = styleStack.reversed().compactMap(\.size).first
+                // The underline goes innermost: ulem breaks lines only between the words of its own argument, and a
+                // group around them (a font, a colour) would make the whole passage one unbreakable box.
+                if underlined > 0 { result = "\\uline{\(result)}" }
+                if raised > 0 { result = "\\textsuperscript{\(result)}" } else if lowered > 0 { result = "\\textsubscript{\(result)}" }
                 if let size {
                     result = "{\\fontsize{\(WriterSpanStyle.format(size))pt}{\(WriterSpanStyle.format(size * 1.2))pt}\\selectfont{}\(result)}"
                 }
                 if let font { result = "{\\\(fontMacro(font)){}\(result)}" }
                 if let color { result = "\\textcolor[HTML]{\(color)}{\(result)}" }
-                if raised > 0 { result = "\\textsuperscript{\(result)}" } else if lowered > 0 { result = "\\textsubscript{\(result)}" }
-                if underlined > 0 { result = "\\uline{\(result)}" }
                 return result
             }
             /// The stretches of the run between the placeholders, with the state at each.
@@ -859,13 +862,17 @@ enum LaTeXWriter {
                 var result = ""
                 var rest = Substring(text)
                 while !rest.isEmpty {
-                    guard let marker = rest.range(of: #"LLMDSPANO\d+X|LLMDSPANCX|LLMDULINEOPENX|LLMDULINECLOSEX|LLMDSU[PB](?:OPEN|CLOSE)X"#, options: .regularExpression) else {
+                    guard let marker = rest.range(of: #"LLMDSPANO\d+X|LLMDSPANCX|LLMDULINEOPENX|LLMDULINECLOSEX|LLMDSU[PB](?:OPEN|CLOSE)X|LLMDFOOTNOTE\d+X"#, options: .regularExpression) else {
                         result += wrap(set(String(rest)))
                         break
                     }
                     result += wrap(set(String(rest[..<marker.lowerBound])))
                     let token = rest[marker]
-                    if token.hasPrefix("LLMDSPANO"), let number = Int(token.dropFirst(9).dropLast()), number < styles.count {
+                    if token.hasPrefix("LLMDFOOTNOTE"), let number = Int(token.dropFirst(12).dropLast()), number < notes.count {
+                        // Outside the passage's underline and colour: ulem can't hold a footnote, and the note has
+                        // its own look. \protect keeps it whole in headings and captions.
+                        result += "\\protect\\footnote{\(inline(notes[number], math: math))}"
+                    } else if token.hasPrefix("LLMDSPANO"), let number = Int(token.dropFirst(9).dropLast()), number < styles.count {
                         styleStack.append(styles[number])
                     } else if token == "LLMDSPANCX" {
                         _ = styleStack.popLast()

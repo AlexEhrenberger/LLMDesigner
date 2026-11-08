@@ -140,6 +140,7 @@ final class WriterEditorController {
     // MARK: Comments
 
     func addComment() { perform { $0.newComment() } }
+    func insertFootnote() { perform { $0.newFootnote() } }
     func replyToComment(_ id: String, text: String) { textView?.replyToComment(id, text: text) ; refreshComments() }
     func resolveComment(_ id: String, _ resolved: Bool) { textView?.resolveComment(id, resolved); refreshComments() }
     func deleteComment(_ id: String) { textView?.deleteComment(id); refreshComments() }
@@ -527,6 +528,7 @@ struct WriterEditor: NSViewRepresentable {
         func textDidChange(_ notification: Notification) {
             controller?.find.textChanged()
             textView?.citationsChanged()
+            textView?.footnotesChanged()
             textView?.checkCiteTrigger()
             isDirty = true
             pending?.cancel()

@@ -24,7 +24,8 @@ struct PresenterScreen: View {
                 VStack(spacing: 0) {
                     PresenterTopBar(document: document)
                     switch app.writerTab {
-                    case .document:
+                    // Presentations have no code view (their tabs don't offer it).
+                    case .document, .code:
                         editor(document, deck: deck, slide: slide)
                     case .play:
                         PresentationPlayView(document: document)

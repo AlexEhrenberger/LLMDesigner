@@ -128,12 +128,13 @@ flowchart LR
 Ein WYSIWYG-Textverarbeitungsprogramm auf Markdown-Basis:
 
 - Formatierung: Schriften, Größen, Farben, fett/kursiv/unterstrichen/durchgestrichen, hoch- und tiefgestellt, Code, Ausrichtung, Einzüge, Zeilenabstand.
-- Struktur: Kapitel, Überschriften, Listen, Zitate, Trennlinien, Seitenumbrüche, Inhaltsverzeichnis (formal oder dynamisch von der KI), Lesezeichen, Kommentare.
+- Struktur: Kapitel, Überschriften, Listen, Zitate, Trennlinien, Seitenumbrüche, Inhaltsverzeichnis (formal oder dynamisch von der KI), Lesezeichen, Kommentare, Fußnoten (⌥⌘F; im Editor eine hochgestellte Nummer, im PDF unten auf der Seite).
 - Objekte: Bilder (auch von Draw Things generiert), Tabellen mit **Formeln** (SUMME, MITTELWERT …), Sortieren und Diagrammen, Formeleditor mit Plots (Python/matplotlib), Zeichnungen, Mermaid-Diagramme, Kästen (Definition, Merksatz …) mit Textumfluss, zweispaltige Abschnitte, Code mit Hervorhebung und Flussdiagrammen (Python/SQL).
 - Seitenformate DIN A4, Taschenbuch, Normseite, eigene Formate, Kopf- und Fußzeilen.
 - **KI im Dokument**: eine Eingabeleiste mit eigenem KI-Cursor (schreiben, umformulieren, ausformulieren, Fragen beantworten), Rechtschreib- und Plausibilitätsprüfung, Inhaltsanalyse mit Mermaid-Diagrammen.
 - Audio: Diktat ins Dokument, Vorlesen mit Hervorhebung.
 - Export: PDF (über LaTeX/Tectonic), `.tex`, Markdown, Drucken.
+- **Code-Ansicht** (Reiter „Code“): das Markdown des Dokuments zum Bearbeiten (Änderungen gehen direkt ins Dokument) und das LaTeX des PDFs mit Vorschau. Das LaTeX lässt sich von Hand korrigieren und setzen (⌘↩); diese Änderungen gelten nur für das so gesicherte PDF, das Dokument bleibt, wie es ist. Meldet LaTeX einen Fehler, springt ein Knopf zur Zeile.
 
 ## Presenter Studio
 
