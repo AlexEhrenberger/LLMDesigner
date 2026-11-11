@@ -2,7 +2,7 @@ import SwiftUI
 
 /// The applications the power access reaches from the right-hand panel.
 enum PowerModule: String, CaseIterable, Identifiable {
-    case chats, writer, presenter, citation, stories
+    case chats, writer, presenter, citation, stories, notes
 
     var id: String { rawValue }
 
@@ -13,6 +13,7 @@ enum PowerModule: String, CaseIterable, Identifiable {
         case .presenter: "Presenter"
         case .citation: "Citation"
         case .stories: "Stories"
+        case .notes: "Notes"
         }
     }
 
@@ -23,6 +24,7 @@ enum PowerModule: String, CaseIterable, Identifiable {
         case .presenter: StudioApplication.presenter.symbol
         case .citation: StudioApplication.citation.symbol
         case .stories: StudioApplication.stories.symbol
+        case .notes: StudioApplication.notes.symbol
         }
     }
 }
@@ -41,6 +43,7 @@ final class PowerAccess {
     var chatID: Chat.ID?
     var sourceID: UUID?
     var worldID: UUID?
+    var noteID: UUID?
     var storyKind: StoryElementKind = .figure
     /// The last change made here, which "Rückgängig" takes back.
     var lastChange: Change?
@@ -59,6 +62,7 @@ final class PowerAccess {
         case .presenter: presentationID != nil
         case .citation: sourceID != nil
         case .stories: worldID != nil
+        case .notes: noteID != nil
         }
     }
 
@@ -69,6 +73,7 @@ final class PowerAccess {
         case .presenter: presentationID = nil
         case .citation: sourceID = nil
         case .stories: worldID = nil
+        case .notes: noteID = nil
         }
         query = ""
     }
@@ -77,7 +82,9 @@ final class PowerAccess {
 extension AppModel {
     /// The panel on the right is wider while it holds the power access.
     var rightPanelWidth: CGFloat {
-        power.isOn ? Theme.powerWidth : Theme.outlineWidth
+        if power.isOn { return Theme.powerWidth }
+        if selectedDocumentID != nil, documentPanelTab == .notes { return Theme.notesPanelWidth }
+        return Theme.outlineWidth
     }
 
     /// Switches the power access on (showing the panel) or off (back to the contents).
@@ -89,6 +96,7 @@ extension AppModel {
             if !isPanelShown { toggleOutlinePanel() }
             citations.loadIfNeeded()
             stories.loadIfNeeded()
+            notes.loadIfNeeded()
         }
     }
 

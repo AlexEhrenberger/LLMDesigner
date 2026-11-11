@@ -32,6 +32,7 @@ flowchart LR
     L --> G["Geschichten/"]
     G --> GW["‹id›.json<br/>eine Romanwelt"]
     G --> GB["Bilder/‹id›/"]
+    L --> N["Notizen/<br/>‹id›.json: ein Note"]
     L --> PD["Präsentationen/Designs/<br/>eigene CSS-Designs"]
 ```
 
@@ -151,3 +152,41 @@ Zusätzliche Felder (seit 2026-11-07, alle optional): Eine Folie trägt `"ohnePl
 ## Romanwelten
 
 `Geschichten/<id>.json` enthält eine ganze Welt als `{"format": 1, "world": {…}}`: Titel, Kalender, Zeitleiste, Bücher mit Akten/Kapiteln/Abschnitten und die Listen `figures`, `places`, `events`, `reasons`, `purposes`, `species`, `facts` sowie `gallery` (Bilder mit `caption`; jedes Buch, jeder Akt, jedes Kapitel und jeder Abschnitt hat ebenfalls eine `gallery`). Welt und Teile haben `linkedDocuments`: IDs von Writer-Dokumenten und Präsentationen, die dazugehören („Dazugehörige Dokumente“); die Dokumente bleiben in ihren Ordnern. Verweise zwischen Elementen sind IDs innerhalb derselben Datei. Ein Teil kann mit `manuscriptID` auf das Writer-Dokument mit seinem Text zeigen; die Welt enthält den Plan, das Dokument den Text. Bilder liegen in `Geschichten/Bilder/<id>/`, die Videocards der Figuren (`videos`) in `Geschichten/Videos/<id>/`. Unbekannte oder fehlende Felder werden beim Lesen übergangen.
+
+## Notes
+
+`Notizen/<id>.json` enthält ein Note als `{"format": 1, "note": {…}}`. Die Schlüssel sind deutsch; leere Felder (`text`, `gehoertZu`, `zu`, `dokumente`, `unter`) werden nicht geschrieben.
+
+```json
+{
+  "format": 1,
+  "note": {
+    "id": "…",
+    "titel": "Bachelorarbeit",
+    "anzeige": "glas",
+    "text": "Abgabe am 20.11.",
+    "gehoertZu": [
+      {"art": "dokument", "id": "…"},
+      {"art": "romanwelt", "welt": "…", "teil": "…"}
+    ],
+    "todos": [
+      {"id": "…", "text": "Konzept ausarbeiten", "erledigt": false, "dokumente": ["…"],
+       "unter": [{"id": "…", "text": "Gliederung", "erledigt": true}]},
+      {"id": "…", "text": "Literatur", "erledigt": false, "zu": true, "unter": [ … ]}
+    ],
+    "erstellt": "2026-11-11T09:00:00Z",
+    "geaendert": "2026-11-11T09:30:00Z"
+  }
+}
+```
+
+| Schlüssel | Bedeutung |
+|---|---|
+| `anzeige` | Fortschrittsanzeige: `balken`, `ringe`, `glas`, `pflanze`, `rakete`, `gipfel`, `akku`, `mond`, `pizza`, `schnecke`, `tacho`, `pixel`; Unbekanntes wird `balken` |
+| `gehoertZu` | Zugehörigkeiten: `dokument` (Writer-Dokument oder Präsentation) mit `id`; `romanwelt` mit `welt` und optional `teil` (ohne: die ganze Welt). Unbekannte Arten werden beim Lesen übergangen |
+| `todos`, `unter` | ToDos und ihre Unter-ToDos, beliebig tief |
+| `erledigt` | ein ToDo mit Unter-ToDos ist erledigt, wenn alle erledigt sind; die App gleicht das beim Ändern an |
+| `zu` | Unter-ToDos eingeklappt |
+| `dokumente` | IDs verknüpfter Writer-Dokumente und Präsentationen; die Dokumente bleiben in ihren Ordnern |
+
+Die Dokumente, Präsentationen und Romanwelten selbst ändern sich durch eine Zuordnung nicht. Ein gelöschtes Note kommt in den Papierkorb. Die zuletzt gewählte Anzeige (`notesDefaultStyle`) und das zuletzt offene Note (`notesLastNote`) stehen in den Einstellungen der Bibliothek.

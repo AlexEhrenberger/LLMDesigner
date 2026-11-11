@@ -22,9 +22,11 @@ flowchart LR
         PR["Presenter Studio"]
         CI["Citation Studio"]
         ST["Stories Studio"]
+        NO["Notes"]
     end
     subgraph Rechts["Panel"]
         O["Inhalt · Lesezeichen · Quellen"]
+        DN["Notes dieses Dokuments"]
         PW["Power-Zugriff"]
     end
     C --> CH & W & PR
@@ -33,7 +35,7 @@ flowchart LR
 
 ## Neu anlegen
 
-Das Stift-Symbol oben in der Seitenleiste (und in den Titelleisten, wenn die Seitenleiste zu ist) öffnet ein Menü: **Neuer Chat** und alle Applikationen – Writer Studio (neues Dokument), Citation Studio, Presenter Studio (neue Präsentation), Stories Studio; Notes folgt. Darunter „Präsentation aus Dokument …“.
+Das Stift-Symbol oben in der Seitenleiste (und in den Titelleisten, wenn die Seitenleiste zu ist) öffnet ein Menü: **Neuer Chat** und alle Applikationen – Writer Studio (neues Dokument), Citation Studio, Presenter Studio (neue Präsentation), Stories Studio und Notes. Darunter „Präsentation aus Dokument …“.
 
 **Ordner** haben eine zweite Ebene: „Neuer Unterordner“ im Menü eines Ordners, oder einen Ordner auf einen anderen ziehen. Ein Unterordner, der nach draußen gezogen wird, kommt wieder nach oben. Löscht man einen Unterordner und behält den Inhalt, wandert er in den Ordner darüber.
 
@@ -175,6 +177,25 @@ Dazu kommen **Spezies** (Wesen der Welt: Gestalt, Fähigkeiten und Schwächen, L
 
 Getippter Text geht zuerst in einen Entwurf und erst nach einer kurzen Pause (350 ms) in die Romanwelt; so muss das Studio nicht bei jedem Tastendruck neu gezeichnet werden. Gespeichert wird im Hintergrund. Die Textfelder wachsen mit dem Text (ohne Obergrenze, die Seite scrollt); Return beginnt eine neue Zeile, in Namen und Titeln beendet es die Eingabe; Tab springt ins nächste Feld. Kopf und Tabs einer Figur bleiben beim Scrollen stehen.
 
+## Notes
+
+Ein **Note** ist eine ToDo-Liste mit Titel, einer Fortschrittsanzeige und freiem Notiztext. ToDos haben beliebig tiefe **Unter-ToDos**, die sich ein- und ausklappen lassen. Der Kreis vor einem ToDo hakt es ab; ein ToDo mit Unter-ToDos zeigt im Kreis, wie weit sie sind, und ist erledigt, wenn alle erledigt sind. Gelöscht wird über das Papierkorb-Symbol oder das Kontextmenü, ⌘Z holt es zurück.
+
+- **Tastatur wie in einem Outliner**: Return legt das nächste ToDo an (teilt den Text an der Schreibmarke), Tab rückt ein (Unter-ToDo), ⇧Tab rückt aus, ⌫ in einer leeren Zeile löscht sie, ↑/↓ wechseln die Zeile. Mehrere eingefügte Zeilen werden mehrere ToDos.
+- **Verknüpfte Dokumente**: Ein ToDo („Konzept ausarbeiten“) verknüpft Writer-Dokumente und Präsentationen; das Ketten-Symbol sucht ein vorhandenes oder legt ein neues mit dem Namen des ToDos an. Ein Klick auf die Kapsel öffnet es.
+- **Zwölf Fortschrittsanzeigen**, wählbar mit einem Klick auf die Anzeige: Balken, Ringe (einer je Hauptaufgabe), Glas (füllt sich, mit Strohhalm bei 100 %), Pflanze (wächst und blüht), Rakete (von der Erde zum Mond), Gipfel, Akku, Mond (Neumond bis Vollmond), Pizza, Schnecke (kriecht zum Salat), Tacho und Pixel (Ladebalken wie 1989). Ist alles erledigt, gibt es kurz Konfetti. Neue Notes nehmen die zuletzt gewählte Anzeige.
+
+**Wo Notes erscheinen:**
+
+| Ort | Was | Erkennbar an |
+|---|---|---|
+| Notes (Studio) | alle Notes, links gruppiert: Allgemein, Zu Dokumenten, Zu Romanwelten | eigenes Studio im Neu-Menü und in der Menüleiste |
+| Writer, Presenter: Checklisten-Symbol in der Titelleiste | **nur die Notes dieses Dokuments**, rechts im Panel; ein kleiner Ring am Symbol zeigt ihren Stand | Pin und „Gehört zu diesem Dokument“ im Kopf |
+| Stories Studio: Karte „Notes“ bei der Welt und jedem Buch, Akt, Kapitel, Abschnitt | **nur die Notes dieses Teils**, zum Aufklappen | Karte im Teil |
+| Power-Zugriff, Modul „Notes“ | **alle Notes**, die des offenen Dokuments oben | Blitz und „Alle Notes“ |
+
+Ein Note gehört dem Dokument, in dessen Panel es angelegt wurde; „Vorhandenes Note verknüpfen“ ordnet ein bestehendes zu, das Pin-Symbol mit Strich löst es wieder. Im Studio zeigt „Gehört zu“ alle Zuordnungen.
+
 ## Terminal, MCP und Werkzeuge im Chat
 
 Die App lässt sich aus dem Terminal (`llmd`) und über MCP steuern, und der Chat kann auf Wunsch selbst in den Studios arbeiten. Heikle Schritte fragt die App nach, und jeder Schritt ist im Aktivitätsfenster und in der Antwort sichtbar. Siehe [Action-Schicht](actions.md).
@@ -190,6 +211,7 @@ Der Blitz in der Titelleiste (⌥⌘J) verwandelt das rechte Panel in **kompakte
 | Presenter | Präsentationen, Folien als Karten mit Miniatur und Text | auf eine Folie: unter ihren Text; „neue Folie“: erste Zeile wird Titel, der Rest Stichpunkte | ganze Folie oder einzelne Blöcke |
 | Citation | Quellen, Zitate einer Quelle; DOI/ISBN-Import | Text wird ein neues Zitat; Eingabefeld mit Seite | Zitat mit Quellenangabe (im Dokument als Zitations-Pille) |
 | Stories | Romanwelten, Figuren/Spezies/Orte/Events/Reasons/Purposes/Fakten | Text wird ein neues Element (erste Zeile = Name) | Name und Haupttext |
+| Notes | alle Notes (die des offenen Dokuments oben), ein Note zum Abhaken | Text wird ein neues Note (Überschrift = Titel, jede Listenzeile ein ToDo); auf ein offenes Note: ToDos ans Ende | das Note als Aufgabenliste (`- [ ]`) |
 
 Die **Suche** filtert in der Liste (Titel und Inhalt, mit Textausschnitt) und markiert im geöffneten Element die Treffer, mit Zähler und Pfeilen zum Springen. Jede Änderung aus dem Panel lässt sich unten mit **Rückgängig** zurücknehmen. Rechtsklick auf einen Block: Kopieren, **An der Schreibmarke einfügen**, Bearbeiten (Markdown), Löschen.
 
@@ -212,4 +234,4 @@ sequenceDiagram
 
 ## Bibliotheken
 
-Alles – Chats, Dokumente, Bilder, Personas, Gedächtnis, Skills, Zitate, Romanwelten, Einstellungen – liegt in einer **Bibliothek** (`Name.llmdlibrary`). Unten links wechselt man zwischen Bibliotheken; sie sehen nichts voneinander. Details: [Speicherformate](speicherformate.md).
+Alles – Chats, Dokumente, Bilder, Personas, Gedächtnis, Skills, Zitate, Romanwelten, Notes, Einstellungen – liegt in einer **Bibliothek** (`Name.llmdlibrary`). Unten links wechselt man zwischen Bibliotheken; sie sehen nichts voneinander. Details: [Speicherformate](speicherformate.md).

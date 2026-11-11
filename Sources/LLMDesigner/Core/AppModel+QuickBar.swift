@@ -210,6 +210,7 @@ enum QuickBarTools {
         ("presenter.core", ["präsentation", "folie", "vortrag", "slide", "deck", "presenter", "sprechernotiz"]),
         ("citation.core", ["quelle", "zitat", "literatur", "doi", "isbn", "arxiv", "studie", "beleg", "citation", "bibliograf", "zitier"]),
         ("stories.core", ["roman", "figur", "szene", "geschichte", "story", "stories", "kapitel", "akt ", "erzähl", "welt"]),
+        ("notes.core", ["todo", "to-do", "to do", "aufgabe", "notes", "note ", "erledig", "abhak", "checkliste", "fortschritt", "hak "]),
         ("chat.core", ["chat", "persona", "skill"]),
         ("chat.private", ["gedächtnis", "erinnerst", "erinnere dich", "persona-datei", "tagebuch"]),
     ]

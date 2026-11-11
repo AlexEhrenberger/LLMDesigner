@@ -95,6 +95,7 @@ struct ActionCatalogView: View {
         case "presenter": "Presenter Studio"
         case "citation": "Citation Studio"
         case "stories": "Stories Studio"
+        case "notes": "Notes"
         case "chat": "Chats"
         case "minichat": "Mini-Chat"
         case "persona": "Personas"
@@ -117,6 +118,7 @@ struct ActionCatalogView: View {
         case "presenter": StudioApplication.presenter.symbol
         case "citation": "quote.opening"
         case "stories": "book.closed"
+        case "notes": StudioApplication.notes.symbol
         case "chat", "minichat": "bubble.left.and.bubble.right"
         case "persona": Persona.symbol
         case "skill": Skill.defaultSymbol

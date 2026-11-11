@@ -73,7 +73,7 @@ struct DocumentPanel: View {
                     VStack(alignment: .leading, spacing: 0) {
                         switch app.documentPanelTab {
                         case .bookmarks: bookmarkList(bookmarks)
-                        case .contents, .sources, .comments:
+                        case .contents, .sources, .comments, .notes:
                             if mode == .headings { headingList } else { dynamicContents(isGenerating: isGenerating) }
                         }
                     }

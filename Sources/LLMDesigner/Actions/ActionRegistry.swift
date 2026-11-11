@@ -33,6 +33,7 @@ final class ActionRegistry {
         registry.registerPresenterActions()
         registry.registerCitationActions()
         registry.registerStoriesActions()
+        registry.registerNotesActions()
         registry.registerChatActions()
         return registry
     }

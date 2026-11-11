@@ -19,6 +19,8 @@ struct WriterScreen: View {
                     Group {
                         if app.power.isOn {
                             PowerPanel()
+                        } else if app.documentPanelTab == .notes {
+                            DocumentNotesPanel(document: document)
                         } else {
                             DocumentPanel(document: document, controller: controller, assistant: assistant)
                         }
@@ -33,6 +35,8 @@ struct WriterScreen: View {
                               edge: .trailing, width: app.rightPanelWidth) {
                     if app.power.isOn {
                         PowerPanel()
+                    } else if app.documentPanelTab == .notes {
+                        DocumentNotesPanel(document: document)
                     } else {
                         DocumentPanel(document: document, controller: controller, assistant: assistant)
                     }
@@ -365,7 +369,10 @@ private struct WriterTopBar: View {
             }
             // In the light design the sheet is always white.
             if colorScheme == .dark { PaperSwitch() }
-            if app.writerTab == .document { PowerButton() }
+            if app.writerTab == .document {
+                DocumentNotesButton(document: document)
+                PowerButton()
+            }
             if !app.isPanelDocked, app.writerTab == .document {
                 IconButton(systemName: "sidebar.right", help: "Inhaltsverzeichnis und Lesezeichen einblenden (⌥⌘I)", frameSize: Theme.titleBarControlSize) {
                     app.toggleOutlinePanel()

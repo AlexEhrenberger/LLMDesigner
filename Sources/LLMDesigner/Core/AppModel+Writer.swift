@@ -25,6 +25,7 @@ extension AppModel {
     var activeApplication: StudioApplication? {
         if citationStudioOpen { return .citation }
         if storiesStudioOpen { return .stories }
+        if notesStudioOpen { return .notes }
         guard let document = selectedDocument else { return nil }
         return document.isPresentation ? .presenter : .writer
     }
@@ -64,7 +65,7 @@ extension AppModel {
         case .citation: openCitationStudio()
         case .presenter: newPresentation()
         case .stories: openStoriesStudio()
-        case .notes: break
+        case .notes: openNotesStudio()
         }
     }
 
@@ -112,6 +113,7 @@ extension AppModel {
     func closeDocument() {
         if citationStudioOpen { closeCitationStudio() }
         if storiesStudioOpen { closeStoriesStudio() }
+        if notesStudioOpen { closeNotesStudio() }
         guard let id = selectedDocumentID else { return }
         // Dictation and reading belong to the open document.
         if dictationIntoDocument { Task { await stopDictation() } }

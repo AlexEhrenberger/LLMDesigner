@@ -32,12 +32,13 @@ enum StudioApplication: String, CaseIterable, Identifiable {
         switch self {
         case .writer: "Writer Studio – neues Dokument"
         case .presenter: "Presenter Studio – neue Präsentation"
+        case .notes: "Notes – ToDos und Fortschritt"
         default: title
         }
     }
 
-    /// Notes is not built yet.
-    var isAvailable: Bool { self != .notes }
+    /// Every application is built; the menus keep the check for the next one that is announced before it exists.
+    var isAvailable: Bool { true }
 
     var summary: String {
         switch self {
@@ -45,7 +46,7 @@ enum StudioApplication: String, CaseIterable, Identifiable {
         case .citation: "Quellen und Zitate sammeln"
         case .presenter: "Präsentationen entwerfen"
         case .stories: "Romane strukturieren und entwerfen"
-        case .notes: "Notizen sammeln und ordnen"
+        case .notes: "ToDos abhaken und Fortschritt sehen"
         }
     }
 }

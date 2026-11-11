@@ -373,6 +373,7 @@ extension AppModel {
         case "bookmarks": documentPanelTab = .bookmarks
         case "sources": documentPanelTab = .sources
         case "comments": documentPanelTab = .comments
+        case "notes": documentPanelTab = .notes
         default: throw RPCError.invalidParams("Diese Seitenleiste gibt es nicht.")
         }
         if power.isOn { togglePower() }
@@ -385,7 +386,7 @@ struct WriterViewPanelAction: LLMDAction {
     typealias Output = OKOutput
     static let descriptor = ActionDescriptor(
         id: "writer.view.panel", summary: "Zeigt eine Seitenleiste des offenen Dokuments", kind: .read, security: .plainRead,
-        input: .object(Args.docProperty.merging(["panel": .choice(["outline", "bookmarks", "sources", "comments", "analysis", "power"], "Die Seitenleiste")]) { _, new in new }, required: ["panel"]), output: .freeObject()
+        input: .object(Args.docProperty.merging(["panel": .choice(["outline", "bookmarks", "sources", "comments", "notes", "analysis", "power"], "Die Seitenleiste")]) { _, new in new }, required: ["panel"]), output: .freeObject()
     )
     static func run(_ args: Args, context: ActionContext) async throws -> Output {
         try context.app.showDocumentPanel(args.panel ?? "")

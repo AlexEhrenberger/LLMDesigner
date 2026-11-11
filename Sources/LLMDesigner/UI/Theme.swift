@@ -46,6 +46,8 @@ enum Theme {
     static let outlineWidth: CGFloat = 280
     /// The right-hand panel with the power access.
     static let powerWidth: CGFloat = 400
+    /// The right-hand panel with the notes of the open document: wide enough for a to-do with its buttons.
+    static let notesPanelWidth: CGFloat = 340
     static let contentWidth: CGFloat = 768
 
     /// Whether an appearance is a light one (`NSView.effectiveAppearance`, `NSAppearance.current`).

@@ -234,7 +234,7 @@ struct MCPAdapterTests {
         #expect(source["contents"]?.arrayValue?.first?["text"]?.stringValue?.contains("mueller2020") == true)
 
         let templates = try #require(adapter.handle(request("resources/templates/list")).first?.result)
-        #expect(templates["resourceTemplates"]?.arrayValue?.count == 4)
+        #expect(templates["resourceTemplates"]?.arrayValue?.count == 5)
     }
 
     @Test func aMissingResourceUsesTheSpecifiedError() {

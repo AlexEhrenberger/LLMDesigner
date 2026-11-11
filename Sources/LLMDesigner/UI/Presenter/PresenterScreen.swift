@@ -39,6 +39,8 @@ struct PresenterScreen: View {
                     Group {
                         if app.power.isOn {
                             PowerPanel()
+                        } else if app.documentPanelTab == .notes {
+                            DocumentNotesPanel(document: document)
                         } else {
                             PresenterPanel(document: document, deck: deck, currentSlideID: slide.id, controller: controller)
                         }
@@ -53,6 +55,8 @@ struct PresenterScreen: View {
                               edge: .trailing, width: app.rightPanelWidth) {
                     if app.power.isOn {
                         PowerPanel()
+                    } else if app.documentPanelTab == .notes {
+                        DocumentNotesPanel(document: document)
                     } else {
                         PresenterPanel(document: document, deck: deck, currentSlideID: slide.id, controller: controller)
                     }
@@ -377,7 +381,10 @@ private struct PresenterTopBar: View {
             }
             PresentButton(document: document)
                 .fixedSize()
-            if app.writerTab == .document { PowerButton() }
+            if app.writerTab == .document {
+                DocumentNotesButton(document: document)
+                PowerButton()
+            }
             if !app.isPanelDocked, app.writerTab == .document {
                 IconButton(systemName: "sidebar.right", help: "Inhalt, Lesezeichen und Quellen einblenden (⌥⌘I)", frameSize: Theme.titleBarControlSize) {
                     app.toggleOutlinePanel()

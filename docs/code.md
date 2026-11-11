@@ -36,8 +36,8 @@ flowchart LR
     S --> A["App/"]
     S --> C["Core/"]
     S --> U["UI/"]
-    C --> C1["Citations/ · Code/ · Math/<br/>Presenter/ · Speech/ · Stories/"]
-    U --> U1["Writer/ · Presenter/ · Citations/<br/>Stories/ · Power/"]
+    C --> C1["Citations/ · Code/ · Math/<br/>Presenter/ · Speech/ · Stories/ · Notes/"]
+    U --> U1["Writer/ · Presenter/ · Citations/<br/>Stories/ · Notes/ · Power/"]
 ```
 
 | Ort | Inhalt |
@@ -53,6 +53,7 @@ flowchart LR
 | `Core/Presenter/` | `Presentation.swift` (Deck, Folien, freie Elemente, Speicherformat), Designs, Player, Handout, KI-Prompts |
 | `Core/Citations/` | Modell, Bibliothek, Import (Crossref, DNB …), Dublettenprüfung, APA-Formatierer |
 | `Core/Stories/` | Romanwelten, Elemente, Zeitleisten |
+| `Core/Notes/`, `AppModel+Notes.swift` | `NoteModel` (Note, ToDo, Zugehörigkeit, Fortschritt, Baum-Operationen, Aufgabenliste ⇄ ToDos), `NoteLibrary` (Speichern, Entwürfe, Rückgängig); Öffnen, Zuordnen, Besitzernamen |
 | `Core/Math/`, `Core/Code/` | Formelbaum, Plots über Python, Code-Hervorhebung, Flussdiagramme |
 | `Core/Speech/` | Diktat, Vorlesen, Qwen TTS, Gesprächsmodus |
 | `Core/PowerText.swift`, `AppModel+Power.swift` | Power-Zugriff: Blöcke, Klartext, Änderungen mit Rückgängig |
@@ -62,7 +63,8 @@ flowchart LR
 | `UI/RootView.swift` | Seitenleisten, Arbeitsfläche, Einklappen bei schmalen Fenstern |
 | `UI/Writer/` | `WriterScreen`, `WriterEditor` (Representable + Controller), `WriterTextView+*` (Editor nach Themen), Sheets |
 | `UI/Presenter/` | `PresenterScreen`, `SlideImageEditor` (Bilder/Textfelder/Textbereich verschieben), `SlideViews`, `SlidePrinter` (PDF) |
-| `UI/Power/` | `PowerPanel` (Rahmen, Ziehen, gemeinsame Bausteine), `PowerModules` (die fünf Miniatur-Apps) |
+| `UI/Notes/` | `NotesStudioScreen`, `NoteEditor` (Kopf, ToDo-Zeilen, Auswahl von Dokumenten und Notes), `NoteLineEditor` (Zeile mit Outliner-Tasten), `NoteProgressArt` (zwölf Anzeigen, Auswahl, Konfetti), `NoteLinks` (Panel „Notes dieses Dokuments“, Knopf in der Titelleiste, Karte im Stories Studio) |
+| `UI/Power/` | `PowerPanel` (Rahmen, Ziehen, gemeinsame Bausteine), `PowerModules` (fünf Miniatur-Apps), `PowerNotes` (alle Notes) |
 | `UI/QuickBar/` | `QuickBarPanel` (Panel vor allen Apps, Controller), `QuickBarView` (Feld, Chat, Besen, `AuroraView` mit Core-Animation-Farbe); Zustand und Werkzeugwahl in `Core/AppModel+QuickBar.swift` |
 | `Tests/` | Swift-Testing-Suiten für Markdown, Layout, Tabellenformeln, Präsentationen, Power-Zugriff … |
 

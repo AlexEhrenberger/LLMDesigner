@@ -40,6 +40,9 @@ struct MenuBarMenu: View {
         Button("Stories Studio öffnen") {
             showMain { app.openStoriesStudio() }
         }
+        Button("Notes öffnen") {
+            showMain { app.openNotesStudio() }
+        }
         Divider()
         Button("Mini-Chat öffnen") {
             openMiniChat()

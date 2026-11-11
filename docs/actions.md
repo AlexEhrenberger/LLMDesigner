@@ -17,7 +17,7 @@ flowchart LR
     SRV --> REG["ActionRegistry<br/>Schema, Regel, Undo, Protokoll"]
     REG --> POL["ActionPolicy<br/>Rule of Two"]
     REG --> APP["ActionApproval<br/>Dialog"]
-    REG --> ACT["Actions<br/>Writer, Presenter, Citation, Stories, Chat"]
+    REG --> ACT["Actions<br/>Writer, Presenter, Citation, Stories, Notes, Chat"]
     ACT --> AM["AppModel und Bibliothek"]
 ```
 
@@ -95,6 +95,16 @@ flowchart TB
 
 Folien-Actions (`presenter.slide.add`, `setText`, `addFromText`, `field.addText`) messen den Text wie der Editor und liefern `fit`: `fits`, `overflowPercent`, `overflowingFields` und einen Hinweis. Mit `splitOverflow` wandert, was nicht passt, auf Folgefolien „(Forts.)“; `presenter.slide.split` tut das nachträglich, `presenter.slides.checkFit` prüft alle Folien. Hintergründe wählt man nach Namen (`design`) oder nur nach Helligkeit (`background: hell|dunkel`) in `presenter.deck.create`, `presenter.design.apply`, `presenter.ai.createDeck` und `presenter.fromDocument`; `presenter.designs.list` zeigt die Helligkeit jedes Designs. `presenter.slide.add --blank` legt eine leere Folie an, `presenter.slide.placeholder` blendet den Hinweis aus oder ein; `presenter.field.crop` beschneidet ein Bild (je Seite oder `--aspect 1:1`), `presenter.field.pictureStyle` gibt Rahmen und Schlagschatten. `presenter.ai.createDeck --with-notes --present` schreibt Folien und Karten und trägt danach selbst vor (fragt außerhalb der Oberfläche nach).
 
+## Notes
+
+Notes und ToDos werden über ihren Titel bzw. ihre Nummer in der Liste angesprochen (`--todo 2.1`, `--todo "Konzept/Zielgruppe"`). Ein Note gehört mit `--doc` zu einem Dokument oder mit `--world`/`--part` zu einer Romanwelt; `notes.note.list --doc Bachelorarbeit` zeigt genau dessen Notes. Katalog: [Notes-Actions](plan/Notes-Actions.md).
+
+```bash
+llmd notes note create --doc Bachelorarbeit --markdown $'- [ ] Einleitung\n- [ ] Methodik'
+llmd notes todo check --note Bachelorarbeit --todo 1
+llmd notes note progress --note Bachelorarbeit
+```
+
 ## MCP
 
 `llmd mcp` ist ein stdio-Server nach Spezifikation 2026-07-28 und versteht auch das ältere `initialize`.
@@ -106,16 +116,16 @@ claude mcp add llmd -- "/Pfad/LLM Designer.app/Contents/Helpers/llmd" mcp --prof
 | Profil | Inhalt |
 |---|---|
 | `core` | der kleine Satz zum Lesen, Schreiben, Präsentieren, Zitieren und Fragen |
-| `writer`, `presenter`, `citation`, `stories`, `chat` | ein Studio |
+| `writer`, `presenter`, `citation`, `stories`, `notes`, `chat` | ein Studio |
 | `full` | alles außer privaten Daten |
 
-Jedes Profil hat zusätzlich `llmd_search_actions` und `llmd_run_action`, damit kleine Modelle nicht alle Tools laden müssen. Dazu kommen Resources (`llmd://writer/doc/{id}`, `llmd://presenter/deck/{id}`, `llmd://citation/source/{key}`, `llmd://stories/world/{id}`), Prompts aus Skills und `subscriptions/listen`.
+Jedes Profil hat zusätzlich `llmd_search_actions` und `llmd_run_action`, damit kleine Modelle nicht alle Tools laden müssen. Dazu kommen Resources (`llmd://writer/doc/{id}`, `llmd://presenter/deck/{id}`, `llmd://citation/source/{key}`, `llmd://stories/world/{id}`, `llmd://notes/note/{id}`), Prompts aus Skills und `subscriptions/listen`.
 
 Der Kanal gilt immer als fremd. `memory.*` und `persona.files.*` sind gesperrt, Chats mit privaten Dateien ebenso. Eine Runde, die von hier ausgeht, läuft in einem Chat ohne dessen Werkzeuge.
 
 ## Werkzeuge im Chat
 
-Der Blitz im Eingabefeld schaltet Gruppen zu (Writer, Presenter, Citation, Stories, andere Chats, Gedächtnis) und stellt ein, wie viel ohne Rückfrage geht. Jede Gruppe enthält nur den Minimalsatz, weil ihre Schemas bei jeder Frage den Kontext belegen. Über `llmd` und die MCP-Profile der Studios sind alle Actions erreichbar. Jeder Schritt erscheint in der Antwort, und der Pfeil unter der Antwort nimmt alle ihre Änderungen zurück, solange die App läuft.
+Der Blitz im Eingabefeld schaltet Gruppen zu (Writer, Presenter, Citation, Stories, Notes, andere Chats, Gedächtnis) und stellt ein, wie viel ohne Rückfrage geht. Jede Gruppe enthält nur den Minimalsatz, weil ihre Schemas bei jeder Frage den Kontext belegen. Über `llmd` und die MCP-Profile der Studios sind alle Actions erreichbar. Jeder Schritt erscheint in der Antwort, und der Pfeil unter der Antwort nimmt alle ihre Änderungen zurück, solange die App läuft.
 
 Fremde Ergebnisse kommen in einem Rahmen mit zufälliger Kennung zum Modell. Das hilft dem Modell, schützt aber nicht: Geschützt wird durch die Registry. Ein Chat kann sich keine Nachrichten schicken und seine eigenen Freigaben nicht ändern.
 

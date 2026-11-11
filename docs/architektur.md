@@ -25,6 +25,7 @@ flowchart TB
         PS["Presenter/"]
         CI["Citations/"]
         ST["Stories/"]
+        NO["Notes/"]
         PW["Power/"]
     end
     subgraph Core["Core/ – Modell, Logik, Dienste"]
@@ -32,6 +33,7 @@ flowchart TB
         DOC["WriterDocument · PresentationDeck"]
         CL["CitationLibrary"]
         SL["StoryLibrary"]
+        NL["NoteLibrary"]
         TH["Thalamus"]
         LLM["LLMClient"]
         SP["Speech/"]
@@ -40,9 +42,9 @@ flowchart TB
     end
     LIB[("AppLibrary<br/>*.llmdlibrary")]
     LA --> LS --> AM
-    RV --> CS & WS & PS & CI & ST & PW
+    RV --> CS & WS & PS & CI & ST & NO & PW
     UI --> AM
-    AM --> DOC & CL & SL & TH & LLM & SP & MA
+    AM --> DOC & CL & SL & NL & TH & LLM & SP & MA
     STO --> LIB
     AM --> STO
 ```
@@ -50,6 +52,7 @@ flowchart TB
 - **`AppModel`** (`@Observable`, auf dem Main Actor) ist der zentrale Zustand: Chats, Dokumente, Auswahl, Verbindungen, laufende Aufgaben. Er ist in viele Dateien `AppModel+….swift` aufgeteilt – je eine pro Bereich (Writer, Presenter, Personas, Thalamus, Speech, Power …).
 - **`LibrarySession`** hält die geöffnete `AppLibrary` und baut beim Bibliothekswechsel einen neuen `AppModel`. Nichts Globales überlebt den Wechsel, außer der Liste der zuletzt geöffneten Bibliotheken.
 - Die **Studios** haben eigene Bibliotheken/Modelle: `CitationLibrary` (Quellen, Zitate, Ordner) und `StoryLibrary` (Romanwelten), beide `@Observable`, lazy geladen, mit verzögertem Speichern (500 ms). `StoryLibrary` hält getippten Text als Entwurf und übernimmt ihn nach 350 ms Pause; geschrieben wird auf einer eigenen Queue. Die Formularfelder des Stories Studio sind `StoryTextEditor` (AppKit-`NSTextView`) statt `TextField(axis: .vertical)`: Sie melden SwiftUI nur eine neue Höhe, nicht jeden Tastendruck – sonst richtete SwiftUI bei jeder Taste das ganze Fenster neu aus. Tab-Leisten (`StoryTabBar`) wählen ihre Kurzform rechnerisch aus der gemessenen Breite statt mit `ViewThatFits` und liegen nie in einer ScrollView.
+- **Notes** (`NoteLibrary`, `Notizen/<id>.json`) folgen demselben Muster: Entwürfe beim Tippen, Speichern nach 500 ms auf einer eigenen Queue. Sie werden beim Start gelesen, weil die Titelleisten von Writer und Presenter den Stand der Notes des offenen Dokuments zeigen. Änderungen aus der Oberfläche laufen über `NoteLibrary.change(_:_:undo:_:)`, das den Stand davor beim `UndoManager` des Fensters ablegt (⌘Z). ToDo-Zeilen sind `NoteLineEditor` (AppKit-`NSTextView`) mit Outliner-Tasten.
 - **UI-Ansichten** lesen den `AppModel` über die SwiftUI-Umgebung (`@Environment(AppModel.self)`).
 
 ## Darstellung: SwiftUI außen, AppKit innen
@@ -168,7 +171,7 @@ Terminal, MCP und Chat erreichen die App über dieselbe Registry, die Parameter 
 flowchart TB
     PA["PowerAccess (@Observable)<br/>isOn, module, query, offene Elemente, lastChange"]
     PP["PowerPanel"] --> PA
-    PP --> MOD["PowerChats · PowerDocuments · PowerPresentations<br/>PowerCitations · PowerStories"]
+    PP --> MOD["PowerChats · PowerDocuments · PowerPresentations<br/>PowerCitations · PowerStories · PowerNotes"]
     MOD --> PT["PowerText<br/>Blöcke, Klartext, Einfügen/Verschieben"]
     MOD --> AMP["AppModel+Power<br/>powerInsert, powerAppend, powerNewSlide,<br/>powerAddQuote, powerAddStoryElement"]
     MOD --> DS["PowerDragSource (AppKit)<br/>Writer-Markdown + Klartext + Herkunft"]
@@ -176,3 +179,17 @@ flowchart TB
 ```
 
 Das Ziehen nutzt eine **AppKit-Drag-Quelle** statt SwiftUIs `onDrag`: Nur so nehmen AppKit-Textansichten (Dokument, Folie, Chat-Eingabe) den Text an. Auf das Pasteboard kommen Writer-Markdown (die Editoren behalten Formatierung, Zitationen werden zu Pillen), Klartext für alle anderen und – bei Blöcken aus dem Panel – deren Herkunft, damit Ziehen innerhalb desselben Dokuments verschiebt statt kopiert.
+
+### Notes: eigene oder alle
+
+```mermaid
+flowchart LR
+    NL[("NoteLibrary<br/>alle Notes")]
+    NL -->|"gehoertZu = dieses Dokument"| DNP["DocumentNotesPanel<br/>Pin: Notes dieses Dokuments"]
+    NL -->|"gehoertZu = Welt/Teil"| SNC["StoryNotesCard<br/>im Teil"]
+    NL -->|"alle"| PN["PowerNotes<br/>Blitz: Alle Notes"]
+    NL -->|"alle, gruppiert"| NS["NotesStudioScreen"]
+    DNP & SNC & PN & NS --> NE["NoteEditor<br/>Kopf, Anzeige, ToDos, Notizen"]
+```
+
+Alle Orte benutzen denselben `NoteEditor`; sie unterscheiden sich nur darin, welche Notes sie zeigen und wie ihr Kopf aussieht. Die Zugehörigkeit steht im Note, nicht im Dokument: Ein Dokument, dessen Note gelöscht wird, ändert sich nicht, und ein gelöschtes Dokument hinterlässt im Note einen Hinweis statt eines Fehlers.

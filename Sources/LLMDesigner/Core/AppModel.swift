@@ -14,6 +14,8 @@ enum SidePanelTab: Hashable {
     case sources
     /// Writer Studio only: the comments on the document.
     case comments
+    /// Writer and Presenter Studio: the notes that belong to the open document (the power access has all notes).
+    case notes
 }
 
 /// What the sidebar lists, and with it what the main area shows: chats, the skill library or the personas.
@@ -452,6 +454,10 @@ final class AppModel {
     var storiesStudioOpen = false
     /// What an action wants Stories Studio to show; the open screen takes it over.
     var storiesStudioCommand: StoriesStudioCommand?
+    /// The Notes studio is shown in the main area.
+    var notesStudioOpen = false
+    /// What an action or another studio wants the Notes studio to show; the open screen takes it over.
+    var notesStudioCommand: NotesStudioCommand?
     /// An action wants the mini chat window open; the main window's view opens it.
     var miniChatOpenRequest: UUID?
     /// Writer Studio shows a white sheet instead of the dark one (the user's choice in the dark design).
@@ -511,6 +517,8 @@ final class AppModel {
     @ObservationIgnored let citations = CitationLibrary(store: .library())
     /// Stories Studio: the novel worlds of the library (read when first needed).
     @ObservationIgnored let stories = StoryLibrary(store: .library())
+    /// Notes: to-do lists with their progress, on their own or belonging to documents and novel worlds.
+    @ObservationIgnored let notes = NoteLibrary(store: .library())
     /// The instruction being written in Writer Studio's assistant bar.
     var writerInstruction = ""
     /// The assistant bar has the keyboard focus (⌘D then dictates into it).
@@ -614,6 +622,8 @@ final class AppModel {
         startPolling()
         setUpSpeechReader()
         removeUnusedAttachments()
+        // Notes are small and the title bars of documents show their rings, so they are read at once.
+        notes.loadIfNeeded()
     }
 
     // MARK: Closing
@@ -628,6 +638,7 @@ final class AppModel {
         imageGeneration.cancelAll()
         citations.saveAll()
         stories.saveAll()
+        notes.saveAll()
         writerFlush?()
         if skillSaveTask != nil { saveSkillLibrary() }
         savePendingPersonas()
