@@ -335,14 +335,16 @@ struct ProjectProgressStylePicker: View {
     var body: some View {
         let sample = NoteProgress(done: 5, total: 8)
         ScrollView {
-            LazyVGrid(columns: Array(repeating: GridItem(.fixed(118), spacing: 8), count: 4), spacing: 8) {
+            // Three flexible columns: the inspector popover is 400 pt wide, four fixed cards (496 pt) were cut off.
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
                 ForEach(ProjectProgressStyle.allCases) { style in
                     Button {
                         onPick(style)
                     } label: {
                         VStack(spacing: 4) {
                             ProjectProgressArt(style: style, progress: sample, project: project, accent: project.accent.color)
-                                .frame(width: 102, height: 58)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 58)
                                 .allowsHitTesting(false)
                             Text(style.title)
                                 .font(.system(size: 11.5, weight: .semibold))
@@ -354,7 +356,7 @@ struct ProjectProgressStylePicker: View {
                                 .minimumScaleFactor(0.8)
                         }
                         .padding(7)
-                        .frame(width: 118)
+                        .frame(maxWidth: .infinity)
                         .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(style == selection ? Theme.accent.opacity(0.12) : Theme.ink.opacity(0.03)))
                         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(style == selection ? Theme.accent : Theme.border, lineWidth: style == selection ? 1.5 : 1))
                         .contentShape(Rectangle())
