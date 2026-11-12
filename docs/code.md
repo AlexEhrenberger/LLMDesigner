@@ -36,8 +36,8 @@ flowchart LR
     S --> A["App/"]
     S --> C["Core/"]
     S --> U["UI/"]
-    C --> C1["Citations/ · Code/ · Math/<br/>Presenter/ · Speech/ · Stories/ · Notes/"]
-    U --> U1["Writer/ · Presenter/ · Citations/<br/>Stories/ · Notes/ · Power/"]
+    C --> C1["Citations/ · Code/ · Math/<br/>Presenter/ · Speech/ · Stories/ · Notes/ · Projects/ · Podcast/"]
+    U --> U1["Writer/ · Presenter/ · Citations/<br/>Stories/ · Notes/ · Projects/ · Podcast/<br/>Data/ · Research/ · Learning/ · Power/"]
 ```
 
 | Ort | Inhalt |
@@ -57,6 +57,13 @@ flowchart LR
 | `Core/Citations/` | Modell, Bibliothek, Import (Crossref, DNB …), Dublettenprüfung, APA-Formatierer |
 | `Core/Stories/` | Romanwelten, Elemente, Zeitleisten |
 | `Core/Notes/`, `AppModel+Notes.swift` | `NoteModel` (Note, ToDo, Zugehörigkeit, Fortschritt, Baum-Operationen, Aufgabenliste ⇄ ToDos), `NoteLibrary` (Speichern, Entwürfe, Rückgängig); Öffnen, Zuordnen, Besitzernamen |
+| `Core/Projects/`, `AppModel+Projects.swift` | `ProjectModel` (Projekt, Verweise, ToDo-Listen, Meilensteine, Spalten, Aufgaben mit Akzeptanzkriterien und Hindernissen, Verlauf, Tage), `ProjectBlock` (Bausteine, Raster, Textstil, Diagramm, Anzeigen), `ProjectEditing` (Fortschritt, Kennzahlen, Layout, Änderungen), `ProjectChartData` (Daten der Diagramme), `ProjectLibrary` (Speichern, Entwürfe, Rückgängig); Öffnen, Verknüpfen, Namen der Verweise |
+| `Core/Podcast/`, `AppModel+Podcast.swift` | `PodcastModel` (Podcast, Teilnehmer, Referenz, Zeile, Phase, Längen), `PodcastLibrary` (Ordner je Podcast, Schnipsel, Papierkorb), `PodcastPrompts` (Recherche, Gliederung, Skript, Besetzung; Zeilen „Name: Text“ lesen), `PodcastAudio` (Schnipsel und M4A zusammenfügen), `PodcastPlayer`; Warteschlange und Pipeline Recherche → Skript → Sprachaufnahme |
+| `Core/RecordStore.swift` | `RecordStore` (eine JSON-Datei je Eintrag, `{"format":1,"<wurzel>":…}`, als Datei oder Ordner) und `RecordLibrary` (im Speicher, Speichern nach 500 ms, Rückgängig) für die neueren Studios |
+| `Core/Data/`, `AppModel+Data.swift` | `DataModel` (Datenblock, Feld, Kürzel, `DataRef`/`DataTokens`/`DataResolver` für `{{…}}`), `DataTemplates` (Strukturen, Rollen, `SlideMaster`, Brief und Lebenslauf); `DataStudio` (Blöcke, Vorlagen, Logo), `DataFields` (Auflöser für die Ansichten), Umbenennen mit Umschreiben, Dokument/Präsentation aus Vorlage |
+| `Core/Research/`, `AppModel+Research.swift` | `ResearchModel` (Recherche, Fragenbaum, Quellen, Rückfrage, Bibliothek), `ScholarSearch` (arXiv, OpenAlex); Ablauf Orientierung → Rückfrage → Plan → Teilfragen → Lücken → Bericht, `ResearchPrompts` |
+| `Core/Learning/`, `AppModel+Learning.swift` | `LearningModel` (Disziplin, Kurs, Karte, Material, Abfrage, Pause, Einstellungen), `LearningScheduler` (FSRS 4.5, SM-2, Lernschritte), `LearningLibrary` (Warteschlange, Tagesgrenzen, Pausen, Statistik, Baumwachstum); Material, Lernzettel, Karten und Abfrage mit dem Modell, `LearningCardText` |
+| `Core/AppModel+StudioModel.swift` | Modellaufruf ohne Chat, PDF-Text, JSON aus Modellantworten (`StudioJSON`) |
 | `Core/Math/`, `Core/Code/` | Formelbaum, Plots über Python, Code-Hervorhebung, Flussdiagramme |
 | `Core/Speech/` | Diktat, Vorlesen, Qwen TTS, Gesprächsmodus |
 | `Core/PowerText.swift`, `AppModel+Power.swift` | Power-Zugriff: Blöcke, Klartext, Änderungen mit Rückgängig |
@@ -66,8 +73,16 @@ flowchart LR
 | `UI/RootView.swift` | Seitenleisten, Arbeitsfläche, Einklappen bei schmalen Fenstern |
 | `UI/Writer/` | `WriterScreen`, `WriterEditor` (Representable + Controller), `WriterTextView+*` (Editor nach Themen), Sheets |
 | `UI/Presenter/` | `PresenterScreen`, `SlideImageEditor` (Bilder/Textfelder/Textbereich verschieben), `SlideViews`, `SlidePrinter` (PDF) |
+| `UI/StudioChrome.swift` | Titelleiste, Tabs, Karten, Listenzeilen, leerer Zustand der neueren Studios |
+| `UI/Data/` | `DataStudioScreen` (Blöcke, Felder, Tabellenansicht, Kürzel), `DataTemplateViews` (Vorlagen, Masterfolie mit Vorschau, Erstellen-Blatt), `DataValueDisplay` (Werte in Textfeldern) |
+| `UI/Writer/WriterTextView+DataFields.swift` | Datenfeld als Textobjekt, Zelle, Auswahl (⌥⌘D, „/daten“) |
+| `UI/Presenter/SlideMasterViews.swift` | Logo, Kopf- und Fußzeile, Seitenzahl auf Folien (auch im PDF) |
+| `UI/Research/` | `ResearchStudioScreen`: Liste, Auftrag, Rückfrage, Fragenbaum, Quellen, Bericht |
+| `UI/Learning/` | `LearningStudioScreen` (Garten, Kurskarten, Einstellungen, Pause), `LearningTree` (Bäume, Himmel), `LearningCoursePage` (Übersicht, Karten, Verknüpft), `LearningSessionViews` (Lernsitzung, Material, Abfrage) |
 | `UI/Notes/` | `NotesStudioScreen`, `NoteEditor` (Kopf, ToDo-Zeilen, Auswahl von Dokumenten und Notes), `NoteLineEditor` (Zeile mit Outliner-Tasten), `NoteProgressArt` (zwölf Anzeigen, Auswahl, Konfetti), `NoteLinks` (Panel „Notes dieses Dokuments“, Knopf in der Titelleiste, Karte im Stories Studio) |
-| `UI/Power/` | `PowerPanel` (Rahmen, Ziehen, gemeinsame Bausteine), `PowerModules` (fünf Miniatur-Apps), `PowerNotes` (alle Notes) |
+| `UI/Projects/` | `ProjectScreen` (Titelleiste, Reiter, Kopf der Seite), `ProjectGrid` (Raster, Ziehen, Größe, Karte eines Bausteins), `ProjectBlockViews` (Inhalte der Bausteine), `ProjectChartViews` (Swift Charts, Ablauf), `ProjectProgressArt` (Anzeigen), `ProjectBlockInspector` (Gestalten), `ProjectBoard` (Kanban, Karte, Aufgaben-Panel), `ProjectMembership` (Zuordnen aus Writer, Presenter, Notes, Stories), `ProjectComponents` (Kacheln, Auswahl, Farben, Tage) |
+| `UI/Podcast/` | `PodcastStudioScreen` (Titelleiste, Übersicht), `PodcastPage` (Frage, Länge, Teilnehmer, Referenzen, Fortschritt, Player, Recherche, Skript), `PodcastComponents` (Ring in der Seitenleiste, Felder mit verzögertem Übernehmen, Referenz-Menü, Knopf „Podcast daraus erzeugen“) |
+| `UI/Power/` | `PowerPanel` (Rahmen, Ziehen, gemeinsame Bausteine), `PowerModules` (fünf Miniatur-Apps), `PowerNotes` (alle Notes), `PowerProjects` (Projekte), `PowerPodcasts` (Podcasts, Skriptzeilen zum Herausziehen), `PowerData` (Datenblöcke, Felder zum Hineinziehen), `PowerResearch` (Recherchen, Bericht zum Herausziehen), `PowerLearning` (Kurse, Lernsitzung im Panel) |
 | `UI/QuickBar/` | `QuickBarPanel` (Panel vor allen Apps, Controller), `QuickBarView` (Feld, Chat, Besen, `AuroraView` mit Core-Animation-Farbe); Zustand und Werkzeugwahl in `Core/AppModel+QuickBar.swift` |
 | `Tests/` | Swift-Testing-Suiten für Markdown, Layout, Tabellenformeln, Präsentationen, Power-Zugriff … |
 
@@ -126,4 +141,6 @@ classDiagram
 - **Drag & Drop**: SwiftUIs `onDrag` erreicht AppKit-Textansichten nicht zuverlässig; der Power-Zugriff benutzt `PowerDragSource` (AppKit).
 - **LM Studio** antwortet bei unbekanntem Modellnamen mit dem geladenen Modell – immer das `model`-Feld des Streams anzeigen.
 - **LaTeX liest Dateien**: Tectonic mit `--untrusted` sperrt nur Shell-Aufrufe. Alles, was roh an die Engine geht, muss durch `LaTeXSafety`; Text läuft durch `LaTeXWriter.escape`.
+- **Podcasts und Qwen TTS**: Tests erreichen den echten Dienst nie: `TestApp` setzt `podcastSpeechServer` auf einen toten Port, `FakeLLMServer` antwortet auch auf `/health` und `/v1/audio/speech` (mit einem Ton als WAV). Ein Podcast ändert beim Tippen sein ganzes Modell; Felder der Podcast-Seite sind deshalb `PodcastField` und übernehmen erst nach einer Pause. Beim Abspielen liest nur `PodcastPlayhead` die Position bei jedem Takt; das Skript hört auf `PodcastPlayer.currentLine`, das sich nur beim Zeilenwechsel ändert, und die Zeilen sind `Equatable`.
+- **`llmd` startet die App selbst**, wenn es sie nicht erreicht, und gibt dabei nur seine eigenen `LLMD_*`-Variablen weiter. Bei Probeläufen mit einer Test-Kopie deshalb `LLMD_TEST_LIBRARY` auch beim `llmd`-Aufruf setzen, sonst legt die nachgestartete App eine neue Bibliothek in `~/Documents/LLM Designer` an.
 - **Qwen-Image** malt jedes Wort über Schrift ins Bild, auch verneint: Hintergrund-Prompts filtern solche Wörter.

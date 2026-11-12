@@ -70,6 +70,9 @@ extension AppModel {
             for document in documents where document.folderID == id {
                 if includingContents { deleteDocument(document.id) } else { moveDocument(document.id, to: keepIn) }
             }
+            for podcast in podcasts.podcasts where podcast.folderID == id {
+                if includingContents { deletePodcast(podcast.id) } else { movePodcast(podcast.id, to: keepIn) }
+            }
             for child in chatFolders where child.parentID == id {
                 if includingContents {
                     deleteFolder(child.id, includingContents: true)
@@ -124,7 +127,7 @@ extension AppModel {
     /// Top-level folders carry their subfolders as `children`.
     var chatFolderSections: [FolderSection<SidebarEntry>] {
         let query = chatSearchQuery
-        let all = (chats.map(SidebarEntry.chat) + documents.map(SidebarEntry.document)).sorted { $0.updatedAt > $1.updatedAt }
+        let all = (chats.map(SidebarEntry.chat) + documents.map(SidebarEntry.document) + podcasts.podcasts.map(SidebarEntry.podcast)).sorted { $0.updatedAt > $1.updatedAt }
         let hits = sidebarEntries
         let topIDs = Set(chatFolders.filter { $0.parentID == nil }.map(\.id))
         func section(_ folder: Folder, children: [FolderSection<SidebarEntry>]) -> FolderSection<SidebarEntry>? {

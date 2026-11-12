@@ -21,7 +21,12 @@ enum TestApp {
     }
 
     /// One model per run: it loads and starts background work once, as in the app.
-    private static let shared = AppModel()
+    private static let shared: AppModel = {
+        let app = AppModel()
+        // No test reaches the real Qwen TTS service; those that speak put a stand-in here.
+        app.podcastSpeechServer = URL(string: "http://127.0.0.1:9")!
+        return app
+    }()
 }
 
 /// Everything that works on the shared model runs one after the other: its settings, endpoint and registry are shared,

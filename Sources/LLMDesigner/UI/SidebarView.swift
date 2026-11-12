@@ -140,7 +140,9 @@ private struct ChatList: View {
     @Environment(\.openWindow) private var openWindow
     @State private var pendingDelete: Chat?
     @State private var pendingDocumentDelete: WriterDocument?
+    @State private var pendingPodcastDelete: Podcast?
     @State private var pendingFolderDelete: Folder?
+    @Environment(\.undoManager) private var undoManager
 
     var body: some View {
         let sections = app.chatFolderSections
@@ -151,6 +153,7 @@ private struct ChatList: View {
 
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 1) {
+                ProjectSidebarSection()
                 if !sections.isEmpty {
                     SectionHeader(title: "Ordner")
                     ForEach(sections) { section in
@@ -194,7 +197,7 @@ private struct ChatList: View {
             return !ids.isEmpty || !folders.isEmpty
         }
         .overlay {
-            if sections.isEmpty && groups.isEmpty && stacks.isEmpty {
+            if sections.isEmpty && groups.isEmpty && stacks.isEmpty && app.projects.projects.isEmpty {
                 Text(searching ? "Keine Treffer" : "Noch keine Chats")
                     .font(.system(size: 12.5))
                     .foregroundStyle(Theme.textTertiary)
@@ -213,6 +216,12 @@ private struct ChatList: View {
         } message: { document in
             Text("„\(document.displayTitle)“ wird dauerhaft gelöscht.")
         }
+        .alert("Podcast löschen?", isPresented: isPresent($pendingPodcastDelete), presenting: pendingPodcastDelete) { podcast in
+            Button("Löschen", role: .destructive) { app.deletePodcast(podcast.id, undo: undoManager) }
+            Button("Abbrechen", role: .cancel) {}
+        } message: { podcast in
+            Text("„\(podcast.displayTitle)“ kommt mit seiner Audiodatei in den Papierkorb.")
+        }
         .confirmationDialog(
             "Ordner „\(pendingFolderDelete?.name ?? "")“ löschen?",
             isPresented: isPresent($pendingFolderDelete),
@@ -224,10 +233,12 @@ private struct ChatList: View {
         } message: { folder in
             let chats = app.chats.filter { $0.folderID == folder.id }.count
             let documents = app.documents.filter { $0.folderID == folder.id }.count
+            let podcasts = app.podcasts.podcasts.filter { $0.folderID == folder.id }.count
             let subfolders = app.subfolders(of: folder.id).count
             let parts = [
                 chats > 0 ? "\(chats) \(chats == 1 ? "Chat" : "Chats")" : nil,
                 documents > 0 ? "\(documents) \(documents == 1 ? "Dokument" : "Dokumente")" : nil,
+                podcasts > 0 ? "\(podcasts) \(podcasts == 1 ? "Podcast" : "Podcasts")" : nil,
                 subfolders > 0 ? "\(subfolders) \(subfolders == 1 ? "Unterordner" : "Unterordner")" : nil,
             ].compactMap { $0 }
             let kept = folder.parentID != nil ? "Behaltenes kommt in den übergeordneten Ordner." : "Behaltenes erscheint wieder in der Liste, Unterordner werden zu Ordnern."
@@ -299,7 +310,51 @@ private struct ChatList: View {
         switch entry {
         case .chat(let chat): row(for: chat, in: folder, indent: indent ?? self.indent(in: folder))
         case .document(let document): row(for: document, in: folder, indent: indent ?? self.indent(in: folder))
+        case .podcast(let podcast): row(for: podcast, in: folder, indent: indent ?? self.indent(in: folder))
         }
+    }
+
+    private func row(for podcast: Podcast, in folder: Folder?, indent: CGFloat) -> some View {
+        SidebarRow(
+            id: podcast.id,
+            title: podcast.displayTitle,
+            isSelected: app.podcastStudioOpen && app.selectedPodcastID == podcast.id,
+            indent: indent,
+            dragPayload: SidebarDrag.payload(SidebarDrag.chat, podcast.id),
+            onSelect: { app.selectPodcast(podcast.id) },
+            onRename: { app.renamePodcast(podcast.id, to: $0) },
+            leading: {
+                Image(systemName: StudioApplication.podcast.symbol)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(folder?.color?.color ?? Theme.accent.opacity(0.85))
+                    .frame(width: 18)
+                    .help("Podcast (PodcastStudio)")
+            },
+            trailing: { PodcastStatusBadge(podcast: podcast, progress: app.podcastProgress[podcast.id]) },
+            menu: {
+                if podcast.phase.isRunning {
+                    Button("Anhalten", systemImage: "stop.circle") { app.stopPodcast(podcast.id) }
+                } else if podcast.startProblem == nil, !app.isPodcastAudioCurrent(podcast) {
+                    Button(podcast.script.isEmpty ? "Erzeugen" : "Fortsetzen", systemImage: "play.circle") { app.startPodcast(podcast.id) }
+                }
+                if app.podcastAudioURL(podcast.id) != nil {
+                    Button("Audio exportieren …", systemImage: "square.and.arrow.up") { app.exportPodcastWithPanel(podcast.id) }
+                }
+                if !podcast.script.isEmpty {
+                    Button("Als Writer-Dokument", systemImage: StudioApplication.writer.symbol) { app.openPodcastAsDocument(podcast.id) }
+                }
+                Divider()
+                Button("Umbenennen", systemImage: "pencil") { app.renamingID = podcast.id }
+                MoveToFolderMenu(
+                    folders: app.chatFolders,
+                    current: podcast.folderID,
+                    onMove: { app.movePodcast(podcast.id, to: $0) },
+                    onNewFolder: { app.movePodcastToNewFolder(podcast.id) }
+                )
+                Divider()
+                Button("Löschen", systemImage: "trash", role: .destructive) { pendingPodcastDelete = podcast }
+            }
+        )
     }
 
     private func row(for document: WriterDocument, in folder: Folder?, indent: CGFloat) -> some View {
@@ -371,6 +426,7 @@ private struct ChatList: View {
             },
             menu: {
                 Button("Im Mini-Chat öffnen", systemImage: "pip.enter") { OpenInMiniChat(app: app, openWindow: openWindow)(chat.id) }
+                Button("Podcast daraus erzeugen", systemImage: StudioApplication.podcast.symbol) { app.newPodcast(about: .chat(chat.id)) }
                 Divider()
                 Button("Umbenennen", systemImage: "pencil") { app.renamingID = chat.id }
                 if chat.isTitleCustom {
@@ -1219,5 +1275,159 @@ private struct SidebarFooter: View {
         case .failed(let message):
             return message
         }
+    }
+}
+
+// MARK: Projects
+
+/// The category "Projekte" above the folders: every project page with its own symbol and colour. A chat or document
+/// dragged onto a project is linked to it; it stays where it is in the list.
+private struct ProjectSidebarSection: View {
+    @Environment(AppModel.self) private var app
+    @State private var pendingDelete: Project?
+
+    var body: some View {
+        let query = app.chatSearchQuery
+        let projects = app.projects.projects.filter { $0.matches(query) }
+        let collapsed = app.projectsSectionCollapsed && query.isEmpty
+        if !app.projects.projects.isEmpty || query.isEmpty {
+            HStack(spacing: 6) {
+                Button {
+                    withAnimation(.snappy(duration: 0.2)) { app.projectsSectionCollapsed.toggle() }
+                } label: {
+                    HStack(spacing: 5) {
+                        Text("Projekte")
+                            .font(.system(size: 11.5, weight: .semibold))
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 8.5, weight: .bold))
+                            .rotationEffect(.degrees(collapsed ? 0 : 90))
+                        if collapsed, !projects.isEmpty {
+                            Text("\(projects.count)")
+                                .font(.system(size: 10.5, weight: .semibold).monospacedDigit())
+                        }
+                    }
+                    .foregroundStyle(Theme.textTertiary)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(collapsed ? "Projekte zeigen" : "Projekte einklappen")
+                Spacer(minLength: 0)
+                IconButton(systemName: "plus", help: "Neues Projekt", size: 11, frameSize: 20) {
+                    app.searchText = ""
+                    app.newProject()
+                }
+            }
+            .padding(.leading, 10)
+            .padding(.trailing, 4)
+            .padding(.top, 8)
+            .padding(.bottom, 2)
+            if !collapsed {
+                ForEach(projects) { project in
+                    ProjectSidebarRow(project: project) { pendingDelete = project }
+                }
+                if projects.isEmpty && query.isEmpty {
+                    Button {
+                        app.newProject()
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: Project.sidebarSymbol)
+                                .font(.system(size: 12))
+                                .frame(width: 18)
+                            Text("Neues Projekt anlegen")
+                                .font(.system(size: 12.5))
+                            Spacer(minLength: 0)
+                        }
+                        .foregroundStyle(Theme.textTertiary)
+                        .padding(.horizontal, 10)
+                        .frame(height: 30)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(StoryRowButtonStyle())
+                }
+            }
+        }
+        EmptyView()
+            .alert("Projekt löschen?", isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }), presenting: pendingDelete) { project in
+                Button("Löschen", role: .destructive) {
+                    if app.openProjectID == project.id { app.closeProject() }
+                    app.projects.deleteProject(project.id)
+                }
+                Button("Abbrechen", role: .cancel) {}
+            } message: { project in
+                Text("„\(project.displayTitle)“ kommt in den Papierkorb. Verknüpfte Chats, Dokumente, Notes und Romanwelten bleiben, wie sie sind.")
+            }
+    }
+}
+
+private struct ProjectSidebarRow: View {
+    @Environment(AppModel.self) private var app
+    @Environment(\.undoManager) private var undoManager
+    let project: Project
+    let onDelete: () -> Void
+    @State private var targeted = false
+
+    var body: some View {
+        let progress = project.overallProgress
+        SidebarRow(
+            id: project.id,
+            title: project.displayTitle,
+            isSelected: app.openProjectID == project.id,
+            indent: 0,
+            dragPayload: nil,
+            onSelect: { app.openProject(project.id) },
+            onRename: { title in
+                let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !title.isEmpty else { return }
+                app.projects.change(project.id, "Projekt umbenennen", undo: undoManager) { $0.title = title }
+            },
+            leading: {
+                ProjectBadge(project: project, size: 18)
+                    .opacity(project.status == .done ? 0.55 : 1)
+                    .help("Projekt (\(project.status.title))")
+            },
+            trailing: {
+                if progress.total > 0 {
+                    NoteMiniRing(progress: progress, size: 14)
+                        .help("\(progress.percent) % – \(progress.label)")
+                }
+            },
+            menu: {
+                Button("Projektseite öffnen", systemImage: ProjectTab.page.symbol) { app.openProject(project.id, tab: .page) }
+                Button("Aufgaben öffnen", systemImage: ProjectTab.board.symbol) { app.openProject(project.id, tab: .board) }
+                Divider()
+                Button("Umbenennen", systemImage: "pencil") { app.renamingID = project.id }
+                Menu("Status", systemImage: project.status.symbol) {
+                    ForEach(ProjectStatus.allCases) { status in
+                        Button(status.title, systemImage: status.symbol) {
+                            app.projects.change(project.id, "Status ändern", undo: undoManager) { $0.status = status }
+                        }
+                    }
+                }
+                Menu("Farbe", systemImage: "paintpalette") {
+                    ForEach(FolderColor.allCases, id: \.self) { color in
+                        Button { app.projects.change(project.id, "Farbe ändern", undo: undoManager) { $0.color = color } } label: {
+                            Label { Text(color.name) } icon: { Image(nsImage: color.swatch) }
+                        }
+                    }
+                }
+                Divider()
+                Button("Löschen …", systemImage: "trash", role: .destructive, action: onDelete)
+            }
+        )
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(targeted ? project.color.color : .clear, lineWidth: 1.5))
+        .dropDestination(for: String.self) { items, _ in
+            let ids = SidebarDrag.ids(in: items, prefix: SidebarDrag.chat)
+            let refs: [ProjectRef] = ids.compactMap { id in
+                if app.document(id) != nil { return .document(id) }
+                if app.chat(id) != nil { return .chat(id) }
+                return nil
+            }
+            guard !refs.isEmpty else { return false }
+            app.projects.change(project.id, "Mit Projekt verknüpfen", undo: undoManager) { project in
+                for ref in refs where !project.links.contains(ref) { project.links.append(ref) }
+            }
+            return true
+        } isTargeted: { targeted = $0 }
+        .help("Chats und Dokumente hierher ziehen, um sie mit dem Projekt zu verknüpfen")
     }
 }

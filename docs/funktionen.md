@@ -7,12 +7,12 @@ mermaid: true
 
 [← Übersicht](index.md) · [Architektur](architektur.md) · [Code-Führer](code.md) · [Speicherformate](speicherformate.md)
 
-Das Fenster hat drei Bereiche: links die **Seitenleiste** (Chats, Dokumente, Präsentationen in Ordnern; Skills; Personas), in der Mitte die **Arbeitsfläche** (Chat oder eine der Anwendungen), rechts ein **Panel** (Inhaltsverzeichnis, Lesezeichen, Quellen – oder der Power-Zugriff). Wird das Fenster schmal, klappen die Seitenleisten weg und legen sich bei Bedarf über den Inhalt.
+Das Fenster hat drei Bereiche: links die **Seitenleiste** (Chats, Dokumente, Präsentationen, Podcasts in Ordnern; Skills; Personas), in der Mitte die **Arbeitsfläche** (Chat oder eine der Anwendungen), rechts ein **Panel** (Inhaltsverzeichnis, Lesezeichen, Quellen – oder der Power-Zugriff). Wird das Fenster schmal, klappen die Seitenleisten weg und legen sich bei Bedarf über den Inhalt.
 
 ```mermaid
 flowchart LR
     subgraph Links["Seitenleiste"]
-        C["Chats · Dokumente · Präsentationen"]
+        C["Chats · Dokumente · Präsentationen · Podcasts"]
         S["Skills"]
         P["Personas"]
     end
@@ -23,19 +23,21 @@ flowchart LR
         CI["Citation Studio"]
         ST["Stories Studio"]
         NO["Notes"]
+        PJ["Projekte"]
+        PO["PodcastStudio"]
     end
     subgraph Rechts["Panel"]
         O["Inhalt · Lesezeichen · Quellen"]
         DN["Notes dieses Dokuments"]
         PW["Power-Zugriff"]
     end
-    C --> CH & W & PR
+    C --> CH & W & PR & PO
     Mitte <-->|"Text ziehen"| PW
 ```
 
 ## Neu anlegen
 
-Das Stift-Symbol oben in der Seitenleiste (und in den Titelleisten, wenn die Seitenleiste zu ist) öffnet ein Menü: **Neuer Chat** und alle Applikationen – Writer Studio (neues Dokument), Citation Studio, Presenter Studio (neue Präsentation), Stories Studio und Notes. Darunter „Präsentation aus Dokument …“.
+Das Stift-Symbol oben in der Seitenleiste (und in den Titelleisten, wenn die Seitenleiste zu ist) öffnet ein Menü: **Neuer Chat** und alle Applikationen – Writer Studio (neues Dokument), Citation Studio, Presenter Studio (neue Präsentation), Stories Studio, Notes, PodcastStudio (neuer Podcast) und Projekt (neue Projektseite). Darunter „Präsentation aus Dokument …“.
 
 **Ordner** haben eine zweite Ebene: „Neuer Unterordner“ im Menü eines Ordners, oder einen Ordner auf einen anderen ziehen. Ein Unterordner, der nach draußen gezogen wird, kommt wieder nach oben. Löscht man einen Unterordner und behält den Inhalt, wandert er in den Ordner darüber.
 
@@ -198,6 +200,88 @@ Ein **Note** ist eine ToDo-Liste mit Titel, einer Fortschrittsanzeige und freiem
 
 Ein Note gehört dem Dokument, in dessen Panel es angelegt wurde; „Vorhandenes Note verknüpfen“ ordnet ein bestehendes zu, das Pin-Symbol mit Strich löst es wieder. Im Studio zeigt „Gehört zu“ alle Zuordnungen.
 
+## Projekte
+
+Ein **Projekt** ist ein Dashboard für ein Vorhaben: Es verknüpft Chats, Dokumente, Präsentationen, Notes und Romanwelten (auch einzelne Teile und Figuren, Orte …), ohne sie zu verschieben. In der Seitenleiste steht über den Ordnern die Kategorie **Projekte** mit jedem Projekt, seinem eigenen Symbol in seiner Farbe und einem kleinen Fortschrittsring. Ein Chat oder Dokument, das man aus der Liste auf ein Projekt zieht, wird verknüpft und bleibt an seinem Platz. Ein neues Projekt (Plus in der Kategorie, Neu-Menü) beginnt mit einer Startseite.
+
+Das Projekt hat zwei Reiter:
+
+**Projektseite.** Kopf mit Symbol, Titel und Untertitel in der Schrift der Seite, Status, nächstem Meilenstein und Gesamtfortschritt. Darunter **Bausteine auf einem Raster mit 12 Spalten**. Unter „Gestalten“ fügt man Bausteine hinzu, zieht sie am Griff an einen anderen Platz und an der Ecke größer oder kleiner; was im Weg ist, rückt nach unten, und nichts überlappt. In schmalen Fenstern stehen die Bausteine untereinander. Die Seite hat eine Schrift, eine Akzentfarbe und einen Hintergrund (Schlicht, Papier, Farbverlauf, Punktraster, Blaupause); jeder Text-Baustein hat eigene Schrift, Größe, Farbe, fett, kursiv und Ausrichtung.
+
+| Baustein | Zeigt |
+|---|---|
+| Text | Überschrift oder Absatz, frei formatiert |
+| Fortschritt | Aufgaben, Akzeptanzkriterien, ToDos, Meilensteine oder alles zusammen als Bild: die zwölf Anzeigen von Notes und vier eigene – **Reise** (ein Weg durch die Meilensteine), **Sternbild** (jede Aufgabe ein Stern, erledigte leuchten und verbinden sich), **Sanduhr**, **Skyline** (die Fenster einer Stadt gehen an) |
+| ToDo-Liste | eine der ToDo-Listen des Projekts (unabhängig von Notes), mit Fälligkeit und Verknüpfung je ToDo |
+| Meilensteine | Termine auf einer Zeitleiste mit „heute“; ein Klick bearbeitet, hakt ab, färbt |
+| Diagramm | **Gantt** (Aufgaben mit Terminen und Meilensteine, Abschnitte zwischen Meilensteinen oder eigene Zeilen), **Kreis** und **Balken** (Aufgaben je Spalte, Priorität, Etikett, ToDos offen/erledigt oder eigene Werte), **Verlauf** (Erledigtes gegen alles, Tag für Tag), **Ablauf** (die Spalten des Boards als Fluss oder eigene Schritte mit Entscheidungen) |
+| Verknüpfungen | alles Verknüpfte als Kacheln; ein Klick öffnet, Gelöschtes ist markiert |
+| Kennzahl | eine große Zahl: offene Aufgaben, erledigte, mit Hindernis, ToDos, Meilensteine, Tage bis zum nächsten Meilenstein oder eine eigene |
+| Countdown | Tage bis zum nächsten Meilenstein oder einem Datum, im Ring |
+| Haftnotiz | ein farbiger Zettel in Handschrift |
+| Hindernisse | was die Aufgaben aufhält, mit Lösung; ein Klick hakt ab |
+| Aufgaben-Überblick | die Spalten des Boards in klein |
+
+**Aufgaben.** Ein **Kanban-Board** mit eigenen Spalten (anlegen, umbenennen, färben, verschieben, löschen; „gilt als erledigt“; WIP-Limit, das rot wird, wenn es überschritten ist). Karten zieht man zwischen und innerhalb der Spalten. Eine Karte zeigt Etiketten, Priorität, Fälligkeit, erfüllte Akzeptanzkriterien und Hindernisse. Ein Klick öffnet sie rechts: Titel, Spalte, Priorität, Start und Fälligkeit, Etiketten, Beschreibung, **Akzeptanzkriterien** („Woran erkennst du, dass die Aufgabe abgenommen werden kann?“, abhakbar), **Hindernisse** („Gibt es Hürden, und wie lassen sie sich beheben?“, mit Lösung, als behoben markierbar) und Verknüpfungen zu Chats, Dokumenten, Präsentationen, Notes und Stories-Elementen. Sind alle Kriterien erfüllt, bietet die Karte **„Abnehmen“** an und schiebt sie in die erledigte Spalte.
+
+**Zuordnen aus den Studios.** Writer und Presenter haben in der Titelleiste das Projekt-Symbol (mit der Zahl der Projekte): Dort ordnet man das Dokument einem Projekt oder einer Aufgabe zu, legt eine neue Aufgabe dafür an oder ein neues Projekt damit. Dasselbe gibt es in Notes für das offene Note und im Stories Studio als Karte „Projekte“ bei der Welt, jedem Teil und jedem Element.
+
+Alles lässt sich mit ⌘Z zurücknehmen. Projekte erreicht man auch im Power-Zugriff und über Actions.
+
+## PodcastStudio
+
+Ein **Podcast** ist ein Gespräch über eine Frage („Was ist Predictive Coding, und ist das ein zeitgemäßes Paradigma?“), 5, 10 oder 15 Minuten lang. Das Modell recherchiert, schreibt das Gespräch, und Qwen TTS spricht es mit einer Stimme je Person; heraus kommt eine M4A-Datei zum Anhören in der App oder zum Exportieren.
+
+- **Teilnehmer**: eine Moderation und Diskutant:innen, jede Person mit Namen (die anderen sprechen sie damit an), Beschreibung (Biologin, Physiker, Taxifahrer …), Stimme aus der Liste von Qwen TTS und Standpunkt. „KI schlägt vor“ leitet eine Runde mit unterschiedlichen Standpunkten aus der Frage ab.
+- **Referenzen**: Chats, Dokumente, Präsentationen, Romanwelten oder ihre Teile, auf die sich das Gespräch stützt. Writer, Presenter und Stories Studio haben dafür einen Knopf „Podcast daraus erzeugen“ in der Titelleiste (Stories: der offene Teil oder die ganze Welt), Chats einen Eintrag im Menü der Seitenleiste.
+- **Erzeugen** läuft im Hintergrund: erst die **Recherche** (das Modell schlägt mit Denkmodus mehrmals in Wikipedia und im Web nach und schreibt ein Faktenblatt mit Quellen), dann **Gliederung und Skript** passend zur Länge (etwa 140 Wörter pro Minute), dann die **Sprachaufnahme** Zeile für Zeile. Es läuft immer ein Podcast; weitere warten. Jeder Podcast steht mit eigenem Symbol in der Seitenleiste, mit einem Ring für den Fortschritt, einer Uhr, wenn er wartet, und seiner Länge, wenn er fertig ist.
+- **Anhören**: Abspielen, 15 Sekunden vor und zurück, Tempo; das Skript zeigt die laufende Zeile und läuft mit („Mitlaufen“ lässt sich ausschalten), ein Klick auf eine Zeit springt dorthin. **Exportieren …** speichert die M4A-Datei.
+- **Nacharbeiten**: Ein Doppelklick bearbeitet eine Zeile, das Menü daneben gibt sie einer anderen Person oder löscht sie. „Audio aktualisieren“ spricht nur die geänderten Zeilen neu. „Neu erzeugen“ bietet alles neu, ein neues Skript auf derselben Recherche oder alle Zeilen neu gesprochen.
+- **Sprachmodell**: Vorgabe ist das kleine Qwen-TTS-Modell; das große klingt natürlicher, erzeugte aber in längeren Aufnahmen gelegentlich Rauschen.
+- **Denkmodus**: an (Vorgabe) denkt das Modell vor Recherche, Gliederung und Skript nach – gründlicher, aber langsamer. Aus geht es mit Kapitsa und Gemma; Qwen in LM Studio denkt immer.
+- **Ton**: ein Regler in fünf Stufen von *sachlich* über *lebhaft*, *kontrovers* und *polemisch* bis *hitzig*. Hitzig klingt wie die Fernsehdebatten der 70er und 80er (etwa Alice Schwarzer gegen Esther Vilar): Man fällt sich ins Wort, wird persönlich, beschimpft und beleidigt sich, die Moderation schlichtet vergeblich. Die Beleidigungen gelten der Person, nicht Gruppen; Drohungen gibt es keine.
+- **Eigene Quellen**: Webadressen und PDFs (das PDF wird in den Podcast kopiert). Das Modell liest sie zuerst; mit **„Nur aus diesen Quellen“** sucht es gar nicht im Web oder in Wikipedia, und Faktenblatt und Gespräch halten sich allein an sie.
+- **Als Writer-Dokument** (über dem Skript und im Menü der Seitenleiste): ein neues Dokument mit Frage, Teilnehmern, dem Gespräch Zeile für Zeile, Faktenblatt und Quellen, im Ordner des Podcasts.
+
+## Data Studio
+
+**Datenblöcke** sammeln Angaben unter einem Namen, den man selbst wählt: „Absender“, „User 1“, „Finanzamt“, „Bank“. Jeder Block hat ein **Kürzel** (`absender`) und Felder mit eigenem Kürzel (`strasse`), Namen, Art (Text, mehrzeilig, Datum, Zahl, E-Mail, Telefon, Link) und Wert. Neue Blöcke beginnen mit den Feldern einer **Struktur** (Person, Firma/Behörde, Anschrift, Kontakt, Bankverbindung, frei); Felder kommen per „+ Feld“ dazu, lassen sich umbenennen, umsortieren (ziehen) und löschen. Die **Tabellenansicht** zeigt alle Blöcke einer Gruppe als Zeilen und ihre Felder als Spalten – wie eine kleine Datenbank.
+
+- **Platzhalter**: `{{absender.strasse}}` setzt ein Feld ein, `{{absender}}` den ganzen Block in seiner **Darstellung** (`{vorname} {nachname}\n{strasse}\n{plz} {ort}`; leere Zeilen fallen weg), `{{heute}}` das Datum („12. November 2026“; `{{heute.kurz}}`, `{{heute.iso}}`, `{{heute.jahr}}`).
+- **Writer und Presenter** zeigen ein Feld als Objekt mit dem aktuellen Wert (gepunktet unterstrichen); gespeichert wird der Platzhalter. Einsetzen mit **⌥⌘D**, „/daten“ oder dem Kontextmenü; Doppelklick wählt ein anderes Feld, das Kontextmenü zeigt den Block in Data Studio oder setzt den Wert als festen Text ein. Ändert man den Block, ändert sich jedes Dokument sofort mit. Export, Druck und Markdown setzen die Werte ein.
+- **Notes, Projektseiten und Stories** zeigen in ihren Textfeldern die Werte, solange man nicht darin tippt; ein Klick bringt die Platzhalter zurück, an derselben Stelle.
+- **Kürzel ändern** schreibt auf Wunsch alle Dokumente, Präsentationen, Notes, Projekte und Vorlagen mit um. „Verwendet in“ zeigt, wo ein Block steht.
+- **Vorlagen**: mitgeliefert sind **Brief (DIN 5008)** (Absender, Rücksendeangabe, Anschriftfeld, Datum rechts, Betreff, Gruß) und **Lebenslauf (tabellarisch)** (persönliche Daten, Berufserfahrung und Ausbildung neueste zuerst, Kenntnisse, Ort und Datum) sowie die Masterfolie **Master: Klar**. Eine Vorlage nennt **Rollen** (`absender`, `empfaenger`, `person`); beim Erstellen wählt man für jede Rolle einen Datenblock (oder legt einen an), und aus `{{absender.strasse}}` wird `{{user1.strasse}}` – verknüpft, nicht kopiert. Erstellen über „Neu → Aus Vorlage“, das Kontextmenü der Vorlage oder `data.template.use`. Mitgelieferte Vorlagen lassen sich als Kopie anpassen; „Neu → Aus „…““ macht aus dem zuletzt offenen Dokument eine eigene Vorlage.
+- **Masterfolien** legen Logo (Ecke, Größe), Kopf- und Fußzeile (mit `{{titel}}`, `{{folie}}`, `{{folien}}` und Datenfeldern), Seitenzahlen, eine Linie und auf Wunsch ein Design fest. Eine Präsentation mit Master zeigt ihn auf jeder Folie (außer der Titelfolie, wenn nicht gewünscht) – im Editor, in den Vorschaubildern, beim Vorführen und im PDF. Der Master bleibt verknüpft: Ein neues Logo erscheint in allen Präsentationen.
+- **Power-Zugriff „Data“**: alle Blöcke; Felder und ganze Blöcke lassen sich in Texte ziehen, Werte direkt ändern.
+
+## Rechercherista
+
+Ein **Forschungsauftrag** an das lokale Modell, gründlicher als die Websuche im Chat (eine Art Deep Research für Qwen 3.5 9B):
+
+1. **Orientierung**: Das Modell schlägt die Begriffe bei Wikipedia nach (Treffer und Artikelanfang).
+2. **Rückfrage**: Kann der Auftrag ganz verschiedene Dinge meinen (ein juristischer gegenüber einem kognitionswissenschaftlichen Begriff), fragt Rechercherista „Was meinst du?“ mit Optionen und einem Feld für eigene Worte. Wer den Fokus vorher einträgt, wird nicht gefragt.
+3. **Plan**: drei, fünf oder sieben Teilfragen (Überblick, gründlich, sehr gründlich) – der **Fragenbaum**.
+4. **Recherche je Teilfrage** in den gewählten Quellen: **Wikipedia**, **Websuche** (die besten Seiten werden gelesen), **arXiv** und **OpenAlex** (Fachartikel mit Abstracts und Zitationszahlen; es gehen nur Suchwörter hinaus). Das Modell fasst jede Teilfrage mit Belegen [n] zusammen.
+5. **Lücken**: Bei „gründlich“ und „sehr gründlich“ sucht es danach Folgefragen (Lücken, Widersprüche, fehlende Belege) und recherchiert auch diese.
+6. **Bericht**: Kurzfassung, Abschnitte, Einordnung und Widersprüche, offene Fragen; das Quellenverzeichnis schreibt die App selbst, damit jede Nummer auf eine echte Quelle zeigt.
+
+Die Recherche läuft im Hintergrund (eine nach der anderen), jeder Schritt wird gespeichert; angehalten geht sie dort weiter. Unter **Quellen** nimmt man Quellen an oder verwirft sie und lässt dann den Bericht neu schreiben. Aus dem Bericht wird mit einem Klick ein **Writer-Dokument**, eine **Präsentation** (über „Präsentation aus Dokument“), ein **Podcast** (der Bericht als Material) oder Fachquellen mit DOI/arXiv-Nummer kommen nach **Citation Studio**. Im Chat startet der Rechtsklick „Recherche dazu starten“ (die markierte Stelle oder die Nachricht) eine Recherche und wechselt nach Rechercherista; mit den Chat-Werkzeugen „Rechercherista“ kann das Modell es selbst (`research.start`, mit Rückfrage an dich). Kommt der Auftrag aus einem Chat, der private Persona-Dateien gelesen hat, sucht die Recherche nur in Wikipedia.
+
+## Learning Studio
+
+Die Startseite ist ein **Garten**: Jede **Disziplin** (Psychologie, Informatik …) ist ein Baum – Eiche, Kirschbaum, Ahorn, Birke, Kiefer oder Magnolie –, der vom Keimling zum großen Baum wächst. Blätter kommen mit gelernten Karten, **Blüten** mit regelmäßigem Lernen (Tage in Folge, Behaltensrate), **Früchte** mit abgeschlossenen Kursen und guten Abfragen. Der Himmel folgt der Tageszeit, die Bäume wiegen sich leicht. Unter dem Garten stehen die **Kurse** der gewählten Disziplin mit Fortschrittsring, Fälligen und Prüfungs-Countdown.
+
+- **Karteikarten**: anlegen (Vorder- und Rückseite), viele aus Text („Frage ; Antwort“ je Zeile, auch Tab, „–“ oder „F: … / A: …“), zurückstellen, zurücksetzen. **Lernen**: Leertaste zeigt die Antwort, **1–4** bewerten (Nochmal, Schwer, Gut, Leicht); die Knöpfe zeigen, wann die Karte wiederkommt.
+- **Algorithmus** (Regler oben rechts): **FSRS** (empfohlen; Stabilität und Schwierigkeit je Karte, die gewünschte **Behaltensrate** von 80 bis 97 % bestimmt die Abstände) oder **SM-2** wie Anki (Faktor je Karte, Startfaktor und Intervall-Faktor einstellbar). Lernschritte in Minuten, neue Karten und Wiederholungen pro Tag und Kurs, längstes Intervall.
+- **Lernpause** (Pause-Knopf): für alles, eine Disziplin oder einen Kurs, ab heute oder geplant, mit Ende oder offen. Während der Pause kommen keine Karten; endet sie, rücken alle Karten, die danach fällig waren, um die Pausenlänge weiter – nach zwei Wochen Urlaub wartet kein Berg. Pausentage unterbrechen die Tage in Folge nicht.
+- **Material**: PDFs, eine **Probeklausur**, Text, Links und **YouTube**-Adressen (sie öffnen im Browser), Quellen aus **Citation Studio**. Das Modell schreibt daraus einen **Lernzettel** (Writer-Dokument, mit dem Kurs verknüpft), erstellt **Karten** oder fragt ab.
+- **Abfrage**: Das Modell stellt eine Prüfungsfrage zum Material (eine Probeklausur dient als Vorbild), prüft die Antwort (richtig, teilweise, falsch), erklärt, was fehlt, und zeigt eine Musterantwort; frühere Abfragen bleiben mit ihrem Ergebnis.
+- **Übersicht**: Fällige, neue, junge und gefestigte Karten, Behaltensrate, Antworten der letzten 30 Tage und Fälligkeiten der nächsten 14 Tage als Diagramme.
+- **Verknüpft**: eigene Dokumente, Präsentationen, Notes, Projekte und Chats gehören zum Kurs; neue lassen sich direkt für ihn anlegen.
+- **Power-Zugriff „Lernen“**: alle Kurse mit Fälligen und eine Lernsitzung direkt neben dem Dokument; Text dorthin ziehen legt Karten an.
+- **Chat**: Mit den Werkzeugen „Learning Studio“ kennt das Modell deinen Lernfortschritt (`learning.overview`), fragt dich Karten ab (`learning.due`, dann `learning.review`), legt Karten an oder plant eine Pause.
+
 ## Terminal, MCP und Werkzeuge im Chat
 
 Die App lässt sich aus dem Terminal (`llmd`) und über MCP steuern, und der Chat kann auf Wunsch selbst in den Studios arbeiten. Heikle Schritte fragt die App nach, und jeder Schritt ist im Aktivitätsfenster und in der Antwort sichtbar. Siehe [Action-Schicht](actions.md).
@@ -214,6 +298,8 @@ Der Blitz in der Titelleiste (⌥⌘J) verwandelt das rechte Panel in **kompakte
 | Citation | Quellen, Zitate einer Quelle; DOI/ISBN-Import | Text wird ein neues Zitat; Eingabefeld mit Seite | Zitat mit Quellenangabe (im Dokument als Zitations-Pille) |
 | Stories | Romanwelten, Figuren/Spezies/Orte/Events/Reasons/Purposes/Fakten | Text wird ein neues Element (erste Zeile = Name) | Name und Haupttext |
 | Notes | alle Notes (die des offenen Dokuments oben), ein Note zum Abhaken | Text wird ein neues Note (Überschrift = Titel, jede Listenzeile ein ToDo); auf ein offenes Note: ToDos ans Ende | das Note als Aufgabenliste (`- [ ]`) |
+| Projekte | alle Projekte mit Fortschritt; ein Projekt mit seinen Spalten, ToDo-Listen (zum Abhaken) und Verknüpfungen | Text wird ein neues Projekt (erste Zeile = Titel, weitere Zeilen Aufgaben); auf ein offenes Projekt: jede Zeile eine Aufgabe | eine Aufgabe mit Akzeptanzkriterien und Hindernissen als Text, ein ToDo als `- [ ]` |
+| Podcasts | alle Podcasts mit Stand; ein Podcast mit Abspielen, Fortschritt und Skript; „Zum Dokument“ legt einen Podcast zum offenen Dokument an | Text wird die Frage eines neuen Podcasts (langer Text: seine Überschrift) | eine Zeile „Name: Text“ oder das ganze Skript |
 
 Die **Suche** filtert in der Liste (Titel und Inhalt, mit Textausschnitt) und markiert im geöffneten Element die Treffer, mit Zähler und Pfeilen zum Springen. Jede Änderung aus dem Panel lässt sich unten mit **Rückgängig** zurücknehmen. Rechtsklick auf einen Block: Kopieren, **An der Schreibmarke einfügen**, Bearbeiten (Markdown), Löschen.
 
@@ -236,4 +322,4 @@ sequenceDiagram
 
 ## Bibliotheken
 
-Alles – Chats, Dokumente, Bilder, Personas, Gedächtnis, Skills, Zitate, Romanwelten, Notes, Einstellungen – liegt in einer **Bibliothek** (`Name.llmdlibrary`). Unten links wechselt man zwischen Bibliotheken; sie sehen nichts voneinander. Details: [Speicherformate](speicherformate.md).
+Alles – Chats, Dokumente, Bilder, Personas, Gedächtnis, Skills, Zitate, Romanwelten, Notes, Projekte, Podcasts, Einstellungen – liegt in einer **Bibliothek** (`Name.llmdlibrary`). Unten links wechselt man zwischen Bibliotheken; sie sehen nichts voneinander. Details: [Speicherformate](speicherformate.md).

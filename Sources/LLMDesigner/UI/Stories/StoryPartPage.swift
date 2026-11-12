@@ -85,6 +85,7 @@ struct StoryWorldPage: View {
                     library.update(world.id) { $0.linkedDocuments = ids }
                 }
                 StoryNotesCard(owner: .story(world: world.id, part: nil), ownerLabel: "zur ganzen Romanwelt")
+                StoryProjectsCard(ref: .story(world: world.id, part: nil, element: nil), label: "die Romanwelt")
                 books
                 stats
             }
@@ -281,6 +282,7 @@ struct StoryPartPage: View {
                     library.update(world.id) { $0.updatePart(partID) { $0.linkedDocuments = ids } }
                 }
                 StoryNotesCard(owner: .story(world: world.id, part: partID), ownerLabel: Self.ownerLabel(part.level))
+                StoryProjectsCard(ref: .story(world: world.id, part: partID, element: nil), label: part.level == .act || part.level == .section ? "dieser \(part.level.label)" : "dieses \(part.level.label)")
                 if let child = part.level.child {
                     children(part, level: child)
                 }

@@ -143,6 +143,9 @@ private struct NotesTopBar: View {
                     .fixedSize()
             }
             Spacer(minLength: 16)
+            if let id = model.selectedID, app.notes.note(id) != nil {
+                ProjectMembershipButton(ref: .note(id), label: "dieses Note")
+            }
             IconButton(systemName: "plus", help: "Neues Note", size: 13, frameSize: Theme.titleBarControlSize) {
                 model.query = ""
                 model.selectedID = app.newNote().id

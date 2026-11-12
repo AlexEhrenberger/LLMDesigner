@@ -17,7 +17,7 @@ flowchart LR
     SRV --> REG["ActionRegistry<br/>Schema, Regel, Undo, Protokoll"]
     REG --> POL["ActionPolicy<br/>Rule of Two"]
     REG --> APP["ActionApproval<br/>Dialog"]
-    REG --> ACT["Actions<br/>Writer, Presenter, Citation, Stories, Notes, Chat"]
+    REG --> ACT["Actions<br/>Writer, Presenter, Citation, Stories, Notes, Projekte, Podcast,<br/>Data, Rechercherista, Learning, Chat"]
     ACT --> AM["AppModel und Bibliothek"]
 ```
 
@@ -110,6 +110,41 @@ llmd notes todo check --note Bachelorarbeit --todo 1
 llmd notes note progress --note Bachelorarbeit
 ```
 
+## Projekte
+
+Projekte, Aufgaben, Spalten, Bausteine, ToDos und Meilensteine nimmt jede Action als ID, Nummer (wie in der Ausgabe) oder eindeutigen Titel. Verknüpft wird mit `--chat`, `--doc`, `--note` oder `--world` (mit `--part` oder `--element figure:Mara`). `projects.link.find --doc …` sagt, zu welchen Projekten und Aufgaben ein Dokument gehört. Katalog: [Projekte-Actions](plan/Projekte-Actions.md).
+
+```bash
+llmd projects project create --title "Hausarbeit Statistik" --columns Offen --columns "In Arbeit" --columns Fertig
+llmd projects task add --project "Hausarbeit Statistik" --title "Kapitel 3" --criteria "Quellen geprüft" --doc Hausarbeit
+llmd projects task move --project "Hausarbeit Statistik" --task "Kapitel 3" --column Fertig
+llmd projects block add --project "Hausarbeit Statistik" --kind diagramm --chart gantt --source aufgaben --width 12
+```
+
+## Podcasts
+
+`podcast.generate` startet die Recherche, das Skript und die Sprachaufnahme im Hintergrund und kehrt sofort zurück; `podcast.status` zeigt Phase und Prozent. `--from fortsetzen` (Vorgabe) macht nur, was fehlt – nach geänderten Zeilen (`podcast.line.update`) also nur deren Aufnahme. Katalog: [Podcast-Actions](plan/Podcast-Actions.md).
+
+```bash
+llmd podcast create --question "Was ist Predictive Coding?" --minutes 10
+llmd podcast participants suggest --podcast "Was ist Predictive Coding?"
+llmd podcast generate --podcast "Was ist Predictive Coding?"
+llmd podcast export --podcast "Was ist Predictive Coding?"
+```
+
+## Data Studio, Rechercherista, Learning Studio
+
+Datenblöcke nimmt jede Action als ID, Kürzel oder Name; ihre Werte zu lesen (`data.block.read`, `data.resolve`) gilt als **privat** und ist über MCP gesperrt. Recherchen und Kurse lesen gilt als fremd (Webseiten, PDFs). `research.start` und `research.answer` wirken nach außen (Suchwörter verlassen den Mac) und fragen deshalb nach. Kataloge: [Data-Actions](plan/Data-Actions.md), [Rechercherista-Actions](plan/Rechercherista-Actions.md), [Learning-Actions](plan/Learning-Actions.md).
+
+```bash
+llmd data block create --name Absender --structure person --values '{"vorname":"Mara","ort":"Neustadt"}'
+llmd data template use --template brief-din5008 --blocks '{"absender":"absender","empfaenger":"finanzamt"}' --title "Brief ans Finanzamt"
+llmd research start --question "Predictive Coding" --focus Kognitionswissenschaft --depth gruendlich
+llmd learning course create --name "Statistik 2" --discipline Psychologie --exam 2027-02-10
+llmd learning card addMany --course "Statistik 2" --text "Was ist Varianz? ; Mittlere quadratische Abweichung"
+llmd learning pause --until 2026-12-28 --reason Urlaub
+```
+
 ## MCP
 
 `llmd mcp` ist ein stdio-Server nach Spezifikation 2026-07-28 und versteht auch das ältere `initialize`.
@@ -121,16 +156,16 @@ claude mcp add llmd -- "/Pfad/LLM Designer.app/Contents/Helpers/llmd" mcp --prof
 | Profil | Inhalt |
 |---|---|
 | `core` | der kleine Satz zum Lesen, Schreiben, Präsentieren, Zitieren und Fragen |
-| `writer`, `presenter`, `citation`, `stories`, `notes`, `chat` | ein Studio |
+| `writer`, `presenter`, `citation`, `stories`, `notes`, `projects`, `podcast`, `data`, `research`, `learning`, `chat` | ein Studio |
 | `full` | alles außer privaten Daten |
 
-Jedes Profil hat zusätzlich `llmd_search_actions` und `llmd_run_action`, damit kleine Modelle nicht alle Tools laden müssen. Dazu kommen Resources (`llmd://writer/doc/{id}`, `llmd://presenter/deck/{id}`, `llmd://citation/source/{key}`, `llmd://stories/world/{id}`, `llmd://notes/note/{id}`), Prompts aus Skills und `subscriptions/listen`.
+Jedes Profil hat zusätzlich `llmd_search_actions` und `llmd_run_action`, damit kleine Modelle nicht alle Tools laden müssen. Dazu kommen Resources (`llmd://writer/doc/{id}`, `llmd://presenter/deck/{id}`, `llmd://citation/source/{key}`, `llmd://stories/world/{id}`, `llmd://notes/note/{id}`, `llmd://projects/project/{id}`, `llmd://podcast/podcast/{id}`), Prompts aus Skills und `subscriptions/listen`.
 
 Der Kanal gilt immer als fremd. `memory.*` und `persona.files.*` sind gesperrt, Chats mit privaten Dateien ebenso. Eine Runde, die von hier ausgeht, läuft in einem Chat ohne dessen Werkzeuge.
 
 ## Werkzeuge im Chat
 
-Der Blitz im Eingabefeld schaltet Gruppen zu (Writer, Presenter, Citation, Stories, Notes, andere Chats, Gedächtnis) und stellt ein, wie viel ohne Rückfrage geht. Jede Gruppe enthält nur den Minimalsatz, weil ihre Schemas bei jeder Frage den Kontext belegen. Über `llmd` und die MCP-Profile der Studios sind alle Actions erreichbar. Jeder Schritt erscheint in der Antwort, und der Pfeil unter der Antwort nimmt alle ihre Änderungen zurück, solange die App läuft.
+Der Blitz im Eingabefeld schaltet Gruppen zu (Writer, Presenter, Citation, Stories, Notes, PodcastStudio, andere Chats, Gedächtnis) und stellt ein, wie viel ohne Rückfrage geht. Jede Gruppe enthält nur den Minimalsatz, weil ihre Schemas bei jeder Frage den Kontext belegen. Über `llmd` und die MCP-Profile der Studios sind alle Actions erreichbar. Jeder Schritt erscheint in der Antwort, und der Pfeil unter der Antwort nimmt alle ihre Änderungen zurück, solange die App läuft.
 
 Fremde Ergebnisse kommen in einem Rahmen mit zufälliger Kennung zum Modell. Das hilft dem Modell, schützt aber nicht: Geschützt wird durch die Registry. Ein Chat kann sich keine Nachrichten schicken und seine eigenen Freigaben nicht ändern.
 

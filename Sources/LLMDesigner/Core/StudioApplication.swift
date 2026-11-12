@@ -3,7 +3,7 @@ import Foundation
 /// Applications next to the chat where the model helps with a piece of work. Only the menu exists so far;
 /// Writer Studio comes first. Coding Studio follows later.
 enum StudioApplication: String, CaseIterable, Identifiable {
-    case writer, citation, presenter, stories, notes
+    case writer, citation, presenter, stories, notes, projects, podcast, data, research, learning
 
     var id: String { rawValue }
 
@@ -14,6 +14,11 @@ enum StudioApplication: String, CaseIterable, Identifiable {
         case .presenter: "Presenter Studio"
         case .stories: "Stories Studio"
         case .notes: "Notes"
+        case .projects: "Projekte"
+        case .podcast: "PodcastStudio"
+        case .data: "Data Studio"
+        case .research: "Rechercherista"
+        case .learning: "Learning Studio"
         }
     }
 
@@ -24,6 +29,11 @@ enum StudioApplication: String, CaseIterable, Identifiable {
         case .presenter: "play.rectangle"
         case .stories: "books.vertical"
         case .notes: "note.text"
+        case .projects: Project.sidebarSymbol
+        case .podcast: "waveform.and.mic"
+        case .data: "tablecells"
+        case .research: "binoculars"
+        case .learning: "leaf"
         }
     }
 
@@ -33,6 +43,11 @@ enum StudioApplication: String, CaseIterable, Identifiable {
         case .writer: "Writer Studio – neues Dokument"
         case .presenter: "Presenter Studio – neue Präsentation"
         case .notes: "Notes – ToDos und Fortschritt"
+        case .projects: "Projekt – neue Projektseite"
+        case .podcast: "PodcastStudio – neuer Podcast"
+        case .data: "Data Studio – Datenblöcke und Vorlagen"
+        case .research: "Rechercherista – neue Recherche"
+        case .learning: "Learning Studio – Lernbäume und Karteikarten"
         default: title
         }
     }
@@ -47,6 +62,11 @@ enum StudioApplication: String, CaseIterable, Identifiable {
         case .presenter: "Präsentationen entwerfen"
         case .stories: "Romane strukturieren und entwerfen"
         case .notes: "ToDos abhaken und Fortschritt sehen"
+        case .projects: "Vorhaben planen, verknüpfen und verfolgen"
+        case .podcast: "Gespräche recherchieren, schreiben und vertonen"
+        case .data: "Datenblöcke für Platzhalter, Vorlagen und Masterfolien"
+        case .research: "Gründlich recherchieren, Schritt für Schritt bis zum Bericht"
+        case .learning: "Disziplinen, Kurse, Karteikarten und Lernfortschritt"
         }
     }
 }

@@ -455,6 +455,9 @@ struct PresentationSlide: Identifiable, Hashable, Codable, Sendable {
 struct PresentationDeck: Hashable, Sendable {
     var slides: [PresentationSlide]
     var backgrounds = RoleBackgrounds.all(.standard)
+    /// The master from Data Studio on every slide (logo, header, footer); looked up live, so changing the master
+    /// changes every presentation that uses it.
+    var masterID: UUID?
 
     /// A new presentation starts with its title slide.
     static func new() -> PresentationDeck {

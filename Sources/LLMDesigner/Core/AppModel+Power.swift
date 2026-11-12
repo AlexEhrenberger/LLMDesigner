@@ -2,7 +2,7 @@ import SwiftUI
 
 /// The applications the power access reaches from the right-hand panel.
 enum PowerModule: String, CaseIterable, Identifiable {
-    case chats, writer, presenter, citation, stories, notes
+    case chats, writer, presenter, citation, stories, notes, projects, podcasts, data, research, learning
 
     var id: String { rawValue }
 
@@ -14,6 +14,11 @@ enum PowerModule: String, CaseIterable, Identifiable {
         case .citation: "Citation"
         case .stories: "Stories"
         case .notes: "Notes"
+        case .projects: "Projekte"
+        case .podcasts: "Podcasts"
+        case .data: "Data"
+        case .research: "Recherche"
+        case .learning: "Lernen"
         }
     }
 
@@ -25,6 +30,11 @@ enum PowerModule: String, CaseIterable, Identifiable {
         case .citation: StudioApplication.citation.symbol
         case .stories: StudioApplication.stories.symbol
         case .notes: StudioApplication.notes.symbol
+        case .projects: Project.sidebarSymbol
+        case .podcasts: StudioApplication.podcast.symbol
+        case .data: StudioApplication.data.symbol
+        case .research: StudioApplication.research.symbol
+        case .learning: StudioApplication.learning.symbol
         }
     }
 }
@@ -44,6 +54,11 @@ final class PowerAccess {
     var sourceID: UUID?
     var worldID: UUID?
     var noteID: UUID?
+    var projectID: UUID?
+    var dataBlockID: UUID?
+    var researchID: UUID?
+    var courseID: UUID?
+    var podcastID: UUID?
     var storyKind: StoryElementKind = .figure
     /// The last change made here, which "Rückgängig" takes back.
     var lastChange: Change?
@@ -63,6 +78,11 @@ final class PowerAccess {
         case .citation: sourceID != nil
         case .stories: worldID != nil
         case .notes: noteID != nil
+        case .projects: projectID != nil
+        case .podcasts: podcastID != nil
+        case .data: dataBlockID != nil
+        case .research: researchID != nil
+        case .learning: courseID != nil
         }
     }
 
@@ -74,6 +94,11 @@ final class PowerAccess {
         case .citation: sourceID = nil
         case .stories: worldID = nil
         case .notes: noteID = nil
+        case .projects: projectID = nil
+        case .podcasts: podcastID = nil
+        case .data: dataBlockID = nil
+        case .research: researchID = nil
+        case .learning: courseID = nil
         }
         query = ""
     }
@@ -97,6 +122,7 @@ extension AppModel {
             citations.loadIfNeeded()
             stories.loadIfNeeded()
             notes.loadIfNeeded()
+            podcasts.loadIfNeeded()
         }
     }
 

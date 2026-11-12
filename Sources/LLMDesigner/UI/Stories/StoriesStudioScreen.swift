@@ -205,6 +205,9 @@ private struct StoriesTopBar: View {
                     .fixedSize()
             }
             Spacer(minLength: 16)
+            if let world {
+                PodcastFromButton(reference: podcastReference(in: world), help: podcastHelp(in: world))
+            }
             IconButton(systemName: "xmark", help: "Stories Studio schließen und zurück zum Chat", size: 12.5, frameSize: Theme.titleBarControlSize) {
                 withAnimation(.easeInOut(duration: 0.25)) { app.closeStoriesStudio() }
             }
@@ -225,6 +228,17 @@ private struct StoriesTopBar: View {
         } message: {
             Text("Die Romanwelt kommt mit allen Büchern, Elementen und Bildern in den Papierkorb.")
         }
+    }
+
+    /// The podcast button speaks about the open part, or the whole world on its other pages.
+    private func podcastReference(in world: StoryWorld) -> PodcastReference {
+        if case .part(let id) = model.page, world.part(id) != nil { return .story(world: world.id, part: id) }
+        return .story(world: world.id, part: nil)
+    }
+
+    private func podcastHelp(in world: StoryWorld) -> String {
+        if case .part(let id) = model.page, let part = world.part(id) { return "Podcast über \(part.level.label) „\(world.displayTitle(of: part))“ erzeugen" }
+        return "Podcast über die Romanwelt „\(world.displayTitle)“ erzeugen"
     }
 
     private func worldMenu(_ world: StoryWorld?) -> some View {

@@ -17,7 +17,7 @@ enum SlidePrinter {
         for (index, slide) in deck.slides.enumerated() {
             if Task.isCancelled { return nil }
             progress?(index, deck.slides.count)
-            let view = await view(for: slide, in: deck, family: family, citations: citations)
+            let view = await view(for: slide, in: deck, family: family, citations: citations, title: title)
             let data = view.dataWithPDF(inside: view.bounds)
             guard let page = PDFDocument(data: data)?.page(at: 0) else { continue }
             result.insert(page, at: result.pageCount)
@@ -41,7 +41,7 @@ enum SlidePrinter {
 
     /// The slide as views that draw themselves: background with the pictures behind the text, the text, the
     /// pictures in front.
-    static func view(for slide: PresentationSlide, in deck: PresentationDeck, family: WriterFont, citations: CitationLibrary?) async -> NSView {
+    static func view(for slide: PresentationSlide, in deck: PresentationDeck, family: WriterFont, citations: CitationLibrary?, title: String = "") async -> NSView {
         let background = deck.background(of: slide)
         var designImage: NSImage?
         if background.kind == .design, let design = SlideLook.design(of: background) {
@@ -53,6 +53,11 @@ enum SlidePrinter {
         stage.tone = SlideLook.tone(of: background, role: slide.role)
         stage.designImage = designImage.flatMap { PrintImages.compact($0, key: "design|\(background.design ?? "")|\(slide.role.rawValue)", size: canvas) }
         stage.images = slide.images.filter { $0.placement == .behind && !$0.isText }
+        if let content = SlideMasterContent.make(deck: deck, slide: slide, title: title) {
+            let master = SlideMasterView(frame: frame)
+            master.content = content
+            stage.addSubview(master)
+        }
         let fieldPalette = SlideLook.fieldPalette(background, role: slide.role)
         for field in slide.images where field.isText && field.placement == .behind {
             stage.addSubview(fieldView(field, family: family, palette: fieldPalette, citations: citations))
