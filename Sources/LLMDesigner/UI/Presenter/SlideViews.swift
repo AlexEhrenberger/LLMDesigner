@@ -336,6 +336,7 @@ struct SlideStageView: View {
             SlideBackgroundView(background: background, role: slide.role, live: live)
                 // The same background on the next slide stays where it is, without fading.
                 .id(backgroundKey(background))
+            SlideMasterLayer(deck: deck, slide: slide)
             ZStack {
                 SlideImagesLayer(images: slide.images, placements: [.behind])
                 SlideTextView(
@@ -410,6 +411,7 @@ struct SlideThumbnail: View {
         let background = deck.background(of: slide)
         ZStack {
             SlideBackgroundView(background: background, role: slide.role)
+            SlideMasterLayer(deck: deck, slide: slide)
             SlideImagesLayer(images: slide.images, placements: [.behind])
             if let image = SlideThumbnailRenderer.image(
                 markdown: slide.markdown, family: family, palette: SlideLook.palette(background, role: slide.role),

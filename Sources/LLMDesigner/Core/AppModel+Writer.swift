@@ -28,6 +28,9 @@ extension AppModel {
         if notesStudioOpen { return .notes }
         if openProjectID != nil { return .projects }
         if podcastStudioOpen { return .podcast }
+        if dataStudioOpen { return .data }
+        if researchStudioOpen { return .research }
+        if learningStudioOpen { return .learning }
         guard let document = selectedDocument else { return nil }
         return document.isPresentation ? .presenter : .writer
     }
@@ -70,6 +73,9 @@ extension AppModel {
         case .notes: openNotesStudio()
         case .projects: newProject()
         case .podcast: newPodcast()
+        case .data: openDataStudio()
+        case .research: openResearchStudio(new: true)
+        case .learning: openLearningStudio()
         }
     }
 
@@ -120,7 +126,11 @@ extension AppModel {
         if notesStudioOpen { closeNotesStudio() }
         if openProjectID != nil { closeProject() }
         if podcastStudioOpen { closePodcastStudio() }
+        if dataStudioOpen { closeDataStudio() }
+        if researchStudioOpen { closeResearchStudio() }
+        if learningStudioOpen { closeLearningStudio() }
         guard let id = selectedDocumentID else { return }
+        lastClosedDocumentID = id
         // Dictation and reading belong to the open document.
         if dictationIntoDocument { Task { await stopDictation() } }
         stopReadingDocument()
@@ -288,7 +298,7 @@ extension AppModel {
         saveDocument(document.id)
     }
 
-    private func modifyDocument(_ id: WriterDocument.ID, _ change: (inout WriterDocument) -> Void) {
+    func modifyDocument(_ id: WriterDocument.ID, _ change: (inout WriterDocument) -> Void) {
         guard let index = documents.firstIndex(where: { $0.id == id }) else { return }
         change(&documents[index])
         saveDocument(id)
@@ -434,7 +444,8 @@ extension AppModel {
             await refreshDocumentOutline(document.id)?.value
         }
         let current = self.document(document.id) ?? document
-        let markdown = current.markdown.trimmingCharacters(in: .whitespacesAndNewlines) + "\n"
+        // Fields from Data Studio go out with their values: other programs and LaTeX don't know Data Studio.
+        let markdown = resolvingData(current.markdown).trimmingCharacters(in: .whitespacesAndNewlines) + "\n"
         // The pictures that are on this Mac, by their Markdown source; LaTeX prints a plot's PDF version.
         var figures: [String: URL] = [:]
         var printFigures: [String: URL] = [:]

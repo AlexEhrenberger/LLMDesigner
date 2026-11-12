@@ -74,10 +74,12 @@ private struct StoryTextViewHost: NSViewRepresentable {
         textView.insertionPointColor = color
         textView.typingAttributes = [.font: font, .foregroundColor: color]
         textView.alignment = alignment
-        textView.string = text
+        textView.dataDisplay.view = textView
+        textView.dataDisplay.set(text)
         textView.placeholder = placeholder
         textView.delegate = context.coordinator
         textView.onWidthChange = { [weak coordinator = context.coordinator] in coordinator?.reportHeight() }
+        textView.dataDisplay.onSwap = { [weak coordinator = context.coordinator] in coordinator?.reportHeight() }
         textView.focusOnAppear = focusOnAppear
         context.coordinator.textView = textView
         return textView
@@ -86,8 +88,8 @@ private struct StoryTextViewHost: NSViewRepresentable {
     func updateNSView(_ textView: StoryTextView, context: Context) {
         context.coordinator.parent = self
         // Only text changed from outside (another field, the power access) is put in; while typing the two agree.
-        if textView.string != text {
-            textView.string = text
+        if textView.dataDisplay.text != text {
+            textView.dataDisplay.set(text)
             textView.needsDisplay = true
             context.coordinator.reportHeight()
         }
@@ -174,6 +176,20 @@ final class StoryTextView: NSTextView {
     var onWidthChange: (() -> Void)?
     var focusOnAppear = false
     private var lastWidth: CGFloat = 0
+    /// Values of `{{…}}` fields while the field isn't being edited.
+    let dataDisplay = DataValueDisplay()
+
+    override func becomeFirstResponder() -> Bool {
+        let became = super.becomeFirstResponder()
+        if became { dataDisplay.beginEditing() }
+        return became
+    }
+
+    override func resignFirstResponder() -> Bool {
+        let resigned = super.resignFirstResponder()
+        if resigned { dataDisplay.endEditing() }
+        return resigned
+    }
 
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)

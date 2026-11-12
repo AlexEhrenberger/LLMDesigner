@@ -2,7 +2,7 @@ import SwiftUI
 
 /// The applications the power access reaches from the right-hand panel.
 enum PowerModule: String, CaseIterable, Identifiable {
-    case chats, writer, presenter, citation, stories, notes, projects, podcasts
+    case chats, writer, presenter, citation, stories, notes, projects, podcasts, data, research, learning
 
     var id: String { rawValue }
 
@@ -16,6 +16,9 @@ enum PowerModule: String, CaseIterable, Identifiable {
         case .notes: "Notes"
         case .projects: "Projekte"
         case .podcasts: "Podcasts"
+        case .data: "Data"
+        case .research: "Recherche"
+        case .learning: "Lernen"
         }
     }
 
@@ -29,6 +32,9 @@ enum PowerModule: String, CaseIterable, Identifiable {
         case .notes: StudioApplication.notes.symbol
         case .projects: Project.sidebarSymbol
         case .podcasts: StudioApplication.podcast.symbol
+        case .data: StudioApplication.data.symbol
+        case .research: StudioApplication.research.symbol
+        case .learning: StudioApplication.learning.symbol
         }
     }
 }
@@ -49,6 +55,9 @@ final class PowerAccess {
     var worldID: UUID?
     var noteID: UUID?
     var projectID: UUID?
+    var dataBlockID: UUID?
+    var researchID: UUID?
+    var courseID: UUID?
     var podcastID: UUID?
     var storyKind: StoryElementKind = .figure
     /// The last change made here, which "Rückgängig" takes back.
@@ -71,6 +80,9 @@ final class PowerAccess {
         case .notes: noteID != nil
         case .projects: projectID != nil
         case .podcasts: podcastID != nil
+        case .data: dataBlockID != nil
+        case .research: researchID != nil
+        case .learning: courseID != nil
         }
     }
 
@@ -84,6 +96,9 @@ final class PowerAccess {
         case .notes: noteID = nil
         case .projects: projectID = nil
         case .podcasts: podcastID = nil
+        case .data: dataBlockID = nil
+        case .research: researchID = nil
+        case .learning: courseID = nil
         }
         query = ""
     }

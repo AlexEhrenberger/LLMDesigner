@@ -232,6 +232,7 @@ struct PresenterScreen: View {
             ?? WriterSlideContent(id: slide.id, markdown: slide.markdown, layout: textLayout)
         return ZStack {
             SlideBackgroundView(background: background, role: slide.role)
+            SlideMasterLayer(deck: deck, slide: slide, title: document.displayTitle)
             SlideImagesLayer(images: images, placements: [.behind], hiding: field?.id)
             if field != nil {
                 SlideTextView(markdown: slide.markdown, family: document.textFont, palette: palette, layout: textLayout, citations: app.citations)

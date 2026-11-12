@@ -530,6 +530,7 @@ struct WriterEditor: NSViewRepresentable {
             textView?.citationsChanged()
             textView?.footnotesChanged()
             textView?.checkCiteTrigger()
+            textView?.checkDataTrigger()
             isDirty = true
             pending?.cancel()
             pending = Task { [weak self] in
