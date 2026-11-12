@@ -26,6 +26,7 @@ flowchart TB
         CI["Citations/"]
         ST["Stories/"]
         NO["Notes/"]
+        PJ["Projects/"]
         PW["Power/"]
     end
     subgraph Core["Core/ – Modell, Logik, Dienste"]
@@ -34,6 +35,7 @@ flowchart TB
         CL["CitationLibrary"]
         SL["StoryLibrary"]
         NL["NoteLibrary"]
+        PL["ProjectLibrary"]
         TH["Thalamus"]
         LLM["LLMClient"]
         SP["Speech/"]
@@ -42,9 +44,9 @@ flowchart TB
     end
     LIB[("AppLibrary<br/>*.llmdlibrary")]
     LA --> LS --> AM
-    RV --> CS & WS & PS & CI & ST & NO & PW
+    RV --> CS & WS & PS & CI & ST & NO & PJ & PW
     UI --> AM
-    AM --> DOC & CL & SL & NL & TH & LLM & SP & MA
+    AM --> DOC & CL & SL & NL & PL & TH & LLM & SP & MA
     STO --> LIB
     AM --> STO
 ```
@@ -53,6 +55,7 @@ flowchart TB
 - **`LibrarySession`** hält die geöffnete `AppLibrary` und baut beim Bibliothekswechsel einen neuen `AppModel`. Nichts Globales überlebt den Wechsel, außer der Liste der zuletzt geöffneten Bibliotheken.
 - Die **Studios** haben eigene Bibliotheken/Modelle: `CitationLibrary` (Quellen, Zitate, Ordner) und `StoryLibrary` (Romanwelten), beide `@Observable`, lazy geladen, mit verzögertem Speichern (500 ms). `StoryLibrary` hält getippten Text als Entwurf und übernimmt ihn nach 350 ms Pause; geschrieben wird auf einer eigenen Queue. Die Formularfelder des Stories Studio sind `StoryTextEditor` (AppKit-`NSTextView`) statt `TextField(axis: .vertical)`: Sie melden SwiftUI nur eine neue Höhe, nicht jeden Tastendruck – sonst richtete SwiftUI bei jeder Taste das ganze Fenster neu aus. Tab-Leisten (`StoryTabBar`) wählen ihre Kurzform rechnerisch aus der gemessenen Breite statt mit `ViewThatFits` und liegen nie in einer ScrollView.
 - **Notes** (`NoteLibrary`, `Notizen/<id>.json`) folgen demselben Muster: Entwürfe beim Tippen, Speichern nach 500 ms auf einer eigenen Queue. Sie werden beim Start gelesen, weil die Titelleisten von Writer und Presenter den Stand der Notes des offenen Dokuments zeigen. Änderungen aus der Oberfläche laufen über `NoteLibrary.change(_:_:undo:_:)`, das den Stand davor beim `UndoManager` des Fensters ablegt (⌘Z). ToDo-Zeilen sind `NoteLineEditor` (AppKit-`NSTextView`) mit Outliner-Tasten.
+- **Projekte** (`ProjectLibrary`, `Projekte/<id>.json`) folgen demselben Muster und werden beim Start gelesen, weil die Seitenleiste sie zeigt. Ein Projekt hält nur Verweise (`ProjectRef`: Chat, Dokument, Note, Romanwelt mit Teil oder Element); das Verknüpfte bleibt unverändert. Die Seite ist ein Raster aus Bausteinen (`ProjectBlock` mit `ProjectGridFrame`); `ProjectLayout.place` setzt den bewegten Baustein und schiebt, was er verdeckt, nach unten, sodass nichts überlappt. Diagrammdaten (`ProjectChartData`) rechnet der Kern aus dem Projekt, die Ansicht zeichnet sie mit Swift Charts. Jede Änderung schreibt den Verlauf des Tages fort (`recordHistory`).
 - **UI-Ansichten** lesen den `AppModel` über die SwiftUI-Umgebung (`@Environment(AppModel.self)`).
 
 ## Darstellung: SwiftUI außen, AppKit innen
@@ -171,7 +174,7 @@ Terminal, MCP und Chat erreichen die App über dieselbe Registry, die Parameter 
 flowchart TB
     PA["PowerAccess (@Observable)<br/>isOn, module, query, offene Elemente, lastChange"]
     PP["PowerPanel"] --> PA
-    PP --> MOD["PowerChats · PowerDocuments · PowerPresentations<br/>PowerCitations · PowerStories · PowerNotes"]
+    PP --> MOD["PowerChats · PowerDocuments · PowerPresentations<br/>PowerCitations · PowerStories · PowerNotes · PowerProjects"]
     MOD --> PT["PowerText<br/>Blöcke, Klartext, Einfügen/Verschieben"]
     MOD --> AMP["AppModel+Power<br/>powerInsert, powerAppend, powerNewSlide,<br/>powerAddQuote, powerAddStoryElement"]
     MOD --> DS["PowerDragSource (AppKit)<br/>Writer-Markdown + Klartext + Herkunft"]

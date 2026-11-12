@@ -159,6 +159,7 @@ struct StoryFigurePage: View {
                       text: field(\.perception), lines: 3...14)
         StoryRelatedFacts(ref: figure.ref, world: world, model: model)
         StoryUsageList(ref: figure.ref, world: world, model: model)
+        StoryProjectsCard(ref: .story(world: world.id, part: nil, element: figure.ref), label: "dieses Element")
         StoryPinList(ref: figure.ref, world: world, model: model)
     }
 

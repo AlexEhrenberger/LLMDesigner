@@ -43,6 +43,7 @@ struct StoryPlacePage: View {
                 related(place)
                 StoryRelatedFacts(ref: place.ref, world: world, model: model)
                 StoryUsageList(ref: place.ref, world: world, model: model)
+                StoryProjectsCard(ref: .story(world: world.id, part: nil, element: place.ref), label: "dieses Element")
                 StoryPinList(ref: place.ref, world: world, model: model)
                 StoryTextArea(title: "Notizen", text: field(\.notes), lines: 2...16)
             }
@@ -151,6 +152,7 @@ struct StoryEventPage: View {
                 StoryRelatedFacts(ref: event.ref, world: world, model: model)
                 StoryPinList(ref: event.ref, world: world, model: model)
                 StoryUsageList(ref: event.ref, world: world, model: model)
+                StoryProjectsCard(ref: .story(world: world.id, part: nil, element: event.ref), label: "dieses Element")
                 StoryTextArea(title: "Notizen", text: field(\.notes), lines: 2...16)
             }
         }
@@ -389,6 +391,7 @@ struct StoryReasonPage: View {
                 StoryTextArea(title: "Schwachstelle & Gegenargument", hint: "Wo das Argument bricht oder angreifbar ist – ein Plot-Loch, das zu schließen ist, oder ein Widerspruch, den eine Figur nutzen kann.",
                               text: field(\.weakness), lines: 2...12)
                 StoryUsageList(ref: reason.ref, world: world, model: model)
+                StoryProjectsCard(ref: .story(world: world.id, part: nil, element: reason.ref), label: "dieses Element")
                 StoryTextArea(title: "Notizen", text: field(\.notes), lines: 2...16)
             }
         }
@@ -533,6 +536,7 @@ struct StoryPurposePage: View {
                 StoryTextArea(title: "Thema & Motiv", text: field(\.theme), lines: 1...8)
                 setupAndPayoff(purpose)
                 StoryUsageList(ref: purpose.ref, world: world, model: model)
+                StoryProjectsCard(ref: .story(world: world.id, part: nil, element: purpose.ref), label: "dieses Element")
                 StoryTextArea(title: "Notizen", text: field(\.notes), lines: 2...16)
             }
         }

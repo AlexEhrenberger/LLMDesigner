@@ -36,8 +36,8 @@ flowchart LR
     S --> A["App/"]
     S --> C["Core/"]
     S --> U["UI/"]
-    C --> C1["Citations/ · Code/ · Math/<br/>Presenter/ · Speech/ · Stories/ · Notes/"]
-    U --> U1["Writer/ · Presenter/ · Citations/<br/>Stories/ · Notes/ · Power/"]
+    C --> C1["Citations/ · Code/ · Math/<br/>Presenter/ · Speech/ · Stories/ · Notes/ · Projects/"]
+    U --> U1["Writer/ · Presenter/ · Citations/<br/>Stories/ · Notes/ · Projects/ · Power/"]
 ```
 
 | Ort | Inhalt |
@@ -54,6 +54,7 @@ flowchart LR
 | `Core/Citations/` | Modell, Bibliothek, Import (Crossref, DNB …), Dublettenprüfung, APA-Formatierer |
 | `Core/Stories/` | Romanwelten, Elemente, Zeitleisten |
 | `Core/Notes/`, `AppModel+Notes.swift` | `NoteModel` (Note, ToDo, Zugehörigkeit, Fortschritt, Baum-Operationen, Aufgabenliste ⇄ ToDos), `NoteLibrary` (Speichern, Entwürfe, Rückgängig); Öffnen, Zuordnen, Besitzernamen |
+| `Core/Projects/`, `AppModel+Projects.swift` | `ProjectModel` (Projekt, Verweise, ToDo-Listen, Meilensteine, Spalten, Aufgaben mit Akzeptanzkriterien und Hindernissen, Verlauf, Tage), `ProjectBlock` (Bausteine, Raster, Textstil, Diagramm, Anzeigen), `ProjectEditing` (Fortschritt, Kennzahlen, Layout, Änderungen), `ProjectChartData` (Daten der Diagramme), `ProjectLibrary` (Speichern, Entwürfe, Rückgängig); Öffnen, Verknüpfen, Namen der Verweise |
 | `Core/Math/`, `Core/Code/` | Formelbaum, Plots über Python, Code-Hervorhebung, Flussdiagramme |
 | `Core/Speech/` | Diktat, Vorlesen, Qwen TTS, Gesprächsmodus |
 | `Core/PowerText.swift`, `AppModel+Power.swift` | Power-Zugriff: Blöcke, Klartext, Änderungen mit Rückgängig |
@@ -64,7 +65,8 @@ flowchart LR
 | `UI/Writer/` | `WriterScreen`, `WriterEditor` (Representable + Controller), `WriterTextView+*` (Editor nach Themen), Sheets |
 | `UI/Presenter/` | `PresenterScreen`, `SlideImageEditor` (Bilder/Textfelder/Textbereich verschieben), `SlideViews`, `SlidePrinter` (PDF) |
 | `UI/Notes/` | `NotesStudioScreen`, `NoteEditor` (Kopf, ToDo-Zeilen, Auswahl von Dokumenten und Notes), `NoteLineEditor` (Zeile mit Outliner-Tasten), `NoteProgressArt` (zwölf Anzeigen, Auswahl, Konfetti), `NoteLinks` (Panel „Notes dieses Dokuments“, Knopf in der Titelleiste, Karte im Stories Studio) |
-| `UI/Power/` | `PowerPanel` (Rahmen, Ziehen, gemeinsame Bausteine), `PowerModules` (fünf Miniatur-Apps), `PowerNotes` (alle Notes) |
+| `UI/Projects/` | `ProjectScreen` (Titelleiste, Reiter, Kopf der Seite), `ProjectGrid` (Raster, Ziehen, Größe, Karte eines Bausteins), `ProjectBlockViews` (Inhalte der Bausteine), `ProjectChartViews` (Swift Charts, Ablauf), `ProjectProgressArt` (Anzeigen), `ProjectBlockInspector` (Gestalten), `ProjectBoard` (Kanban, Karte, Aufgaben-Panel), `ProjectMembership` (Zuordnen aus Writer, Presenter, Notes, Stories), `ProjectComponents` (Kacheln, Auswahl, Farben, Tage) |
+| `UI/Power/` | `PowerPanel` (Rahmen, Ziehen, gemeinsame Bausteine), `PowerModules` (fünf Miniatur-Apps), `PowerNotes` (alle Notes), `PowerProjects` (Projekte) |
 | `UI/QuickBar/` | `QuickBarPanel` (Panel vor allen Apps, Controller), `QuickBarView` (Feld, Chat, Besen, `AuroraView` mit Core-Animation-Farbe); Zustand und Werkzeugwahl in `Core/AppModel+QuickBar.swift` |
 | `Tests/` | Swift-Testing-Suiten für Markdown, Layout, Tabellenformeln, Präsentationen, Power-Zugriff … |
 

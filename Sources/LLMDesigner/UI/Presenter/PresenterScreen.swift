@@ -382,6 +382,7 @@ private struct PresenterTopBar: View {
             PresentButton(document: document)
                 .fixedSize()
             if app.writerTab == .document {
+                ProjectMembershipButton(ref: .document(document.id), label: "diese Präsentation")
                 DocumentNotesButton(document: document)
                 PowerButton()
             }

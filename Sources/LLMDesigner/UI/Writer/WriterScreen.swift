@@ -370,6 +370,7 @@ private struct WriterTopBar: View {
             // In the light design the sheet is always white.
             if colorScheme == .dark { PaperSwitch() }
             if app.writerTab == .document {
+                ProjectMembershipButton(ref: .document(document.id), label: "dieses Dokument")
                 DocumentNotesButton(document: document)
                 PowerButton()
             }

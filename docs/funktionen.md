@@ -23,6 +23,7 @@ flowchart LR
         CI["Citation Studio"]
         ST["Stories Studio"]
         NO["Notes"]
+        PJ["Projekte"]
     end
     subgraph Rechts["Panel"]
         O["Inhalt · Lesezeichen · Quellen"]
@@ -35,7 +36,7 @@ flowchart LR
 
 ## Neu anlegen
 
-Das Stift-Symbol oben in der Seitenleiste (und in den Titelleisten, wenn die Seitenleiste zu ist) öffnet ein Menü: **Neuer Chat** und alle Applikationen – Writer Studio (neues Dokument), Citation Studio, Presenter Studio (neue Präsentation), Stories Studio und Notes. Darunter „Präsentation aus Dokument …“.
+Das Stift-Symbol oben in der Seitenleiste (und in den Titelleisten, wenn die Seitenleiste zu ist) öffnet ein Menü: **Neuer Chat** und alle Applikationen – Writer Studio (neues Dokument), Citation Studio, Presenter Studio (neue Präsentation), Stories Studio, Notes und Projekt (neue Projektseite). Darunter „Präsentation aus Dokument …“.
 
 **Ordner** haben eine zweite Ebene: „Neuer Unterordner“ im Menü eines Ordners, oder einen Ordner auf einen anderen ziehen. Ein Unterordner, der nach draußen gezogen wird, kommt wieder nach oben. Löscht man einen Unterordner und behält den Inhalt, wandert er in den Ordner darüber.
 
@@ -196,6 +197,34 @@ Ein **Note** ist eine ToDo-Liste mit Titel, einer Fortschrittsanzeige und freiem
 
 Ein Note gehört dem Dokument, in dessen Panel es angelegt wurde; „Vorhandenes Note verknüpfen“ ordnet ein bestehendes zu, das Pin-Symbol mit Strich löst es wieder. Im Studio zeigt „Gehört zu“ alle Zuordnungen.
 
+## Projekte
+
+Ein **Projekt** ist ein Dashboard für ein Vorhaben: Es verknüpft Chats, Dokumente, Präsentationen, Notes und Romanwelten (auch einzelne Teile und Figuren, Orte …), ohne sie zu verschieben. In der Seitenleiste steht über den Ordnern die Kategorie **Projekte** mit jedem Projekt, seinem eigenen Symbol in seiner Farbe und einem kleinen Fortschrittsring. Ein Chat oder Dokument, das man aus der Liste auf ein Projekt zieht, wird verknüpft und bleibt an seinem Platz. Ein neues Projekt (Plus in der Kategorie, Neu-Menü) beginnt mit einer Startseite.
+
+Das Projekt hat zwei Reiter:
+
+**Projektseite.** Kopf mit Symbol, Titel und Untertitel in der Schrift der Seite, Status, nächstem Meilenstein und Gesamtfortschritt. Darunter **Bausteine auf einem Raster mit 12 Spalten**. Unter „Gestalten“ fügt man Bausteine hinzu, zieht sie am Griff an einen anderen Platz und an der Ecke größer oder kleiner; was im Weg ist, rückt nach unten, und nichts überlappt. In schmalen Fenstern stehen die Bausteine untereinander. Die Seite hat eine Schrift, eine Akzentfarbe und einen Hintergrund (Schlicht, Papier, Farbverlauf, Punktraster, Blaupause); jeder Text-Baustein hat eigene Schrift, Größe, Farbe, fett, kursiv und Ausrichtung.
+
+| Baustein | Zeigt |
+|---|---|
+| Text | Überschrift oder Absatz, frei formatiert |
+| Fortschritt | Aufgaben, Akzeptanzkriterien, ToDos, Meilensteine oder alles zusammen als Bild: die zwölf Anzeigen von Notes und vier eigene – **Reise** (ein Weg durch die Meilensteine), **Sternbild** (jede Aufgabe ein Stern, erledigte leuchten und verbinden sich), **Sanduhr**, **Skyline** (die Fenster einer Stadt gehen an) |
+| ToDo-Liste | eine der ToDo-Listen des Projekts (unabhängig von Notes), mit Fälligkeit und Verknüpfung je ToDo |
+| Meilensteine | Termine auf einer Zeitleiste mit „heute“; ein Klick bearbeitet, hakt ab, färbt |
+| Diagramm | **Gantt** (Aufgaben mit Terminen und Meilensteine, Abschnitte zwischen Meilensteinen oder eigene Zeilen), **Kreis** und **Balken** (Aufgaben je Spalte, Priorität, Etikett, ToDos offen/erledigt oder eigene Werte), **Verlauf** (Erledigtes gegen alles, Tag für Tag), **Ablauf** (die Spalten des Boards als Fluss oder eigene Schritte mit Entscheidungen) |
+| Verknüpfungen | alles Verknüpfte als Kacheln; ein Klick öffnet, Gelöschtes ist markiert |
+| Kennzahl | eine große Zahl: offene Aufgaben, erledigte, mit Hindernis, ToDos, Meilensteine, Tage bis zum nächsten Meilenstein oder eine eigene |
+| Countdown | Tage bis zum nächsten Meilenstein oder einem Datum, im Ring |
+| Haftnotiz | ein farbiger Zettel in Handschrift |
+| Hindernisse | was die Aufgaben aufhält, mit Lösung; ein Klick hakt ab |
+| Aufgaben-Überblick | die Spalten des Boards in klein |
+
+**Aufgaben.** Ein **Kanban-Board** mit eigenen Spalten (anlegen, umbenennen, färben, verschieben, löschen; „gilt als erledigt“; WIP-Limit, das rot wird, wenn es überschritten ist). Karten zieht man zwischen und innerhalb der Spalten. Eine Karte zeigt Etiketten, Priorität, Fälligkeit, erfüllte Akzeptanzkriterien und Hindernisse. Ein Klick öffnet sie rechts: Titel, Spalte, Priorität, Start und Fälligkeit, Etiketten, Beschreibung, **Akzeptanzkriterien** („Woran erkennst du, dass die Aufgabe abgenommen werden kann?“, abhakbar), **Hindernisse** („Gibt es Hürden, und wie lassen sie sich beheben?“, mit Lösung, als behoben markierbar) und Verknüpfungen zu Chats, Dokumenten, Präsentationen, Notes und Stories-Elementen. Sind alle Kriterien erfüllt, bietet die Karte **„Abnehmen“** an und schiebt sie in die erledigte Spalte.
+
+**Zuordnen aus den Studios.** Writer und Presenter haben in der Titelleiste das Projekt-Symbol (mit der Zahl der Projekte): Dort ordnet man das Dokument einem Projekt oder einer Aufgabe zu, legt eine neue Aufgabe dafür an oder ein neues Projekt damit. Dasselbe gibt es in Notes für das offene Note und im Stories Studio als Karte „Projekte“ bei der Welt, jedem Teil und jedem Element.
+
+Alles lässt sich mit ⌘Z zurücknehmen. Projekte erreicht man auch im Power-Zugriff und über Actions.
+
 ## Terminal, MCP und Werkzeuge im Chat
 
 Die App lässt sich aus dem Terminal (`llmd`) und über MCP steuern, und der Chat kann auf Wunsch selbst in den Studios arbeiten. Heikle Schritte fragt die App nach, und jeder Schritt ist im Aktivitätsfenster und in der Antwort sichtbar. Siehe [Action-Schicht](actions.md).
@@ -212,6 +241,7 @@ Der Blitz in der Titelleiste (⌥⌘J) verwandelt das rechte Panel in **kompakte
 | Citation | Quellen, Zitate einer Quelle; DOI/ISBN-Import | Text wird ein neues Zitat; Eingabefeld mit Seite | Zitat mit Quellenangabe (im Dokument als Zitations-Pille) |
 | Stories | Romanwelten, Figuren/Spezies/Orte/Events/Reasons/Purposes/Fakten | Text wird ein neues Element (erste Zeile = Name) | Name und Haupttext |
 | Notes | alle Notes (die des offenen Dokuments oben), ein Note zum Abhaken | Text wird ein neues Note (Überschrift = Titel, jede Listenzeile ein ToDo); auf ein offenes Note: ToDos ans Ende | das Note als Aufgabenliste (`- [ ]`) |
+| Projekte | alle Projekte mit Fortschritt; ein Projekt mit seinen Spalten, ToDo-Listen (zum Abhaken) und Verknüpfungen | Text wird ein neues Projekt (erste Zeile = Titel, weitere Zeilen Aufgaben); auf ein offenes Projekt: jede Zeile eine Aufgabe | eine Aufgabe mit Akzeptanzkriterien und Hindernissen als Text, ein ToDo als `- [ ]` |
 
 Die **Suche** filtert in der Liste (Titel und Inhalt, mit Textausschnitt) und markiert im geöffneten Element die Treffer, mit Zähler und Pfeilen zum Springen. Jede Änderung aus dem Panel lässt sich unten mit **Rückgängig** zurücknehmen. Rechtsklick auf einen Block: Kopieren, **An der Schreibmarke einfügen**, Bearbeiten (Markdown), Löschen.
 
@@ -234,4 +264,4 @@ sequenceDiagram
 
 ## Bibliotheken
 
-Alles – Chats, Dokumente, Bilder, Personas, Gedächtnis, Skills, Zitate, Romanwelten, Notes, Einstellungen – liegt in einer **Bibliothek** (`Name.llmdlibrary`). Unten links wechselt man zwischen Bibliotheken; sie sehen nichts voneinander. Details: [Speicherformate](speicherformate.md).
+Alles – Chats, Dokumente, Bilder, Personas, Gedächtnis, Skills, Zitate, Romanwelten, Notes, Projekte, Einstellungen – liegt in einer **Bibliothek** (`Name.llmdlibrary`). Unten links wechselt man zwischen Bibliotheken; sie sehen nichts voneinander. Details: [Speicherformate](speicherformate.md).

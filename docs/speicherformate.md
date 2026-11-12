@@ -33,6 +33,7 @@ flowchart LR
     G --> GW["‹id›.json<br/>eine Romanwelt"]
     G --> GB["Bilder/‹id›/"]
     L --> N["Notizen/<br/>‹id›.json: ein Note"]
+    L --> PJ["Projekte/<br/>‹id›.json: ein Projekt"]
     L --> PD["Präsentationen/Designs/<br/>eigene CSS-Designs"]
 ```
 
@@ -190,3 +191,62 @@ Zusätzliche Felder (seit 2026-11-07, alle optional): Eine Folie trägt `"ohnePl
 | `dokumente` | IDs verknüpfter Writer-Dokumente und Präsentationen; die Dokumente bleiben in ihren Ordnern |
 
 Die Dokumente, Präsentationen und Romanwelten selbst ändern sich durch eine Zuordnung nicht. Ein gelöschtes Note kommt in den Papierkorb. Die zuletzt gewählte Anzeige (`notesDefaultStyle`) und das zuletzt offene Note (`notesLastNote`) stehen in den Einstellungen der Bibliothek.
+
+## Projekte
+
+`Projekte/<id>.json` enthält ein Projekt als `{"format": 1, "projekt": {…}}`: Seite, Aufgaben-Board, ToDo-Listen, Meilensteine, Verknüpfungen und Verlauf in einer Datei. Die Schlüssel sind deutsch; Tage stehen als `"2026-11-20"` (Kalender des Macs). Alles wird nachsichtig gelesen: Unbekanntes oder Fehlendes behält seinen Standard, ein Baustein unbekannter Art fällt weg, eine Aufgabe ohne bekannte Spalte kommt in die erste, ein Projekt ohne Spalten bekommt die fünf Standardspalten.
+
+```json
+{
+  "format": 1,
+  "projekt": {
+    "id": "…", "titel": "Hausarbeit Statistik", "untertitel": "Regression an offenen Daten",
+    "symbol": "graduationcap", "farbe": "teal", "status": "laeuft",
+    "gestaltung": {"schrift": "georgia", "akzent": "pink", "hintergrund": "papier"},
+    "bausteine": [
+      {"id": "…", "art": "text", "x": 0, "y": 0, "b": 8, "h": 2, "text": "Ziel …",
+       "stil": {"schrift": "didot", "groesse": 22, "farbe": "blue", "fett": true, "kursiv": true, "ausrichtung": "mitte"}},
+      {"id": "…", "art": "fortschritt", "x": 8, "y": 0, "b": 4, "h": 4, "anzeige": "reise", "quelle": "alles"},
+      {"id": "…", "art": "todos", "x": 0, "y": 4, "b": 6, "h": 5, "liste": "…"},
+      {"id": "…", "art": "diagramm", "x": 0, "y": 9, "b": 12, "h": 5,
+       "diagramm": {"art": "gantt", "quelle": "manuell", "werte": [{"id": "…", "titel": "Lesen", "wert": 1, "start": "2026-11-12", "ende": "2026-11-18"}]}},
+      {"id": "…", "art": "haftnotiz", "x": 0, "y": 14, "b": 3, "h": 4, "text": "…", "farbe": "yellow"}
+    ],
+    "verknuepft": [
+      {"art": "dokument", "id": "…"}, {"art": "chat", "id": "…"}, {"art": "note", "id": "…"},
+      {"art": "romanwelt", "id": "…", "teil": "…"}, {"art": "romanwelt", "id": "…", "element": {"art": "figure", "id": "…"}}
+    ],
+    "todoListen": [{"id": "…", "titel": "Nächste Schritte", "todos": [{"id": "…", "text": "Mail ans Institut", "erledigt": false, "faellig": "2026-11-15", "verweis": {"art": "dokument", "id": "…"}}]}],
+    "meilensteine": [{"id": "…", "titel": "Abgabe", "datum": "2026-11-20", "erledigt": false, "farbe": "red"}],
+    "spalten": [{"id": "…", "titel": "Offen", "farbe": "blue"}, {"id": "…", "titel": "In Arbeit", "limit": 3}, {"id": "…", "titel": "Erledigt", "fertig": true}],
+    "aufgaben": [
+      {"id": "…", "titel": "Kapitel 3", "beschreibung": "…", "spalte": "…", "prioritaet": "hoch", "start": "2026-11-12", "faellig": "2026-11-15",
+       "etiketten": ["Schreiben"],
+       "akzeptanz": [{"id": "…", "text": "Quellen geprüft", "erfuellt": true}],
+       "hindernisse": [{"id": "…", "text": "Daten fehlen", "loesung": "Beim Institut anfragen", "behoben": false}],
+       "verweise": [{"art": "dokument", "id": "…"}],
+       "erstellt": "…", "geaendert": "…"}
+    ],
+    "verlauf": [{"tag": "2026-11-12", "offen": 8, "erledigt": 12}],
+    "erstellt": "2026-11-12T09:00:00Z", "geaendert": "2026-11-12T09:30:00Z"
+  }
+}
+```
+
+| Schlüssel | Bedeutung |
+|---|---|
+| `status` | `geplant`, `laeuft`, `pausiert`, `fertig` |
+| `farbe`, `akzent`, Farben überall | die Ordnerfarben: `red`, `orange`, `yellow`, `green`, `teal`, `blue`, `purple`, `pink` |
+| `gestaltung` | Schrift der Seite (Writer-Schriften, z. B. `georgia`, `didot`, `sans`), Akzent (ohne: Farbe des Projekts), Hintergrund `standard`, `papier`, `verlauf`, `punkte`, `blaupause` |
+| `bausteine` | Platz im Raster mit 12 Spalten: `x` (Spalte 0–11), `y` (Zeile), `b` (Breite in Spalten), `h` (Höhe in Zeilen). Arten: `text`, `fortschritt`, `todos`, `meilensteine`, `diagramm`, `verknuepfungen`, `kennzahl`, `countdown`, `haftnotiz`, `hindernisse`, `board` |
+| `stil` | nur, was vom Standard abweicht: `schrift`, `groesse` (8–96), `farbe`, `fett`, `kursiv`, `ausrichtung` (`links`, `mitte`, `rechts`) |
+| `anzeige` | Fortschrittsanzeige: die zwölf von Notes und `reise`, `sternbild`, `sanduhr`, `skyline` |
+| `quelle` | was Fortschritt oder Kennzahl zählt: `aufgaben`, `akzeptanz`, `todos`, `meilensteine`, `alles`; Kennzahlen auch `offeneAufgaben`, `hindernisse`, `verknuepfungen`, `restTage`, `manuell` (mit `wert` und `text`) |
+| `liste`, `datum` | die ToDo-Liste eines ToDo-Bausteins; der Tag eines Countdowns (ohne: der nächste offene Meilenstein) |
+| `diagramm` | `art`: `gantt`, `kreis`, `balken`, `verlauf`, `ablauf`; `quelle`: `aufgaben`, `meilensteine`, `spalten`, `prioritaet`, `etiketten`, `todos`, `verlauf`, `manuell`; `werte` nur bei eigenen Werten (`titel`, `wert`, `farbe`, `start`, `ende`, `erledigt`, `form`: `schritt`, `entscheidung`, `start`) |
+| `verknuepft`, `verweise`, `verweis` | Chats, Dokumente/Präsentationen, Notes, Romanwelten mit optionalem `teil` oder `element`. Das Verknüpfte bleibt, wo es ist; ein gelöschtes hinterlässt einen Hinweis statt eines Fehlers |
+| `spalten` | eigene Spalten des Boards; `fertig`: Aufgaben darin gelten als erledigt; `limit`: WIP-Grenze |
+| `aufgaben` | in Board-Reihenfolge; `prioritaet`: `niedrig`, `mittel`, `hoch`, `dringend`; `akzeptanz`: woran man die Abnahme erkennt; `hindernisse` mit `loesung` |
+| `verlauf` | ein Eintrag je Tag, an dem sich etwas geändert hat: offene und erledigte Aufgaben und ToDos zusammen, nie Text; höchstens 400 Tage |
+
+Ein gelöschtes Projekt kommt in den Papierkorb. Ob die Kategorie „Projekte“ in der Seitenleiste eingeklappt ist (`projectsSectionCollapsed`), steht in den Einstellungen der Bibliothek.

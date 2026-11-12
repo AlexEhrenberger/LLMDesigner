@@ -17,7 +17,7 @@ flowchart LR
     SRV --> REG["ActionRegistry<br/>Schema, Regel, Undo, Protokoll"]
     REG --> POL["ActionPolicy<br/>Rule of Two"]
     REG --> APP["ActionApproval<br/>Dialog"]
-    REG --> ACT["Actions<br/>Writer, Presenter, Citation, Stories, Notes, Chat"]
+    REG --> ACT["Actions<br/>Writer, Presenter, Citation, Stories, Notes, Projekte, Chat"]
     ACT --> AM["AppModel und Bibliothek"]
 ```
 
@@ -105,6 +105,17 @@ llmd notes todo check --note Bachelorarbeit --todo 1
 llmd notes note progress --note Bachelorarbeit
 ```
 
+## Projekte
+
+Projekte, Aufgaben, Spalten, Bausteine, ToDos und Meilensteine nimmt jede Action als ID, Nummer (wie in der Ausgabe) oder eindeutigen Titel. Verknüpft wird mit `--chat`, `--doc`, `--note` oder `--world` (mit `--part` oder `--element figure:Mara`). `projects.link.find --doc …` sagt, zu welchen Projekten und Aufgaben ein Dokument gehört. Katalog: [Projekte-Actions](plan/Projekte-Actions.md).
+
+```bash
+llmd projects project create --title "Hausarbeit Statistik" --columns Offen --columns "In Arbeit" --columns Fertig
+llmd projects task add --project "Hausarbeit Statistik" --title "Kapitel 3" --criteria "Quellen geprüft" --doc Hausarbeit
+llmd projects task move --project "Hausarbeit Statistik" --task "Kapitel 3" --column Fertig
+llmd projects block add --project "Hausarbeit Statistik" --kind diagramm --chart gantt --source aufgaben --width 12
+```
+
 ## MCP
 
 `llmd mcp` ist ein stdio-Server nach Spezifikation 2026-07-28 und versteht auch das ältere `initialize`.
@@ -116,10 +127,10 @@ claude mcp add llmd -- "/Pfad/LLM Designer.app/Contents/Helpers/llmd" mcp --prof
 | Profil | Inhalt |
 |---|---|
 | `core` | der kleine Satz zum Lesen, Schreiben, Präsentieren, Zitieren und Fragen |
-| `writer`, `presenter`, `citation`, `stories`, `notes`, `chat` | ein Studio |
+| `writer`, `presenter`, `citation`, `stories`, `notes`, `projects`, `chat` | ein Studio |
 | `full` | alles außer privaten Daten |
 
-Jedes Profil hat zusätzlich `llmd_search_actions` und `llmd_run_action`, damit kleine Modelle nicht alle Tools laden müssen. Dazu kommen Resources (`llmd://writer/doc/{id}`, `llmd://presenter/deck/{id}`, `llmd://citation/source/{key}`, `llmd://stories/world/{id}`, `llmd://notes/note/{id}`), Prompts aus Skills und `subscriptions/listen`.
+Jedes Profil hat zusätzlich `llmd_search_actions` und `llmd_run_action`, damit kleine Modelle nicht alle Tools laden müssen. Dazu kommen Resources (`llmd://writer/doc/{id}`, `llmd://presenter/deck/{id}`, `llmd://citation/source/{key}`, `llmd://stories/world/{id}`, `llmd://notes/note/{id}`, `llmd://projects/project/{id}`), Prompts aus Skills und `subscriptions/listen`.
 
 Der Kanal gilt immer als fremd. `memory.*` und `persona.files.*` sind gesperrt, Chats mit privaten Dateien ebenso. Eine Runde, die von hier ausgeht, läuft in einem Chat ohne dessen Werkzeuge.
 

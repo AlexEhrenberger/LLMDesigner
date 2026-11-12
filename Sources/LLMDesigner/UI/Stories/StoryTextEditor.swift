@@ -18,11 +18,13 @@ struct StoryTextEditor: View {
     var singleLine = false
     /// Takes the keyboard when it appears (a new element's name, a new scene).
     var focusOnAppear = false
+    /// How the lines sit (project pages set text centred or to the right).
+    var alignment: NSTextAlignment = .natural
     @State private var height: CGFloat?
 
     var body: some View {
         StoryTextViewHost(placeholder: placeholder, text: $text, minLines: minLines, font: font, color: color,
-                          singleLine: singleLine, focusOnAppear: focusOnAppear) { newHeight in
+                          singleLine: singleLine, focusOnAppear: focusOnAppear, alignment: alignment) { newHeight in
             if height != newHeight { height = newHeight }
         }
         .frame(height: height ?? StoryTextViewHost.lineHeight(font) * CGFloat(max(minLines, 1)))
@@ -37,7 +39,17 @@ private struct StoryTextViewHost: NSViewRepresentable {
     let color: NSColor
     let singleLine: Bool
     let focusOnAppear: Bool
+    let alignment: NSTextAlignment
     let onHeight: (CGFloat) -> Void
+
+    /// Colours made from SwiftUI are new objects on every update, so the style is compared by what it looks like.
+    static func styleKey(font: NSFont, color: NSColor, alignment: NSTextAlignment, in view: NSView) -> String {
+        var rgb = ""
+        view.effectiveAppearance.performAsCurrentDrawingAppearance {
+            if let c = color.usingColorSpace(.sRGB) { rgb = String(format: "%.3f,%.3f,%.3f,%.3f", c.redComponent, c.greenComponent, c.blueComponent, c.alphaComponent) }
+        }
+        return "\(font.fontName)|\(font.pointSize)|\(alignment.rawValue)|\(rgb)"
+    }
 
     static func lineHeight(_ font: NSFont) -> CGFloat {
         ceil(NSLayoutManager().defaultLineHeight(for: font))
@@ -61,6 +73,7 @@ private struct StoryTextViewHost: NSViewRepresentable {
         textView.textColor = color
         textView.insertionPointColor = color
         textView.typingAttributes = [.font: font, .foregroundColor: color]
+        textView.alignment = alignment
         textView.string = text
         textView.placeholder = placeholder
         textView.delegate = context.coordinator
@@ -78,6 +91,18 @@ private struct StoryTextViewHost: NSViewRepresentable {
             textView.needsDisplay = true
             context.coordinator.reportHeight()
         }
+        // A style chosen while the field is shown (font, colour, alignment) goes onto all of its text.
+        let style = Self.styleKey(font: font, color: color, alignment: alignment, in: textView)
+        if context.coordinator.styleKey == nil { context.coordinator.styleKey = style }
+        if context.coordinator.styleKey != style {
+            context.coordinator.styleKey = style
+            textView.font = font
+            textView.textColor = color
+            textView.insertionPointColor = color
+            textView.typingAttributes = [.font: font, .foregroundColor: color]
+            textView.alignment = alignment
+            context.coordinator.reportHeight()
+        }
         if textView.placeholder != placeholder {
             textView.placeholder = placeholder
             textView.needsDisplay = true
@@ -87,6 +112,7 @@ private struct StoryTextViewHost: NSViewRepresentable {
     final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: StoryTextViewHost
         weak var textView: StoryTextView?
+        var styleKey: String?
         private var reported: CGFloat?
 
         init(_ parent: StoryTextViewHost) {
