@@ -280,6 +280,15 @@ final class AppModel {
     /// Pictures for the composer that are still being read and scaled, per chat.
     private var draftImports: [UUID: Int] = [:]
 
+    // MARK: Documents
+
+    /// Documents in the composer, per chat like the pictures (`AppModel+Documents`).
+    var draftDocumentLists: [UUID: [DocumentAttachment]] = [:]
+    /// Documents that are still being read, with what is happening, per chat.
+    var documentImports: [UUID: [DocumentImport]] = [:]
+    /// Documents whose figures a model is describing right now.
+    var describingDocumentIDs: Set<DocumentAttachment.ID> = []
+
     // MARK: Editing
 
     /// Question that is being edited in place; sending it branches the chat.
@@ -423,7 +432,7 @@ final class AppModel {
     @ObservationIgnored private var liveAnswers: [ChatMessage.ID: LiveAnswer] = [:]
     private var drafts: [UUID: String] = [:]
 
-    @ObservationIgnored private let newChatDraftKey = UUID()
+    @ObservationIgnored let newChatDraftKey = UUID()
     @ObservationIgnored private var explicitModelChoice = false
     @ObservationIgnored private var generationTasks: [Chat.ID: Task<Void, Never>] = [:]
     @ObservationIgnored private var pollTask: Task<Void, Never>?
@@ -798,7 +807,8 @@ final class AppModel {
 
     var canSend: Bool {
         let hasText = !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        return (hasText || !draftImages.isEmpty) && importingDraftImages == 0 && currentModelId != nil && !isGenerating
+        return (hasText || !draftImages.isEmpty || !draftDocuments.isEmpty) && importingDraftImages == 0 && draftDocumentImports.isEmpty
+            && currentModelId != nil && !isGenerating
     }
 
     var chatSearchQuery: String { searchText.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -972,6 +982,7 @@ final class AppModel {
         chats.removeAll { $0.id == id }
         drafts[id] = nil
         draftImageLists[id] = nil
+        draftDocumentLists[id] = nil
         store.delete(id)
         if selectedChatID == id { selectedChatID = nil }
         if miniChat.chatID == id { miniChat.chatID = nil }
@@ -991,10 +1002,13 @@ final class AppModel {
         }
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         let images = draftImages
-        guard !text.isEmpty || !images.isEmpty, importingDraftImages == 0, currentModelId != nil, !isGenerating else { return }
+        let documents = draftDocuments
+        guard !text.isEmpty || !images.isEmpty || !documents.isEmpty, importingDraftImages == 0, draftDocumentImports.isEmpty,
+              currentModelId != nil, !isGenerating else { return }
         draft = ""
         draftImages = []
-        send(text: text, images: images)
+        draftDocuments = []
+        send(text: text, images: images, documents: documents)
     }
 
     /// Sends a suggested follow-up question as the next message.
@@ -1005,14 +1019,14 @@ final class AppModel {
 
     /// Sends a message in the selected chat, or starts a new chat with it. `spoken` marks a turn of conversation mode.
     @discardableResult
-    func send(text: String, images: [ImageAttachment] = [], spoken: Bool = false) -> Chat.ID? {
+    func send(text: String, images: [ImageAttachment] = [], documents: [DocumentAttachment] = [], spoken: Bool = false) -> Chat.ID? {
         guard let modelId = currentModelId else { return nil }
 
         let chatID: Chat.ID
         if let selectedIndex {
             chatID = chats[selectedIndex].id
         } else {
-            var chat = Chat(title: Self.title(for: text), modelId: modelId)
+            var chat = Chat(title: Self.title(for: text.isEmpty ? documents.first.map { ($0.name as NSString).deletingPathExtension } ?? text : text), modelId: modelId)
             chat.hasCustomTitle = false
             if newChatWebSearch { chat.webSearch = true }
             if newChatWikipedia { chat.wikipediaSearch = true }
@@ -1042,17 +1056,17 @@ final class AppModel {
         }
 
         guard index(of: chatID) != nil else { return nil }
-        ask(text, images: images, in: chatID, model: modelId, spoken: spoken)
+        ask(text, images: images, documents: documents, in: chatID, model: modelId, spoken: spoken)
         return chatID
     }
 
     /// Adds the question to a chat (the main window's or the mini chat's) and lets the model answer it.
-    func ask(_ text: String, images: [ImageAttachment], in chatID: Chat.ID, model modelId: String, spoken: Bool = false) {
+    func ask(_ text: String, images: [ImageAttachment], documents: [DocumentAttachment] = [], in chatID: Chat.ID, model modelId: String, spoken: Bool = false) {
         guard let index = index(of: chatID) else { return }
         // The chat model has priority; outline and suggestions are rebuilt once the answer is complete.
         outlineTasks[chatID]?.cancel()
         followUpTasks[chatID]?.cancel()
-        chats[index].messages.append(ChatMessage(role: .user, content: text, images: images.isEmpty ? nil : images))
+        chats[index].messages.append(ChatMessage(role: .user, content: text, images: images.isEmpty ? nil : images, documents: documents.isEmpty ? nil : documents))
         chats[index].modelId = modelId
         chats[index].updatedAt = Date()
         chats.sort { $0.updatedAt > $1.updatedAt }
@@ -1113,7 +1127,8 @@ final class AppModel {
         let canCallTools = model?.acceptsTools == true
         let sources: WebTools.Sources = canCallTools ? lookupSources(of: chats[index]) : []
         // A persona with files may look into them whenever it needs to.
-        let fileTools = canCallTools ? persona(of: chats[index]).flatMap(PersonaFileTools.init(persona:)) : nil
+        // Documents too long for the chat come along with the same tools.
+        let fileTools = canCallTools ? PersonaFileTools(persona: persona(of: chats[index]), documents: shortenedDocuments(of: chats[index])) : nil
         // A turn that an action started runs without action tools (see `startTurn` in ChatActions).
         let actionTools = canCallTools && !chatsBeingAskedByActions.contains(chatID)
             ? actionRegistry.flatMap { ChatActionTools(registry: $0, chat: chats[index]) } : nil
@@ -1128,8 +1143,9 @@ final class AppModel {
         // Kapitsa switches thinking per request. In LM Studio, Gemma 4 thinks only with its token at the very start of
         // the system prompt; Qwen 3.5 always thinks there.
         let thinking = chats[index].thinking == true
+        let chat = chats[index]
         let history = chats[index].messages.filter { $0.error == nil && $0.hasContent }.map { message in
-            var entry = ChatPayloadMessage(role: message.role.rawValue, content: WebTools.historyContent(of: message))
+            var entry = ChatPayloadMessage(role: message.role.rawValue, content: modelContent(of: message, in: chat, toolsAvailable: canCallTools))
             if message.role == .user, let images = message.images {
                 entry.images = images.compactMap(AttachmentStore.dataURL)
             }
@@ -1182,10 +1198,10 @@ final class AppModel {
             var timedTokens = 0
             var streamingSeconds = 0.0
             var reasoningSeconds = 0.0
-            var lastFlush = Date.distantPast
+            var reportedModel: String?
             var failure: String?
 
-            // Shows the accumulated stream in the answer; called at most ~20×/s to keep the UI smooth.
+            // Shows the accumulated stream in the answer; `StreamRound` calls it at most ~20×/s.
             @MainActor func flush() {
                 let parts = ThinkingSplitter.split(raw)
                 if roundFirstContent == nil, !parts.content.isEmpty { roundFirstContent = Date() }
@@ -1245,36 +1261,32 @@ final class AppModel {
                     let stream = client.streamChat(
                         model: modelId, messages: conversation, temperature: temperature, tools: offered, thinking: thinking
                     )
-                    var calls: [ToolCall] = []
-
-                    for try await event in stream {
-                        let now = Date()
-                        switch event {
-                        case .content(let text):
-                            if roundStart == nil { roundStart = now }
-                            raw += text
-                            roundEvents += 1
-                        case .reasoning(let text):
-                            if roundStart == nil { roundStart = now }
-                            reasoningField += text
-                            roundEvents += 1
-                        case .usage(let prompt, let completion, let cached):
-                            promptTokens = prompt
-                            roundCompletion = completion
-                            if !sawUsage {
-                                sawUsage = true
-                                cachedPromptTokens = cached
-                            }
-                        case .model(let answering):
+                    @MainActor func take(_ round: StreamRound) {
+                        raw = round.raw
+                        reasoningField = round.reasoning
+                        roundStart = round.start
+                        roundEvents = round.events
+                        if let answering = round.model, answering != reportedModel {
+                            reportedModel = answering
                             self?.updateMessage(chatID, messageID) { $0.model = answering }
-                        case .toolCalls(let requested):
-                            calls = requested
-                        }
-                        if now.timeIntervalSince(lastFlush) >= 0.05 {
-                            lastFlush = now
-                            flush()
                         }
                     }
+                    let outcome = await StreamRound.read(stream) { round in
+                        take(round)
+                        flush()
+                    }
+                    let round = outcome.round
+                    take(round)
+                    if round.sawUsage {
+                        promptTokens = round.promptTokens
+                        roundCompletion = round.completionTokens
+                        if !sawUsage {
+                            sawUsage = true
+                            cachedPromptTokens = round.cachedPromptTokens
+                        }
+                    }
+                    let calls = round.toolCalls
+                    if let error = outcome.error { throw error }
 
                     let roundText = closeRound()
                     if offered == nil, tools != nil {
@@ -1455,14 +1467,14 @@ final class AppModel {
     }
 
     /// Asks the edited question in a new branch: the messages before it are copied, the original chat stays as it is.
-    func submitEdit(of messageID: ChatMessage.ID, text: String, images: [ImageAttachment]) {
+    func submitEdit(of messageID: ChatMessage.ID, text: String, images: [ImageAttachment], documents: [DocumentAttachment] = []) {
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty || !images.isEmpty, let source = selectedChat,
+        guard !text.isEmpty || !images.isEmpty || !documents.isEmpty, let source = selectedChat,
               let position = source.messages.firstIndex(where: { $0.id == messageID }) else { return }
         var chat = makeBranch(of: source, keeping: position, from: messageID, editedQuestion: true)
         // The first question names the chat, unless the user chose the title.
         if position == 0 && !source.isTitleCustom { chat.title = Self.title(for: text) }
-        chat.messages.append(ChatMessage(role: .user, content: text, images: images.isEmpty ? nil : images))
+        chat.messages.append(ChatMessage(role: .user, content: text, images: images.isEmpty ? nil : images, documents: documents.isEmpty ? nil : documents))
         open(chat)
         generate(in: chat.id)
     }
@@ -1591,6 +1603,9 @@ final class AppModel {
         var used = Set(chats.flatMap { $0.messages.flatMap { ($0.images ?? []).map(\.fileName) } })
         used.formUnion(draftImageLists.values.flatMap { $0.map(\.fileName) })
         used.formUnion(miniChat.images.map(\.fileName))
+        used.formUnion(chats.flatMap { $0.messages.flatMap { ($0.documents ?? []).flatMap(DocumentStore.fileNames(of:)) } })
+        used.formUnion(draftDocumentLists.values.flatMap { $0.flatMap(DocumentStore.fileNames(of:)) })
+        used.formUnion(miniChat.documents.flatMap(DocumentStore.fileNames(of:)))
         Task.detached(priority: .utility) { AttachmentStore.removeUnused(keeping: used) }
     }
 

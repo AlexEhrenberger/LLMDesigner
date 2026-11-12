@@ -173,6 +173,11 @@ extension AppModel {
         let steps = chat.messages.flatMap { $0.toolSteps ?? [] }.filter { $0.status == .done }
         if steps.contains(where: { $0.kind.isFile }) || chat.memory == .on { state.markSensitive() }
         if steps.contains(where: { $0.kind == .search || $0.kind.readsPage || $0.kind == .wikiSearch }) { state.markUntrusted() }
+        // An attached document is the person's, often private, and its text was mostly written by others: both at once.
+        if chatHasDocuments(chat) {
+            state.markUntrusted()
+            state.markSensitive()
+        }
     }
 
     /// Takes back everything an answer changed through tools. Returns how many steps went back.

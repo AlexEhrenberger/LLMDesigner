@@ -356,7 +356,8 @@ struct LLMClient: Sendable {
     ) async throws -> String {
         var body: [String: Any] = [
             "model": model,
-            "messages": messages.map { ["role": $0.role, "content": $0.content] },
+            // Encoded like a streamed request, so pictures go along as image parts (describing a document's figures).
+            "messages": try messages.map { try JSONSerialization.jsonObject(with: JSONEncoder().encode($0)) },
             "temperature": temperature,
             "max_tokens": maxTokens,
             "stream": false,

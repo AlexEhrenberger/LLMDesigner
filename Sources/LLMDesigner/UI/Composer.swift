@@ -18,12 +18,17 @@ struct ComposerView: View {
             if !app.draftImages.isEmpty || app.importingDraftImages > 0 {
                 AttachmentStrip(images: app.draftImages, importing: app.importingDraftImages, onRemove: app.removeDraftImage)
             }
+            if !app.draftDocuments.isEmpty || !app.draftDocumentImports.isEmpty {
+                DocumentStrip(documents: app.draftDocuments, imports: app.draftDocumentImports, budget: app.draftDocumentBudget,
+                              onRemove: app.removeDraftDocument)
+            }
             ComposerTextView(
                 text: $text,
                 height: $textHeight,
                 focusToken: focusToken,
                 onSubmit: { if canSend { onSend() } },
-                onImages: { app.attachImages($0) }
+                onImages: { app.attachImages($0) },
+                onDocuments: { app.attachDocuments($0) }
             )
             .frame(height: min(max(textHeight, 20), 260))
             .overlay(alignment: .topLeading) {
@@ -110,14 +115,14 @@ private struct MemoryIdleIndicator: View {
     }
 }
 
-/// Opens a file dialog for pictures. Pictures can also be pasted (⌘V) or dragged into the window.
+/// Opens a file dialog for pictures and documents. Both can also be pasted (⌘V) or dragged into the window.
 private struct AttachImageButton: View {
     @Environment(AppModel.self) private var app
     @State private var hovering = false
 
     var body: some View {
-        Button { app.chooseImages() } label: {
-            Image(systemName: "photo.badge.plus")
+        Button { app.chooseAttachments() } label: {
+            Image(systemName: "paperclip")
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(hovering ? Theme.textPrimary : Theme.textSecondary)
                 .frame(width: 32, height: 32)
@@ -126,7 +131,7 @@ private struct AttachImageButton: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
-        .help("Bilder anhängen (⇧⌘A) – oder einfügen (⌘V) bzw. ins Fenster ziehen")
+        .help("Bilder oder Dokumente anhängen (⇧⌘A): PDF, Word, Text – oder einfügen (⌘V) bzw. ins Fenster ziehen")
     }
 }
 
@@ -390,6 +395,8 @@ struct ComposerTextView: NSViewRepresentable {
     let onSubmit: () -> Void
     /// Pictures pasted or dropped onto the text.
     var onImages: (([AttachmentStore.Source]) -> Void)? = nil
+    /// Documents (PDF, Word, text files) pasted or dropped onto the text.
+    var onDocuments: (([URL]) -> Void)? = nil
     /// Escape, e.g. to leave the editor of a sent message.
     var onCancel: (() -> Void)? = nil
 
@@ -427,6 +434,9 @@ struct ComposerTextView: NSViewRepresentable {
         textView.onWidthChange = { [weak coordinator = context.coordinator] in coordinator?.recalculateHeight() }
         if onImages != nil {
             textView.onImages = { [weak coordinator = context.coordinator] in coordinator?.parent.onImages?($0) }
+        }
+        if onDocuments != nil {
+            textView.onDocuments = { [weak coordinator = context.coordinator] in coordinator?.parent.onDocuments?($0) }
         }
         if onCancel != nil {
             textView.onCancel = { [weak coordinator = context.coordinator] in coordinator?.parent.onCancel?() }
@@ -502,6 +512,9 @@ final class SubmittingTextView: NSTextView {
     var onImages: (([AttachmentStore.Source]) -> Void)? {
         didSet { updateDragTypeRegistration() }
     }
+    var onDocuments: (([URL]) -> Void)? {
+        didSet { updateDragTypeRegistration() }
+    }
 
     override func keyDown(with event: NSEvent) {
         let isReturn = event.keyCode == 36 || event.keyCode == 76
@@ -523,10 +536,15 @@ final class SubmittingTextView: NSTextView {
     /// A plain-text view greys out Paste when the clipboard holds only a picture.
     override func validateUserInterfaceItem(_ item: any NSValidatedUserInterfaceItem) -> Bool {
         if item.action == #selector(paste(_:)), onImages != nil, ImagePasteboard.containsImages(.general) { return true }
+        if item.action == #selector(paste(_:)), onDocuments != nil, DocumentPasteboard.containsDocuments(.general) { return true }
         return super.validateUserInterfaceItem(item)
     }
 
     override func paste(_ sender: Any?) {
+        if let onDocuments, let urls = DocumentPasteboard.documents(on: .general) {
+            onDocuments(urls)
+            return
+        }
         if let onImages, let sources = ImagePasteboard.sources(on: .general, preferText: true) {
             onImages(sources)
             return
@@ -535,7 +553,7 @@ final class SubmittingTextView: NSTextView {
     }
 
     override var acceptableDragTypes: [NSPasteboard.PasteboardType] {
-        onImages == nil ? super.acceptableDragTypes : super.acceptableDragTypes + [.fileURL, .png, .tiff]
+        onImages == nil && onDocuments == nil ? super.acceptableDragTypes : super.acceptableDragTypes + [.fileURL, .png, .tiff]
     }
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
@@ -551,6 +569,12 @@ final class SubmittingTextView: NSTextView {
     }
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        if let onDocuments, let urls = DocumentPasteboard.documents(on: sender.draggingPasteboard) {
+            onDocuments(urls)
+            // Pictures dragged along with them still go their way.
+            if let onImages, let sources = ImagePasteboard.sources(on: sender.draggingPasteboard, preferText: false) { onImages(sources) }
+            return true
+        }
         if let onImages, let sources = ImagePasteboard.sources(on: sender.draggingPasteboard, preferText: false) {
             onImages(sources)
             return true
@@ -559,7 +583,8 @@ final class SubmittingTextView: NSTextView {
     }
 
     private func acceptsImages(_ info: NSDraggingInfo) -> Bool {
-        onImages != nil && ImagePasteboard.containsImages(info.draggingPasteboard)
+        (onImages != nil && ImagePasteboard.containsImages(info.draggingPasteboard))
+            || (onDocuments != nil && DocumentPasteboard.containsDocuments(info.draggingPasteboard))
     }
 
     override func setFrameSize(_ newSize: NSSize) {

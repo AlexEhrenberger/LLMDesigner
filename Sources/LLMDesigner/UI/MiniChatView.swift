@@ -185,12 +185,16 @@ private struct MiniChatComposer: View {
                 if !mini.images.isEmpty || mini.importing > 0 {
                     AttachmentStrip(images: mini.images, importing: mini.importing, onRemove: app.removeMiniChatImage)
                 }
+                if !mini.documents.isEmpty || !mini.documentImports.isEmpty {
+                    DocumentStrip(documents: mini.documents, imports: mini.documentImports, onRemove: app.removeMiniChatDocument)
+                }
                 ComposerTextView(
                     text: $mini.draft,
                     height: $textHeight,
                     focusToken: mini.focusToken,
                     onSubmit: { if app.canSendMiniChat { app.sendMiniChat() } },
-                    onImages: { app.attachMiniChatImages($0) }
+                    onImages: { app.attachMiniChatImages($0) },
+                    onDocuments: { app.attachDocuments($0, forMiniChat: true) }
                 )
                 .frame(height: min(max(textHeight, 20), 180))
                 .overlay(alignment: .topLeading) {
@@ -207,8 +211,8 @@ private struct MiniChatComposer: View {
                     DictationPreview()
                 }
                 HStack(spacing: 4) {
-                    IconButton(systemName: "photo.badge.plus", help: "Bilder anhängen (⇧⌘A) – oder einfügen (⌘V)", size: 14) {
-                        app.chooseImages(forMiniChat: true)
+                    IconButton(systemName: "paperclip", help: "Bilder oder Dokumente anhängen (⇧⌘A) – oder einfügen (⌘V)", size: 14) {
+                        app.chooseAttachments(forMiniChat: true)
                     }
                     // The name goes when the row would run out of room (the thinking pill is wider when on).
                     ScreenGlanceButton(showsTitle: width >= (app.isMiniChatThinkingOn ? 430 : 370))

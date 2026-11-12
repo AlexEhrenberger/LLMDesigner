@@ -80,6 +80,7 @@ struct MessageRow: View, Equatable {
 }
 
 private struct UserMessageView: View {
+    @Environment(AppModel.self) private var app
     let message: ChatMessage
     let isHighlighted: Bool
     let isBookmarked: Bool
@@ -96,6 +97,9 @@ private struct UserMessageView: View {
             } else {
                 if let images = message.images, !images.isEmpty {
                     MessageImageGallery(images: images)
+                }
+                if let documents = message.documents, !documents.isEmpty {
+                    MessageDocumentList(documents: documents, chatID: app.chat(holding: message.id)?.id)
                 }
                 if !message.content.isEmpty {
                     bubble
@@ -146,6 +150,7 @@ private struct MessageEditor: View {
     let message: ChatMessage
     @State private var text: String
     @State private var images: [ImageAttachment]
+    @State private var documents: [DocumentAttachment]
     @State private var importing = 0
     @State private var height: CGFloat = 20
 
@@ -153,10 +158,11 @@ private struct MessageEditor: View {
         self.message = message
         _text = State(initialValue: message.content)
         _images = State(initialValue: message.images ?? [])
+        _documents = State(initialValue: message.documents ?? [])
     }
 
     private var canSend: Bool {
-        (!text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !images.isEmpty) && importing == 0
+        (!text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !images.isEmpty || !documents.isEmpty) && importing == 0
     }
 
     var body: some View {
@@ -164,6 +170,11 @@ private struct MessageEditor: View {
             if !images.isEmpty || importing > 0 {
                 AttachmentStrip(images: images, importing: importing) { id in
                     images.removeAll { $0.id == id }
+                }
+            }
+            if !documents.isEmpty {
+                DocumentStrip(documents: documents) { id in
+                    documents.removeAll { $0.id == id }
                 }
             }
             ComposerTextView(
@@ -199,7 +210,7 @@ private struct MessageEditor: View {
 
     private func submit() {
         guard canSend else { return }
-        app.submitEdit(of: message.id, text: text, images: images)
+        app.submitEdit(of: message.id, text: text, images: images, documents: documents)
     }
 
     private func addImages(_ sources: [AttachmentStore.Source]) {

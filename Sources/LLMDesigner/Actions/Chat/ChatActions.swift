@@ -3,6 +3,7 @@ import LLMDProtocol
 
 extension ActionRegistry {
     func registerChatActions() {
+        registerChatDocumentActions()
         register(ChatListAction.self)
         register(ChatCreateAction.self)
         register(ChatReadAction.self)
@@ -59,8 +60,10 @@ extension AppModel {
         let persona = persona(of: chat)
         let isPrivate = chat.memory == .on || persona?.files?.isEmpty == false
             || chat.messages.contains { $0.toolSteps?.contains { $0.kind.isFile } == true }
+            || chatHasDocuments(chat)
         let isForeign = chat.webSearch == true || chat.wikipediaSearch == true
             || chat.messages.contains { $0.toolSteps?.contains { !$0.kind.isFile && $0.kind != .action } == true }
+            || chatHasDocuments(chat)
         return ActionPreflight(readsUntrusted: isForeign, readsSensitive: isPrivate, target: chat.title)
     }
 }
@@ -90,6 +93,8 @@ struct MessageInfo: Encodable, Sendable {
     var reasoning: String?
     var error: String?
     var images: Int?
+    /// Names of the attached documents; their text comes with chat.document.read.
+    var documents: [String]?
     var tools: [Step]?
 
     init(_ message: ChatMessage, withReasoning: Bool, withTools: Bool) {
@@ -101,6 +106,7 @@ struct MessageInfo: Encodable, Sendable {
         reasoning = withReasoning ? message.reasoning : nil
         error = message.error
         images = message.images?.count
+        documents = message.documents.map { $0.map(\.name) }
         if withTools, let steps = message.toolSteps, !steps.isEmpty {
             tools = steps.map { Step(kind: $0.kind.rawValue, argument: $0.argument, status: $0.status.rawValue) }
         }
@@ -253,6 +259,8 @@ struct ChatTextArgs: Decodable, Sendable {
     var chat: String
     var text: String
     var timeout: Int?
+    /// Sends the pictures and documents waiting in the chat's composer along.
+    var withDraft: Bool?
 }
 
 /// Starting a turn is the same for `send` and `ask`.
@@ -267,7 +275,14 @@ private func startTurn(_ args: ChatTextArgs, context: ActionContext) throws -> (
     // A turn from a program or a marked run gets no action tools: otherwise it could have its work done by a chat whose
     // run looks clean. The person at the terminal may use them. It ends with the answer (`finishGeneration`).
     if context.channel != .cli || context.run.hasReadUntrusted { app.chatsBeingAskedByActions.insert(chat.id) }
-    app.ask(args.text, images: [], in: chat.id, model: model)
+    var images: [ImageAttachment] = [], documents: [DocumentAttachment] = []
+    if args.withDraft == true {
+        images = app.draftImages(of: chat.id)
+        documents = app.draftDocuments(of: chat.id)
+        app.setDraftImages([], of: chat.id)
+        app.setDraftDocuments([], of: chat.id)
+    }
+    app.ask(args.text, images: images, documents: documents, in: chat.id, model: model)
     return (chat, count)
 }
 
@@ -286,7 +301,10 @@ private func waitForAnswer(in chatID: Chat.ID, app: AppModel, timeout: Int) asyn
     }
 }
 
-private let chatTextSchema: [String: JSONSchema] = ["chat": .string("Chat (ID oder Titel)"), "text": .string("Die Nachricht")]
+private let chatTextSchema: [String: JSONSchema] = [
+    "chat": .string("Chat (ID oder Titel)"), "text": .string("Die Nachricht"),
+    "withDraft": .boolean("Bilder und Dokumente aus dem Eingabefeld mitschicken (chat.image.attach, chat.document.attach)"),
+]
 
 struct ChatSendAction: LLMDAction {
     struct Output: Encodable, Sendable {

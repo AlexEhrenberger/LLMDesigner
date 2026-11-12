@@ -54,6 +54,8 @@ Fenster → **Action-Katalog für Agenten** (auch unter Einstellungen → Termin
 - **Web- und Wikipedia-Suche** sind Werkzeuge (Tool Calls), pro Chat einschaltbar, nie automatisch.
 - **Kontextlänge** (8K/16K/32K) pro Chat; die App lädt das Modell bei Bedarf mit der passenden Länge neu.
 - **Inhaltsverzeichnis** und Lesezeichen des Chats rechts; Abzweigen, Fragen bearbeiten, Folgefragen, Bilder, Formeln, PDF-Export.
+- **Dokumente als Anhang** (Büroklammer, ⇧⌘A, Einfügen oder Ziehen): PDF, Word, RTF, OpenDocument, HTML und Text. Ein PDF wird Seite für Seite gelesen, Seiten ohne Text (Scans) erkennt die App selbst. Abbildungen schneidet sie aus und setzt an ihre Stelle einen Platzhalter mit Bildunterschrift; „Abbildungen beschreiben“ lässt ein Modell, das Bilder versteht (Gemma 4, Qwen 3.5 in Kapitsa), jede einmal beschreiben, danach geht die Beschreibung als Text mit. Eine einzelne Abbildung lässt sich mit der nächsten Frage als Bild mitschicken. Der Chip zeigt Seiten und Tokens; ist ein Dokument länger als gut ein Drittel des Kontexts, kommt nur der Anfang mit, und das Modell liest den Rest mit `search_files`/`read_file` nach.
+- **Code-Blöcke** stehen in einem eigenen Textfeld, das beim Streamen nur anhängt; die Antwort liest den Strom abseits des Main Threads (`StreamRound`), sodass sie auch bei langem Code mit dem Modell Schritt hält.
 - **Gesprächsmodus**: Diktat (Apple SpeechTranscriber) und Sprachausgabe (Qwen TTS) im Wechsel.
 
 ```mermaid
@@ -69,7 +71,7 @@ sequenceDiagram
         L-->>T: Eindruck
         T-->>A: passende Erinnerungen
     end
-    A->>L: System-Prompt + Skills + Verlauf (+ Werkzeuge)
+    A->>L: System-Prompt + Skills + Verlauf mit Anhängen (+ Werkzeuge)
     loop Stream
         L-->>A: Token, Denkteil, Tool-Call-Stücke
         opt Werkzeug

@@ -26,6 +26,9 @@ final class MiniChat {
     var images: [ImageAttachment] = []
     /// Pictures that are still being read or taken.
     var importing = 0
+    var documents: [DocumentAttachment] = []
+    /// Documents that are still being read.
+    var documentImports: [DocumentImport] = []
     /// Thinking of the chat that is being started in the window.
     var newChatThinking = false
     /// The running dictation writes into this composer.
@@ -62,7 +65,8 @@ extension AppModel {
 
     var canSendMiniChat: Bool {
         let hasText = !miniChat.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        return (hasText || !miniChat.images.isEmpty) && miniChat.importing == 0 && miniChatModelId != nil && !isMiniChatGenerating
+        return (hasText || !miniChat.images.isEmpty || !miniChat.documents.isEmpty) && miniChat.importing == 0 && miniChat.documentImports.isEmpty
+            && miniChatModelId != nil && !isMiniChatGenerating
     }
 
     /// The chat the Chat menu acts on: the mini chat's while its window is in front, else the main window's.
@@ -104,21 +108,23 @@ extension AppModel {
         }
         let text = miniChat.draft.trimmingCharacters(in: .whitespacesAndNewlines)
         let images = miniChat.images
+        let documents = miniChat.documents
         guard canSendMiniChat else { return }
         miniChat.draft = ""
         miniChat.images = []
-        sendInMiniChat(text: text, images: images)
+        miniChat.documents = []
+        sendInMiniChat(text: text, images: images, documents: documents)
     }
 
     /// Sends a message in the mini chat (also a suggested follow-up question), or starts a new chat there with it.
-    func sendInMiniChat(text: String, images: [ImageAttachment] = []) {
+    func sendInMiniChat(text: String, images: [ImageAttachment] = [], documents: [DocumentAttachment] = []) {
         guard let modelId = miniChatModelId, !isMiniChatGenerating else { return }
         miniChat.notice = nil
         let chatID: Chat.ID
         if let current = currentMiniChat {
             chatID = current.id
         } else {
-            var chat = Chat(title: Self.title(for: text), modelId: modelId)
+            var chat = Chat(title: Self.title(for: text.isEmpty ? documents.first.map { ($0.name as NSString).deletingPathExtension } ?? text : text), modelId: modelId)
             chat.hasCustomTitle = false
             if miniChat.newChatThinking { chat.thinking = true }
             // As in the main window: the chosen context length with LM Studio, Kapitsa's own otherwise.
@@ -127,7 +133,7 @@ extension AppModel {
             miniChat.chatID = chat.id
             chatID = chat.id
         }
-        ask(text, images: images, in: chatID, model: modelId)
+        ask(text, images: images, documents: documents, in: chatID, model: modelId)
     }
 
     func stopMiniChat() {

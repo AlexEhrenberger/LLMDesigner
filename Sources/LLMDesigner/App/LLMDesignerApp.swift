@@ -287,7 +287,7 @@ struct AppCommands: Commands {
             Button(app.conversation == nil ? "Gesprächsmodus" : "Gesprächsmodus beenden") { app.toggleConversation() }
                 .keyboardShortcut("d", modifiers: [.command, .shift])
                 .disabled(app.conversation == nil && !app.canStartConversation)
-            Button("Bilder anhängen …") { app.chooseImages(forMiniChat: app.miniChat.isKey) }
+            Button("Anhängen …") { app.chooseAttachments(forMiniChat: app.miniChat.isKey) }
                 .keyboardShortcut("a", modifiers: [.command, .shift])
             Button((app.miniChat.isKey ? app.isMiniChatThinkingOn : app.isThinkingOn) ? "Denkmodus ausschalten" : "Denkmodus einschalten") {
                 if app.miniChat.isKey { app.toggleMiniChatThinking() } else { app.toggleThinking() }

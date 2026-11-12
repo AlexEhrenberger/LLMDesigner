@@ -46,6 +46,9 @@ flowchart LR
 | `Core/AppModel.swift` + `AppModel+*.swift` | Zentraler Zustand und Abläufe, nach Bereichen getrennt |
 | `Core/AppLibrary.swift` | Bibliotheken: Ort, Einstellungen (`Einstellungen.plist`), Liste der zuletzt geöffneten |
 | `Core/LLMClient.swift` | LM Studio / Kapitsa: Modelle, Streaming, Werkzeuge, JSON-Schema |
+| `Core/StreamRound.swift` | liest eine gestreamte Antwort abseits des Main Threads; die Ansicht bekommt höchstens alle 50 ms den neuesten Stand |
+| `Core/Documents/` | Dokumente als Chat-Anhang: `DocumentStore` (Import, Ablage), `PDFReader` (Seiten, Texterkennung, Abbildungen), `DocumentPrompt` (Text fürs Modell, Platzhalter, Kürzen) |
+| `UI/ChatCodeView.swift`, `UI/DocumentViews.swift` | Code-Block als NSTextView, das nur anhängt; Chips und Blatt für Anhänge |
 | `Core/ChatPayloadBuilder.swift` | Anfrage eines Chats: fester System-Prompt, Hinweise der Runde vor der neuesten Nachricht (Präfix-Cache) |
 | `Core/Thalamus*.swift` | Gedächtnis der Personas: Eindrücke, Verdichtung, Abruf |
 | `Core/WriterMarkdown.swift`, `WriterSpans`, `WriterBox`, `WriterTableCalc` … | Markdown-Erweiterungen von Writer: Stile, Kästen, Spalten, Formeln in Tabellen |

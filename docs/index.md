@@ -30,6 +30,8 @@ flowchart LR
 | [Speicherformate](speicherformate.md) | Aufbau einer Bibliothek, Markdown-Erweiterungen, Präsentationen, Zitate, Romanwelten |
 | [Action-Schicht](actions.md) | Registry, Sicherheitsregeln, Terminal-Werkzeug `llmd`, MCP |
 | [Plan: Action-Schicht](plan/Implementierungsplan.md) | Implementierungsplan mit Fortschritt, [Sicherheitskonzept](plan/Sicherheitskonzept-Prompt-Injection.md), [CLI](plan/CLI-Konzept.md), [MCP](plan/MCP-Schicht.md), Kataloge: [Writer](plan/WriterStudio-Actions.md), [Presenter](plan/PresenterStudio-Actions.md), [Citation](plan/CitationStudio-Actions.md), [Stories](plan/StoriesStudio-Actions.md), [Chat](plan/Chat-Actions.md) |
+| [Weiterentwicklung](plan/Weiterentwicklung.md) | Bewertung, priorisierte Feature-Liste, Top 3 (Agentenzentrale, IU-Paket, Projekte mit Rezepten), Wege für unterwegs mit Kosten |
+| [Epics](plan/Epics.md) | E1 Agentenzentrale, E2 Tempo, E3 Projektseite mit Rezepten, E4 IU-Paket: Gewinn, Aussehen, Bausteine, Datenformate, Abnahme |
 
 ## Auf einen Blick
 

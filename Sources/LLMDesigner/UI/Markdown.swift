@@ -36,7 +36,9 @@ struct MarkdownView: View {
         let blocks = MarkdownParser.parse(text)
         VStack(alignment: .leading, spacing: 14) {
             ForEach(Array(blocks.enumerated()), id: \.offset) { index, block in
-                view(for: block)
+                // Its own equatable view: while an answer streams, only the growing last block is built again.
+                MarkdownBlockView(block: block, colorScheme: colorScheme)
+                    .equatable()
                     .overlay(alignment: .topLeading) {
                         if bookmarkedBlocks.contains(index) { BookmarkGlyph().offset(x: -20, y: 4) }
                     }
@@ -50,6 +52,16 @@ struct MarkdownView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct MarkdownBlockView: View, Equatable {
+    let block: MarkdownBlock
+    /// Part of the comparison: formulas are pictures in the design's text colour and must be drawn again.
+    let colorScheme: ColorScheme
+
+    var body: some View {
+        view(for: block)
     }
 
     @ViewBuilder
@@ -155,16 +167,7 @@ private struct CodeBlockView: View {
             .frame(height: 34)
             .background(Theme.codeHeader)
 
-            ScrollView(.horizontal) {
-                Text(code)
-                    .font(.system(size: 13, design: .monospaced))
-                    .lineSpacing(3)
-                    .foregroundStyle(Theme.textPrimary)
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: true, vertical: false)
-                    .padding(14)
-            }
-            .scrollIndicators(.automatic)
+            ChatCodeView(code: code)
         }
         .background(Theme.codeBackground)
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))

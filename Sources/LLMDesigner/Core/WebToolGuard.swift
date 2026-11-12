@@ -22,6 +22,8 @@ enum WebToolGuard {
         /// Addresses the person wrote or a search returned, normalized.
         var trusted: [NormalizedAddress] = []
         var hasReadPersonaFiles = false
+        /// Documents the person attached: as private as a persona's files.
+        var hasDocuments = false
 
         init(messages: [ChatMessage]) {
             var addresses: Set<NormalizedAddress> = []
@@ -29,6 +31,7 @@ enum WebToolGuard {
                 if message.role == .user {
                     addresses.formUnion(WebToolGuard.addresses(in: message.content))
                 }
+                if message.hasDocuments { hasDocuments = true }
                 for step in message.toolSteps ?? [] {
                     if step.kind.isFile, step.status == .done { hasReadPersonaFiles = true }
                     // A page's own links stay out on purpose: they are what an attacker controls.
@@ -40,6 +43,16 @@ enum WebToolGuard {
             }
             trusted = Array(addresses)
         }
+
+        /// What private material the chat holds, as the end of "In diesem Chat …", or nil if none.
+        var privateMaterial: String? {
+            switch (hasReadPersonaFiles, hasDocuments) {
+            case (true, true): "wurden Persona-Dateien gelesen und Dokumente angehängt"
+            case (true, false): "wurden Persona-Dateien gelesen"
+            case (false, true): "hängen Dokumente"
+            case (false, false): nil
+            }
+        }
     }
 
     /// The decision for a tool step about to run. Steps that don't reach the open web are always allowed.
@@ -47,16 +60,16 @@ enum WebToolGuard {
         switch step.kind {
         case .openPage:
             if let refusal = refusal(forOpening: step.argument, trusted: evidence.trusted) { return .denied(refusal) }
-            guard evidence.hasReadPersonaFiles else { return .allowed }
+            guard let reason = evidence.privateMaterial else { return .allowed }
             return .needsConsent(ToolConsentRequest(
                 action: "Seite öffnen", detail: step.argument,
-                reason: "In diesem Chat wurden Persona-Dateien gelesen. Über eine Adresse könnten deren Inhalte die App verlassen."
+                reason: "In diesem Chat \(reason). Über eine Adresse könnten deren Inhalte die App verlassen."
             ))
         case .search:
-            guard evidence.hasReadPersonaFiles else { return .allowed }
+            guard let reason = evidence.privateMaterial else { return .allowed }
             return .needsConsent(ToolConsentRequest(
                 action: "Im Web suchen", detail: step.argument,
-                reason: "In diesem Chat wurden Persona-Dateien gelesen. Über die Suchbegriffe könnten deren Inhalte die App verlassen."
+                reason: "In diesem Chat \(reason). Über die Suchbegriffe könnten deren Inhalte die App verlassen."
             ))
         case .wikiSearch, .wikiArticle, .fileSearch, .fileRead, .action:
             return .allowed
