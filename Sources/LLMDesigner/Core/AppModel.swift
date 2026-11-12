@@ -49,11 +49,13 @@ struct ChatGroup: Identifiable {
 enum SidebarEntry: Identifiable {
     case chat(Chat)
     case document(WriterDocument)
+    case podcast(Podcast)
 
     var id: UUID {
         switch self {
         case .chat(let chat): chat.id
         case .document(let document): document.id
+        case .podcast(let podcast): podcast.id
         }
     }
 
@@ -61,6 +63,7 @@ enum SidebarEntry: Identifiable {
         switch self {
         case .chat(let chat): chat.updatedAt
         case .document(let document): document.updatedAt
+        case .podcast(let podcast): podcast.updatedAt
         }
     }
 
@@ -68,6 +71,7 @@ enum SidebarEntry: Identifiable {
         switch self {
         case .chat(let chat): chat.folderID
         case .document(let document): document.folderID
+        case .podcast(let podcast): podcast.folderID
         }
     }
 }
@@ -471,6 +475,25 @@ final class AppModel {
     var projectsSectionCollapsed: Bool {
         didSet { settings.set(projectsSectionCollapsed, forKey: Keys.projectsSectionCollapsed) }
     }
+    /// PodcastStudio is shown in the main area, with `selectedPodcastID` open (see AppModel+Podcast.swift).
+    var podcastStudioOpen = false
+    var selectedPodcastID: UUID?
+    /// How far the running and waiting podcasts are.
+    var podcastProgress: [UUID: PodcastProgress] = [:]
+    /// Podcasts whose cast the model is proposing.
+    var podcastSuggesting: Set<UUID> = []
+    /// Podcasts started while another one runs, in order.
+    var podcastQueue: [UUID] = []
+    var runningPodcastID: UUID?
+    @ObservationIgnored var podcastStarts: [UUID: PodcastStart] = [:]
+    @ObservationIgnored var podcastTask: Task<Void, Never>?
+    /// The voices of the Qwen TTS service.
+    var podcastVoices: [QwenTTSClient.Voice] = QwenTTSClient.fallbackVoices
+    @ObservationIgnored var podcastVoicesLoaded = false
+    /// Plays a finished podcast.
+    @ObservationIgnored let podcastPlayer = PodcastPlayer()
+    /// Where Qwen TTS answers; tests put a stand-in there, so they never reach the real service.
+    @ObservationIgnored var podcastSpeechServer = URL(string: QwenTTSClient.defaultServer)!
     /// An action wants the mini chat window open; the main window's view opens it.
     var miniChatOpenRequest: UUID?
     /// Writer Studio shows a white sheet instead of the dark one (the user's choice in the dark design).
@@ -534,6 +557,8 @@ final class AppModel {
     @ObservationIgnored let notes = NoteLibrary(store: .library())
     /// Projects: pages of blocks and boards of tasks that point to chats, documents, notes and novel worlds.
     @ObservationIgnored let projects = ProjectLibrary(store: .library())
+    /// PodcastStudio: conversations about a question, researched, written and spoken by the model and Qwen TTS.
+    @ObservationIgnored let podcasts = PodcastLibrary(store: .library())
     /// The instruction being written in Writer Studio's assistant bar.
     var writerInstruction = ""
     /// The assistant bar has the keyboard focus (⌘D then dictates into it).
@@ -642,6 +667,8 @@ final class AppModel {
         removeUnusedAttachments()
         // Notes are small and the title bars of documents show their rings, so they are read at once.
         notes.loadIfNeeded()
+        // Podcasts are entries of the sidebar.
+        podcasts.loadIfNeeded()
     }
 
     // MARK: Closing
@@ -658,6 +685,8 @@ final class AppModel {
         stories.saveAll()
         notes.saveAll()
         projects.saveAll()
+        podcastPlayer.stop()
+        stopAllPodcasts()
         writerFlush?()
         if skillSaveTask != nil { saveSkillLibrary() }
         savePendingPersonas()
@@ -667,7 +696,7 @@ final class AppModel {
         noticeTask?.cancel()
         let running = Array(generationTasks.values) + Array(outlineTasks.values) + Array(followUpTasks.values)
             + Array(documentOutlineTasks.values) + Array(analysisTasks.values) + Array(thalamusQuietTasks.values)
-            + [thalamusWorker].compactMap { $0 }
+            + [thalamusWorker, podcastTask].compactMap { $0 }
         running.forEach { $0.cancel() }
         // Cancelled work ends quickly (an answer is saved as far as it got); it gets a few seconds at most.
         await withTaskGroup(of: Void.self) { group in
@@ -832,6 +861,7 @@ final class AppModel {
     var sidebarEntries: [SidebarEntry] {
         let entries = chats.filter(chatMatchesSearch).map(SidebarEntry.chat)
             + documents.filter { $0.matches(chatSearchQuery) }.map(SidebarEntry.document)
+            + podcasts.podcasts.filter { $0.matches(chatSearchQuery) }.map(SidebarEntry.podcast)
         return entries.sorted { $0.updatedAt > $1.updatedAt }
     }
 

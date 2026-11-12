@@ -31,6 +31,8 @@ final class FakeLLMServer: @unchecked Sendable {
     private(set) var rawCompletions: [String] = []
     /// What streamed answers report after their last chunk, as Kapitsa does (`usage` with `prompt_tokens_details`).
     var usage: JSONValue?
+    /// The texts sent to `/v1/audio/speech`, as Qwen TTS gets them; each is answered with a short tone as WAV.
+    private(set) var spoken: [JSONValue] = []
 
     init(script: [Turn] = []) throws {
         self.script = script
@@ -89,6 +91,23 @@ final class FakeLLMServer: @unchecked Sendable {
             if body.count >= length { break }
         }
         let path = head.split(separator: " ").dropFirst().first.map(String.init) ?? ""
+        // Qwen TTS: the health check, the voices and speech as a tone of 0.3 s per 10 characters.
+        if path == "/health" || path.hasSuffix("/audio/voices") {
+            let text = path == "/health" ? "{}" : #"{"voices":[{"id":"serena","name":"Serena","gender":"female","native":"zh"},{"id":"aiden","name":"Aiden","gender":"male","native":"en"},{"id":"sohee","name":"Sohee","gender":"female","native":"ko"}]}"#
+            let response = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: \(text.utf8.count)\r\nConnection: close\r\n\r\n\(text)"
+            _ = UnixSocket.writeAll(Data(response.utf8), to: client)
+            return
+        }
+        if path.hasSuffix("/audio/speech") {
+            let request = (try? JSONDecoder().decode(JSONValue.self, from: body)) ?? .null
+            lock.withLock { spoken.append(request) }
+            let characters = request["input"]?.stringValue?.count ?? 10
+            let wav = Self.tone(seconds: max(0.2, Double(characters) / 10 * 0.3))
+            var response = Data("HTTP/1.1 200 OK\r\nContent-Type: audio/wav\r\nContent-Length: \(wav.count)\r\nConnection: close\r\n\r\n".utf8)
+            response.append(wav)
+            _ = UnixSocket.writeAll(response, to: client)
+            return
+        }
         let reply: (type: String, text: String)
         if path.hasPrefix("/artikel") {
             reply = ("text/html; charset=utf-8", page)
@@ -114,6 +133,21 @@ final class FakeLLMServer: @unchecked Sendable {
         }
         let response = "HTTP/1.1 200 OK\r\nContent-Type: \(reply.type)\r\nContent-Length: \(reply.text.utf8.count)\r\nConnection: close\r\n\r\n\(reply.text)"
         _ = UnixSocket.writeAll(Data(response.utf8), to: client)
+    }
+
+    /// A quiet 440 Hz tone as 16-bit mono WAV at 24 kHz, the format Qwen TTS answers in.
+    static func tone(seconds: Double, rate: Int = 24_000) -> Data {
+        let frames = Int(seconds * Double(rate))
+        var data = Data()
+        func append<T: FixedWidthInteger>(_ value: T) { withUnsafeBytes(of: value.littleEndian) { data.append(contentsOf: $0) } }
+        data.append(contentsOf: Array("RIFF".utf8)); append(UInt32(36 + frames * 2))
+        data.append(contentsOf: Array("WAVE".utf8)); data.append(contentsOf: Array("fmt ".utf8))
+        append(UInt32(16)); append(UInt16(1)); append(UInt16(1)); append(UInt32(rate)); append(UInt32(rate * 2)); append(UInt16(2)); append(UInt16(16))
+        data.append(contentsOf: Array("data".utf8)); append(UInt32(frames * 2))
+        for frame in 0..<frames {
+            append(Int16(sin(Double(frame) * 2 * .pi * 440 / Double(rate)) * 3_000))
+        }
+        return data
     }
 
     private static func stream(_ turn: Turn, substitute: (String, String)?, usage: JSONValue?) -> String {

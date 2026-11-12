@@ -371,6 +371,7 @@ private struct WriterTopBar: View {
             if colorScheme == .dark { PaperSwitch() }
             if app.writerTab == .document {
                 ProjectMembershipButton(ref: .document(document.id), label: "dieses Dokument")
+                PodcastFromButton(reference: .document(document.id), help: "Podcast über dieses Dokument erzeugen")
                 DocumentNotesButton(document: document)
                 PowerButton()
             }

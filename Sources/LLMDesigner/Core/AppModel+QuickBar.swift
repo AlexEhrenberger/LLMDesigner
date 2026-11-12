@@ -212,6 +212,7 @@ enum QuickBarTools {
         ("stories.core", ["roman", "figur", "szene", "geschichte", "story", "stories", "kapitel", "akt ", "erzähl", "welt"]),
         ("projects.core", ["projekt", "kanban", "board", "meilenstein", "akzeptanz", "hindernis", "impediment", "spalte", "projektseite"]),
         ("notes.core", ["todo", "to-do", "to do", "aufgabe", "notes", "note ", "erledig", "abhak", "checkliste", "fortschritt", "hak "]),
+        ("podcast.core", ["podcast", "hörspiel", "gesprächsrunde", "diskussionsrunde", "folge ", "vertonen", "einsprechen"]),
         ("chat.core", ["chat", "persona", "skill"]),
         ("chat.private", ["gedächtnis", "erinnerst", "erinnere dich", "persona-datei", "tagebuch"]),
     ]

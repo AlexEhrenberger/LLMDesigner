@@ -140,7 +140,9 @@ private struct ChatList: View {
     @Environment(\.openWindow) private var openWindow
     @State private var pendingDelete: Chat?
     @State private var pendingDocumentDelete: WriterDocument?
+    @State private var pendingPodcastDelete: Podcast?
     @State private var pendingFolderDelete: Folder?
+    @Environment(\.undoManager) private var undoManager
 
     var body: some View {
         let sections = app.chatFolderSections
@@ -214,6 +216,12 @@ private struct ChatList: View {
         } message: { document in
             Text("„\(document.displayTitle)“ wird dauerhaft gelöscht.")
         }
+        .alert("Podcast löschen?", isPresented: isPresent($pendingPodcastDelete), presenting: pendingPodcastDelete) { podcast in
+            Button("Löschen", role: .destructive) { app.deletePodcast(podcast.id, undo: undoManager) }
+            Button("Abbrechen", role: .cancel) {}
+        } message: { podcast in
+            Text("„\(podcast.displayTitle)“ kommt mit seiner Audiodatei in den Papierkorb.")
+        }
         .confirmationDialog(
             "Ordner „\(pendingFolderDelete?.name ?? "")“ löschen?",
             isPresented: isPresent($pendingFolderDelete),
@@ -225,10 +233,12 @@ private struct ChatList: View {
         } message: { folder in
             let chats = app.chats.filter { $0.folderID == folder.id }.count
             let documents = app.documents.filter { $0.folderID == folder.id }.count
+            let podcasts = app.podcasts.podcasts.filter { $0.folderID == folder.id }.count
             let subfolders = app.subfolders(of: folder.id).count
             let parts = [
                 chats > 0 ? "\(chats) \(chats == 1 ? "Chat" : "Chats")" : nil,
                 documents > 0 ? "\(documents) \(documents == 1 ? "Dokument" : "Dokumente")" : nil,
+                podcasts > 0 ? "\(podcasts) \(podcasts == 1 ? "Podcast" : "Podcasts")" : nil,
                 subfolders > 0 ? "\(subfolders) \(subfolders == 1 ? "Unterordner" : "Unterordner")" : nil,
             ].compactMap { $0 }
             let kept = folder.parentID != nil ? "Behaltenes kommt in den übergeordneten Ordner." : "Behaltenes erscheint wieder in der Liste, Unterordner werden zu Ordnern."
@@ -300,7 +310,51 @@ private struct ChatList: View {
         switch entry {
         case .chat(let chat): row(for: chat, in: folder, indent: indent ?? self.indent(in: folder))
         case .document(let document): row(for: document, in: folder, indent: indent ?? self.indent(in: folder))
+        case .podcast(let podcast): row(for: podcast, in: folder, indent: indent ?? self.indent(in: folder))
         }
+    }
+
+    private func row(for podcast: Podcast, in folder: Folder?, indent: CGFloat) -> some View {
+        SidebarRow(
+            id: podcast.id,
+            title: podcast.displayTitle,
+            isSelected: app.podcastStudioOpen && app.selectedPodcastID == podcast.id,
+            indent: indent,
+            dragPayload: SidebarDrag.payload(SidebarDrag.chat, podcast.id),
+            onSelect: { app.selectPodcast(podcast.id) },
+            onRename: { app.renamePodcast(podcast.id, to: $0) },
+            leading: {
+                Image(systemName: StudioApplication.podcast.symbol)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(folder?.color?.color ?? Theme.accent.opacity(0.85))
+                    .frame(width: 18)
+                    .help("Podcast (PodcastStudio)")
+            },
+            trailing: { PodcastStatusBadge(podcast: podcast, progress: app.podcastProgress[podcast.id]) },
+            menu: {
+                if podcast.phase.isRunning {
+                    Button("Anhalten", systemImage: "stop.circle") { app.stopPodcast(podcast.id) }
+                } else if podcast.startProblem == nil, !app.isPodcastAudioCurrent(podcast) {
+                    Button(podcast.script.isEmpty ? "Erzeugen" : "Fortsetzen", systemImage: "play.circle") { app.startPodcast(podcast.id) }
+                }
+                if app.podcastAudioURL(podcast.id) != nil {
+                    Button("Audio exportieren …", systemImage: "square.and.arrow.up") { app.exportPodcastWithPanel(podcast.id) }
+                }
+                if !podcast.script.isEmpty {
+                    Button("Als Writer-Dokument", systemImage: StudioApplication.writer.symbol) { app.openPodcastAsDocument(podcast.id) }
+                }
+                Divider()
+                Button("Umbenennen", systemImage: "pencil") { app.renamingID = podcast.id }
+                MoveToFolderMenu(
+                    folders: app.chatFolders,
+                    current: podcast.folderID,
+                    onMove: { app.movePodcast(podcast.id, to: $0) },
+                    onNewFolder: { app.movePodcastToNewFolder(podcast.id) }
+                )
+                Divider()
+                Button("Löschen", systemImage: "trash", role: .destructive) { pendingPodcastDelete = podcast }
+            }
+        )
     }
 
     private func row(for document: WriterDocument, in folder: Folder?, indent: CGFloat) -> some View {
@@ -372,6 +426,7 @@ private struct ChatList: View {
             },
             menu: {
                 Button("Im Mini-Chat öffnen", systemImage: "pip.enter") { OpenInMiniChat(app: app, openWindow: openWindow)(chat.id) }
+                Button("Podcast daraus erzeugen", systemImage: StudioApplication.podcast.symbol) { app.newPodcast(about: .chat(chat.id)) }
                 Divider()
                 Button("Umbenennen", systemImage: "pencil") { app.renamingID = chat.id }
                 if chat.isTitleCustom {

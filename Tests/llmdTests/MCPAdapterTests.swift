@@ -234,7 +234,15 @@ struct MCPAdapterTests {
         #expect(source["contents"]?.arrayValue?.first?["text"]?.stringValue?.contains("mueller2020") == true)
 
         let templates = try #require(adapter.handle(request("resources/templates/list")).first?.result)
-        #expect(templates["resourceTemplates"]?.arrayValue?.count == 6)
+        #expect(templates["resourceTemplates"]?.arrayValue?.count == 7)
+
+        backend.results["podcast.list"] = ["podcasts": [["id": "C1", "title": "Predictive Coding"]]]
+        backend.results["podcast.read"] = ["id": "C1", "question": "Was ist Predictive Coding?"]
+        let withPodcast = try #require(adapter.handle(request("resources/list")).first?.result)
+        #expect(withPodcast["resources"]?.arrayValue?.last?["uri"] == "llmd://podcast/podcast/C1")
+        let podcast = try #require(adapter.handle(request("resources/read", ["uri": "llmd://podcast/podcast/C1"])).first?.result)
+        #expect(podcast["contents"]?.arrayValue?.first?["text"]?.stringValue?.contains("Predictive Coding") == true)
+        #expect(backend.calls.last?.0 == "podcast.read")
     }
 
     @Test func aMissingResourceUsesTheSpecifiedError() {

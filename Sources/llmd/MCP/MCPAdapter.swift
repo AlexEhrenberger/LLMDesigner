@@ -13,7 +13,7 @@ extension LLMDClient: MCPBackend {
 }
 
 enum MCPProfile {
-    static let names = ["core", "writer", "presenter", "citation", "stories", "notes", "projects", "chat", "full"]
+    static let names = ["core", "writer", "presenter", "citation", "stories", "notes", "projects", "podcast", "chat", "full"]
 
     /// Whether an action belongs to a profile. Private groups never do: the app refuses them on this channel anyway,
     /// and a tool that can only fail just costs a small model context.
@@ -44,7 +44,7 @@ final class MCPAdapter {
     /// A tool list changes only with a new app version.
     static let toolListTTL = 300_000
     static let instructions = """
-    LLM Designer: Dokumente, Präsentationen, Quellen, Romanwelten, Notes (ToDo-Listen), Projekte (Seite und Aufgaben-Board) und Chats mit dem lokalen Modell. \
+    LLM Designer: Dokumente, Präsentationen, Quellen, Romanwelten, Notes (ToDo-Listen), Projekte (Seite und Aufgaben-Board), Podcasts und Chats mit dem lokalen Modell. \
     Lesen liefert eine version; Schreiben nimmt sie als ifVersion, damit nichts überschrieben wird. \
     Heikles fragt die App den Menschen, und private Daten sind über diesen Weg gesperrt. \
     Folien-Actions melden in fit, ob der Text auf die Folie passt; bei fits false kürzen oder splitOverflow setzen. \
@@ -210,7 +210,7 @@ final class MCPAdapter {
         [
             "name": .string(searchTool),
             "description": "Findet weitere Actions dieser App, nach Stichwort oder Modul, mit Parametern",
-            "inputSchema": JSONSchema.object(["query": .string("Stichwort"), "module": .string("Modul: writer, presenter, citation, stories, notes, chat")]).document,
+            "inputSchema": JSONSchema.object(["query": .string("Stichwort"), "module": .string("Modul: writer, presenter, citation, stories, notes, podcast, chat")]).document,
             "annotations": ["readOnlyHint": true, "destructiveHint": false, "openWorldHint": false],
         ],
         [
@@ -290,6 +290,7 @@ final class MCPAdapter {
         ["uriTemplate": "llmd://stories/world/{id}", "name": "Romanwelt", "mimeType": "application/json"],
         ["uriTemplate": "llmd://notes/note/{id}", "name": "Note", "mimeType": "application/json"],
         ["uriTemplate": "llmd://projects/project/{id}", "name": "Projekt", "mimeType": "application/json"],
+        ["uriTemplate": "llmd://podcast/podcast/{id}", "name": "Podcast", "mimeType": "application/json"],
     ]
 
     func resources() throws -> [JSONValue] {
@@ -305,6 +306,7 @@ final class MCPAdapter {
             + entries("stories.world.list", list: "worlds", prefix: "llmd://stories/world/", key: "id", name: "title", mime: "application/json")
             + entries("notes.note.list", list: "notes", prefix: "llmd://notes/note/", key: "id", name: "title", mime: "application/json")
             + entries("projects.project.list", list: "projects", prefix: "llmd://projects/project/", key: "id", name: "title", mime: "application/json")
+            + entries("podcast.list", list: "podcasts", prefix: "llmd://podcast/podcast/", key: "id", name: "title", mime: "application/json")
     }
 
     private func readResource(_ params: JSONValue) throws -> JSONValue {
@@ -325,6 +327,8 @@ final class MCPAdapter {
                 return Self.jsonContents(uri, try backend.run("notes.note.read", args: ["note": .string(id)]))
             case "projects/project":
                 return Self.jsonContents(uri, try backend.run("projects.project.read", args: ["project": .string(id)]))
+            case "podcast/podcast":
+                return Self.jsonContents(uri, try backend.run("podcast.read", args: ["podcast": .string(id), "research": true]))
             default:
                 throw Self.resourceNotFound(uri)
             }
@@ -414,6 +418,8 @@ final class MCPAdapter {
                 if let target = event.target { uris = ["llmd://notes/note/\(target)"] }
             case "project.changed":
                 if let target = event.target { uris = ["llmd://projects/project/\(target)"] }
+            case "podcast.changed":
+                if let target = event.target { uris = ["llmd://podcast/podcast/\(target)"] }
             default:
                 break
             }

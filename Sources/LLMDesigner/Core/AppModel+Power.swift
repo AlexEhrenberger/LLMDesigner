@@ -2,7 +2,7 @@ import SwiftUI
 
 /// The applications the power access reaches from the right-hand panel.
 enum PowerModule: String, CaseIterable, Identifiable {
-    case chats, writer, presenter, citation, stories, notes, projects
+    case chats, writer, presenter, citation, stories, notes, projects, podcasts
 
     var id: String { rawValue }
 
@@ -15,6 +15,7 @@ enum PowerModule: String, CaseIterable, Identifiable {
         case .stories: "Stories"
         case .notes: "Notes"
         case .projects: "Projekte"
+        case .podcasts: "Podcasts"
         }
     }
 
@@ -27,6 +28,7 @@ enum PowerModule: String, CaseIterable, Identifiable {
         case .stories: StudioApplication.stories.symbol
         case .notes: StudioApplication.notes.symbol
         case .projects: Project.sidebarSymbol
+        case .podcasts: StudioApplication.podcast.symbol
         }
     }
 }
@@ -47,6 +49,7 @@ final class PowerAccess {
     var worldID: UUID?
     var noteID: UUID?
     var projectID: UUID?
+    var podcastID: UUID?
     var storyKind: StoryElementKind = .figure
     /// The last change made here, which "Rückgängig" takes back.
     var lastChange: Change?
@@ -67,6 +70,7 @@ final class PowerAccess {
         case .stories: worldID != nil
         case .notes: noteID != nil
         case .projects: projectID != nil
+        case .podcasts: podcastID != nil
         }
     }
 
@@ -79,6 +83,7 @@ final class PowerAccess {
         case .stories: worldID = nil
         case .notes: noteID = nil
         case .projects: projectID = nil
+        case .podcasts: podcastID = nil
         }
         query = ""
     }
@@ -102,6 +107,7 @@ extension AppModel {
             citations.loadIfNeeded()
             stories.loadIfNeeded()
             notes.loadIfNeeded()
+            podcasts.loadIfNeeded()
         }
     }
 

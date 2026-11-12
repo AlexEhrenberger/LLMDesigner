@@ -35,6 +35,7 @@ final class ActionRegistry {
         registry.registerStoriesActions()
         registry.registerNotesActions()
         registry.registerProjectsActions()
+        registry.registerPodcastActions()
         registry.registerChatActions()
         return registry
     }

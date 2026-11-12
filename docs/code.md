@@ -36,8 +36,8 @@ flowchart LR
     S --> A["App/"]
     S --> C["Core/"]
     S --> U["UI/"]
-    C --> C1["Citations/ · Code/ · Math/<br/>Presenter/ · Speech/ · Stories/ · Notes/ · Projects/"]
-    U --> U1["Writer/ · Presenter/ · Citations/<br/>Stories/ · Notes/ · Projects/ · Power/"]
+    C --> C1["Citations/ · Code/ · Math/<br/>Presenter/ · Speech/ · Stories/ · Notes/ · Projects/ · Podcast/"]
+    U --> U1["Writer/ · Presenter/ · Citations/<br/>Stories/ · Notes/ · Projects/ · Podcast/ · Power/"]
 ```
 
 | Ort | Inhalt |
@@ -55,6 +55,7 @@ flowchart LR
 | `Core/Stories/` | Romanwelten, Elemente, Zeitleisten |
 | `Core/Notes/`, `AppModel+Notes.swift` | `NoteModel` (Note, ToDo, Zugehörigkeit, Fortschritt, Baum-Operationen, Aufgabenliste ⇄ ToDos), `NoteLibrary` (Speichern, Entwürfe, Rückgängig); Öffnen, Zuordnen, Besitzernamen |
 | `Core/Projects/`, `AppModel+Projects.swift` | `ProjectModel` (Projekt, Verweise, ToDo-Listen, Meilensteine, Spalten, Aufgaben mit Akzeptanzkriterien und Hindernissen, Verlauf, Tage), `ProjectBlock` (Bausteine, Raster, Textstil, Diagramm, Anzeigen), `ProjectEditing` (Fortschritt, Kennzahlen, Layout, Änderungen), `ProjectChartData` (Daten der Diagramme), `ProjectLibrary` (Speichern, Entwürfe, Rückgängig); Öffnen, Verknüpfen, Namen der Verweise |
+| `Core/Podcast/`, `AppModel+Podcast.swift` | `PodcastModel` (Podcast, Teilnehmer, Referenz, Zeile, Phase, Längen), `PodcastLibrary` (Ordner je Podcast, Schnipsel, Papierkorb), `PodcastPrompts` (Recherche, Gliederung, Skript, Besetzung; Zeilen „Name: Text“ lesen), `PodcastAudio` (Schnipsel und M4A zusammenfügen), `PodcastPlayer`; Warteschlange und Pipeline Recherche → Skript → Sprachaufnahme |
 | `Core/Math/`, `Core/Code/` | Formelbaum, Plots über Python, Code-Hervorhebung, Flussdiagramme |
 | `Core/Speech/` | Diktat, Vorlesen, Qwen TTS, Gesprächsmodus |
 | `Core/PowerText.swift`, `AppModel+Power.swift` | Power-Zugriff: Blöcke, Klartext, Änderungen mit Rückgängig |
@@ -66,7 +67,8 @@ flowchart LR
 | `UI/Presenter/` | `PresenterScreen`, `SlideImageEditor` (Bilder/Textfelder/Textbereich verschieben), `SlideViews`, `SlidePrinter` (PDF) |
 | `UI/Notes/` | `NotesStudioScreen`, `NoteEditor` (Kopf, ToDo-Zeilen, Auswahl von Dokumenten und Notes), `NoteLineEditor` (Zeile mit Outliner-Tasten), `NoteProgressArt` (zwölf Anzeigen, Auswahl, Konfetti), `NoteLinks` (Panel „Notes dieses Dokuments“, Knopf in der Titelleiste, Karte im Stories Studio) |
 | `UI/Projects/` | `ProjectScreen` (Titelleiste, Reiter, Kopf der Seite), `ProjectGrid` (Raster, Ziehen, Größe, Karte eines Bausteins), `ProjectBlockViews` (Inhalte der Bausteine), `ProjectChartViews` (Swift Charts, Ablauf), `ProjectProgressArt` (Anzeigen), `ProjectBlockInspector` (Gestalten), `ProjectBoard` (Kanban, Karte, Aufgaben-Panel), `ProjectMembership` (Zuordnen aus Writer, Presenter, Notes, Stories), `ProjectComponents` (Kacheln, Auswahl, Farben, Tage) |
-| `UI/Power/` | `PowerPanel` (Rahmen, Ziehen, gemeinsame Bausteine), `PowerModules` (fünf Miniatur-Apps), `PowerNotes` (alle Notes), `PowerProjects` (Projekte) |
+| `UI/Podcast/` | `PodcastStudioScreen` (Titelleiste, Übersicht), `PodcastPage` (Frage, Länge, Teilnehmer, Referenzen, Fortschritt, Player, Recherche, Skript), `PodcastComponents` (Ring in der Seitenleiste, Felder mit verzögertem Übernehmen, Referenz-Menü, Knopf „Podcast daraus erzeugen“) |
+| `UI/Power/` | `PowerPanel` (Rahmen, Ziehen, gemeinsame Bausteine), `PowerModules` (fünf Miniatur-Apps), `PowerNotes` (alle Notes), `PowerProjects` (Projekte), `PowerPodcasts` (Podcasts, Skriptzeilen zum Herausziehen) |
 | `UI/QuickBar/` | `QuickBarPanel` (Panel vor allen Apps, Controller), `QuickBarView` (Feld, Chat, Besen, `AuroraView` mit Core-Animation-Farbe); Zustand und Werkzeugwahl in `Core/AppModel+QuickBar.swift` |
 | `Tests/` | Swift-Testing-Suiten für Markdown, Layout, Tabellenformeln, Präsentationen, Power-Zugriff … |
 
@@ -125,4 +127,6 @@ classDiagram
 - **Drag & Drop**: SwiftUIs `onDrag` erreicht AppKit-Textansichten nicht zuverlässig; der Power-Zugriff benutzt `PowerDragSource` (AppKit).
 - **LM Studio** antwortet bei unbekanntem Modellnamen mit dem geladenen Modell – immer das `model`-Feld des Streams anzeigen.
 - **LaTeX liest Dateien**: Tectonic mit `--untrusted` sperrt nur Shell-Aufrufe. Alles, was roh an die Engine geht, muss durch `LaTeXSafety`; Text läuft durch `LaTeXWriter.escape`.
+- **Podcasts und Qwen TTS**: Tests erreichen den echten Dienst nie: `TestApp` setzt `podcastSpeechServer` auf einen toten Port, `FakeLLMServer` antwortet auch auf `/health` und `/v1/audio/speech` (mit einem Ton als WAV). Ein Podcast ändert beim Tippen sein ganzes Modell; Felder der Podcast-Seite sind deshalb `PodcastField` und übernehmen erst nach einer Pause. Beim Abspielen liest nur `PodcastPlayhead` die Position bei jedem Takt; das Skript hört auf `PodcastPlayer.currentLine`, das sich nur beim Zeilenwechsel ändert, und die Zeilen sind `Equatable`.
+- **`llmd` startet die App selbst**, wenn es sie nicht erreicht, und gibt dabei nur seine eigenen `LLMD_*`-Variablen weiter. Bei Probeläufen mit einer Test-Kopie deshalb `LLMD_TEST_LIBRARY` auch beim `llmd`-Aufruf setzen, sonst legt die nachgestartete App eine neue Bibliothek in `~/Documents/LLM Designer` an.
 - **Qwen-Image** malt jedes Wort über Schrift ins Bild, auch verneint: Hintergrund-Prompts filtern solche Wörter.

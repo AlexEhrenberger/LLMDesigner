@@ -45,6 +45,7 @@ enum ChatToolGroups {
         ("stories.core", "Stories: Romanwelten"),
         ("notes.core", "Notes: ToDos und Fortschritt"),
         ("projects.core", "Projekte: Seite, Aufgaben-Board, Meilensteine"),
+        ("podcast.core", "PodcastStudio: Podcasts"),
         ("chat.core", "Andere Chats und Personas fragen"),
         ("chat.private", "Gedächtnis und Persona-Dateien (fragt immer)"),
     ]
@@ -63,6 +64,9 @@ enum ChatToolGroups {
         "projects.core": ["projects.project.list", "projects.project.create", "projects.project.read", "projects.project.progress", "projects.link.add",
                           "projects.task.list", "projects.task.add", "projects.task.move", "projects.task.criterion.check", "projects.task.impediment.add",
                           "projects.todo.add", "projects.todo.check", "projects.milestone.add"],
+        "podcast.core": ["podcast.list", "podcast.create", "podcast.read", "podcast.status", "podcast.generate", "podcast.participant.add",
+                         "podcast.participant.update", "podcast.participants.suggest", "podcast.reference.add", "podcast.source.add", "podcast.toDocument",
+                         "podcast.play"],
         "chat.core": ["chat.list", "chat.ask", "chat.read", "persona.list", "skill.list"],
         "chat.private": ["memory.list", "memory.profile.get", "persona.files.search"],
     ]
