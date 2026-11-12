@@ -36,8 +36,8 @@ flowchart LR
     S --> A["App/"]
     S --> C["Core/"]
     S --> U["UI/"]
-    C --> C1["Citations/ · Code/ · Math/<br/>Presenter/ · Speech/ · Stories/ · Notes/ · Podcast/"]
-    U --> U1["Writer/ · Presenter/ · Citations/<br/>Stories/ · Notes/ · Podcast/ · Power/"]
+    C --> C1["Citations/ · Code/ · Math/<br/>Presenter/ · Speech/ · Stories/ · Notes/ · Projects/ · Podcast/"]
+    U --> U1["Writer/ · Presenter/ · Citations/<br/>Stories/ · Notes/ · Projects/ · Podcast/ · Power/"]
 ```
 
 | Ort | Inhalt |
@@ -54,6 +54,7 @@ flowchart LR
 | `Core/Citations/` | Modell, Bibliothek, Import (Crossref, DNB …), Dublettenprüfung, APA-Formatierer |
 | `Core/Stories/` | Romanwelten, Elemente, Zeitleisten |
 | `Core/Notes/`, `AppModel+Notes.swift` | `NoteModel` (Note, ToDo, Zugehörigkeit, Fortschritt, Baum-Operationen, Aufgabenliste ⇄ ToDos), `NoteLibrary` (Speichern, Entwürfe, Rückgängig); Öffnen, Zuordnen, Besitzernamen |
+| `Core/Projects/`, `AppModel+Projects.swift` | `ProjectModel` (Projekt, Verweise, ToDo-Listen, Meilensteine, Spalten, Aufgaben mit Akzeptanzkriterien und Hindernissen, Verlauf, Tage), `ProjectBlock` (Bausteine, Raster, Textstil, Diagramm, Anzeigen), `ProjectEditing` (Fortschritt, Kennzahlen, Layout, Änderungen), `ProjectChartData` (Daten der Diagramme), `ProjectLibrary` (Speichern, Entwürfe, Rückgängig); Öffnen, Verknüpfen, Namen der Verweise |
 | `Core/Podcast/`, `AppModel+Podcast.swift` | `PodcastModel` (Podcast, Teilnehmer, Referenz, Zeile, Phase, Längen), `PodcastLibrary` (Ordner je Podcast, Schnipsel, Papierkorb), `PodcastPrompts` (Recherche, Gliederung, Skript, Besetzung; Zeilen „Name: Text“ lesen), `PodcastAudio` (Schnipsel und M4A zusammenfügen), `PodcastPlayer`; Warteschlange und Pipeline Recherche → Skript → Sprachaufnahme |
 | `Core/Math/`, `Core/Code/` | Formelbaum, Plots über Python, Code-Hervorhebung, Flussdiagramme |
 | `Core/Speech/` | Diktat, Vorlesen, Qwen TTS, Gesprächsmodus |
@@ -65,8 +66,9 @@ flowchart LR
 | `UI/Writer/` | `WriterScreen`, `WriterEditor` (Representable + Controller), `WriterTextView+*` (Editor nach Themen), Sheets |
 | `UI/Presenter/` | `PresenterScreen`, `SlideImageEditor` (Bilder/Textfelder/Textbereich verschieben), `SlideViews`, `SlidePrinter` (PDF) |
 | `UI/Notes/` | `NotesStudioScreen`, `NoteEditor` (Kopf, ToDo-Zeilen, Auswahl von Dokumenten und Notes), `NoteLineEditor` (Zeile mit Outliner-Tasten), `NoteProgressArt` (zwölf Anzeigen, Auswahl, Konfetti), `NoteLinks` (Panel „Notes dieses Dokuments“, Knopf in der Titelleiste, Karte im Stories Studio) |
+| `UI/Projects/` | `ProjectScreen` (Titelleiste, Reiter, Kopf der Seite), `ProjectGrid` (Raster, Ziehen, Größe, Karte eines Bausteins), `ProjectBlockViews` (Inhalte der Bausteine), `ProjectChartViews` (Swift Charts, Ablauf), `ProjectProgressArt` (Anzeigen), `ProjectBlockInspector` (Gestalten), `ProjectBoard` (Kanban, Karte, Aufgaben-Panel), `ProjectMembership` (Zuordnen aus Writer, Presenter, Notes, Stories), `ProjectComponents` (Kacheln, Auswahl, Farben, Tage) |
 | `UI/Podcast/` | `PodcastStudioScreen` (Titelleiste, Übersicht), `PodcastPage` (Frage, Länge, Teilnehmer, Referenzen, Fortschritt, Player, Recherche, Skript), `PodcastComponents` (Ring in der Seitenleiste, Felder mit verzögertem Übernehmen, Referenz-Menü, Knopf „Podcast daraus erzeugen“) |
-| `UI/Power/` | `PowerPanel` (Rahmen, Ziehen, gemeinsame Bausteine), `PowerModules` (fünf Miniatur-Apps), `PowerNotes` (alle Notes), `PowerPodcasts` (Podcasts, Skriptzeilen zum Herausziehen) |
+| `UI/Power/` | `PowerPanel` (Rahmen, Ziehen, gemeinsame Bausteine), `PowerModules` (fünf Miniatur-Apps), `PowerNotes` (alle Notes), `PowerProjects` (Projekte), `PowerPodcasts` (Podcasts, Skriptzeilen zum Herausziehen) |
 | `UI/QuickBar/` | `QuickBarPanel` (Panel vor allen Apps, Controller), `QuickBarView` (Feld, Chat, Besen, `AuroraView` mit Core-Animation-Farbe); Zustand und Werkzeugwahl in `Core/AppModel+QuickBar.swift` |
 | `Tests/` | Swift-Testing-Suiten für Markdown, Layout, Tabellenformeln, Präsentationen, Power-Zugriff … |
 

@@ -3,7 +3,7 @@ import Foundation
 /// Applications next to the chat where the model helps with a piece of work. Only the menu exists so far;
 /// Writer Studio comes first. Coding Studio follows later.
 enum StudioApplication: String, CaseIterable, Identifiable {
-    case writer, citation, presenter, stories, notes, podcast
+    case writer, citation, presenter, stories, notes, projects, podcast
 
     var id: String { rawValue }
 
@@ -14,6 +14,7 @@ enum StudioApplication: String, CaseIterable, Identifiable {
         case .presenter: "Presenter Studio"
         case .stories: "Stories Studio"
         case .notes: "Notes"
+        case .projects: "Projekte"
         case .podcast: "PodcastStudio"
         }
     }
@@ -25,6 +26,7 @@ enum StudioApplication: String, CaseIterable, Identifiable {
         case .presenter: "play.rectangle"
         case .stories: "books.vertical"
         case .notes: "note.text"
+        case .projects: Project.sidebarSymbol
         case .podcast: "waveform.and.mic"
         }
     }
@@ -35,6 +37,7 @@ enum StudioApplication: String, CaseIterable, Identifiable {
         case .writer: "Writer Studio – neues Dokument"
         case .presenter: "Presenter Studio – neue Präsentation"
         case .notes: "Notes – ToDos und Fortschritt"
+        case .projects: "Projekt – neue Projektseite"
         case .podcast: "PodcastStudio – neuer Podcast"
         default: title
         }
@@ -50,6 +53,7 @@ enum StudioApplication: String, CaseIterable, Identifiable {
         case .presenter: "Präsentationen entwerfen"
         case .stories: "Romane strukturieren und entwerfen"
         case .notes: "ToDos abhaken und Fortschritt sehen"
+        case .projects: "Vorhaben planen, verknüpfen und verfolgen"
         case .podcast: "Gespräche recherchieren, schreiben und vertonen"
         }
     }

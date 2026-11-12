@@ -116,6 +116,7 @@ final class AppModel {
         static let writerPageTemplates = "writerPageTemplates"
         static let writerReadsAnswers = "writerReadsAnswers"
         static let presenterNotesVisible = "presenterNotesVisible"
+        static let projectsSectionCollapsed = "projectsSectionCollapsed"
 
         /// Each source keeps its own address, token and chosen model; LM Studio's keys are the ones from before Kapitsa.
         static func endpoint(of provider: LLMProvider) -> String {
@@ -462,6 +463,18 @@ final class AppModel {
     var notesStudioOpen = false
     /// What an action or another studio wants the Notes studio to show; the open screen takes it over.
     var notesStudioCommand: NotesStudioCommand?
+    /// The project shown in the main area (see AppModel+Projects.swift).
+    var openProjectID: UUID?
+    /// Its page or its board of tasks.
+    var projectTab: ProjectTab = .page
+    /// What an action wants the open project to show; the open screen takes it over.
+    var projectCommand: ProjectCommand?
+    /// The project page is being arranged: blocks show their handles.
+    var projectPageEditing = false
+    /// The category "Projekte" in the sidebar is folded.
+    var projectsSectionCollapsed: Bool {
+        didSet { settings.set(projectsSectionCollapsed, forKey: Keys.projectsSectionCollapsed) }
+    }
     /// PodcastStudio is shown in the main area, with `selectedPodcastID` open (see AppModel+Podcast.swift).
     var podcastStudioOpen = false
     var selectedPodcastID: UUID?
@@ -542,6 +555,8 @@ final class AppModel {
     @ObservationIgnored let stories = StoryLibrary(store: .library())
     /// Notes: to-do lists with their progress, on their own or belonging to documents and novel worlds.
     @ObservationIgnored let notes = NoteLibrary(store: .library())
+    /// Projects: pages of blocks and boards of tasks that point to chats, documents, notes and novel worlds.
+    @ObservationIgnored let projects = ProjectLibrary(store: .library())
     /// PodcastStudio: conversations about a question, researched, written and spoken by the model and Qwen TTS.
     @ObservationIgnored let podcasts = PodcastLibrary(store: .library())
     /// The instruction being written in Writer Studio's assistant bar.
@@ -627,8 +642,11 @@ final class AppModel {
             .flatMap { try? JSONDecoder().decode([WriterPageSetup].self, from: Data($0.utf8)) } ?? []
         writerReadsAnswers = defaults.bool(forKey: Keys.writerReadsAnswers)
         presenterNotesVisible = defaults.object(forKey: Keys.presenterNotesVisible) as? Bool ?? true
+        projectsSectionCollapsed = defaults.bool(forKey: Keys.projectsSectionCollapsed)
         chats = store.loadAll()
         documents = documentStore.loadAll()
+        // The sidebar lists the projects from the start.
+        projects.loadIfNeeded()
         chatFolders = library.loadChatFolders()
         loadSidebarStacks()
         let skillLibrary = library.loadSkills()
@@ -666,6 +684,7 @@ final class AppModel {
         citations.saveAll()
         stories.saveAll()
         notes.saveAll()
+        projects.saveAll()
         podcastPlayer.stop()
         stopAllPodcasts()
         writerFlush?()

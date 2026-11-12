@@ -153,6 +153,7 @@ private struct ChatList: View {
 
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 1) {
+                ProjectSidebarSection()
                 if !sections.isEmpty {
                     SectionHeader(title: "Ordner")
                     ForEach(sections) { section in
@@ -196,7 +197,7 @@ private struct ChatList: View {
             return !ids.isEmpty || !folders.isEmpty
         }
         .overlay {
-            if sections.isEmpty && groups.isEmpty && stacks.isEmpty {
+            if sections.isEmpty && groups.isEmpty && stacks.isEmpty && app.projects.projects.isEmpty {
                 Text(searching ? "Keine Treffer" : "Noch keine Chats")
                     .font(.system(size: 12.5))
                     .foregroundStyle(Theme.textTertiary)
@@ -1274,5 +1275,159 @@ private struct SidebarFooter: View {
         case .failed(let message):
             return message
         }
+    }
+}
+
+// MARK: Projects
+
+/// The category "Projekte" above the folders: every project page with its own symbol and colour. A chat or document
+/// dragged onto a project is linked to it; it stays where it is in the list.
+private struct ProjectSidebarSection: View {
+    @Environment(AppModel.self) private var app
+    @State private var pendingDelete: Project?
+
+    var body: some View {
+        let query = app.chatSearchQuery
+        let projects = app.projects.projects.filter { $0.matches(query) }
+        let collapsed = app.projectsSectionCollapsed && query.isEmpty
+        if !app.projects.projects.isEmpty || query.isEmpty {
+            HStack(spacing: 6) {
+                Button {
+                    withAnimation(.snappy(duration: 0.2)) { app.projectsSectionCollapsed.toggle() }
+                } label: {
+                    HStack(spacing: 5) {
+                        Text("Projekte")
+                            .font(.system(size: 11.5, weight: .semibold))
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 8.5, weight: .bold))
+                            .rotationEffect(.degrees(collapsed ? 0 : 90))
+                        if collapsed, !projects.isEmpty {
+                            Text("\(projects.count)")
+                                .font(.system(size: 10.5, weight: .semibold).monospacedDigit())
+                        }
+                    }
+                    .foregroundStyle(Theme.textTertiary)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(collapsed ? "Projekte zeigen" : "Projekte einklappen")
+                Spacer(minLength: 0)
+                IconButton(systemName: "plus", help: "Neues Projekt", size: 11, frameSize: 20) {
+                    app.searchText = ""
+                    app.newProject()
+                }
+            }
+            .padding(.leading, 10)
+            .padding(.trailing, 4)
+            .padding(.top, 8)
+            .padding(.bottom, 2)
+            if !collapsed {
+                ForEach(projects) { project in
+                    ProjectSidebarRow(project: project) { pendingDelete = project }
+                }
+                if projects.isEmpty && query.isEmpty {
+                    Button {
+                        app.newProject()
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: Project.sidebarSymbol)
+                                .font(.system(size: 12))
+                                .frame(width: 18)
+                            Text("Neues Projekt anlegen")
+                                .font(.system(size: 12.5))
+                            Spacer(minLength: 0)
+                        }
+                        .foregroundStyle(Theme.textTertiary)
+                        .padding(.horizontal, 10)
+                        .frame(height: 30)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(StoryRowButtonStyle())
+                }
+            }
+        }
+        EmptyView()
+            .alert("Projekt löschen?", isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }), presenting: pendingDelete) { project in
+                Button("Löschen", role: .destructive) {
+                    if app.openProjectID == project.id { app.closeProject() }
+                    app.projects.deleteProject(project.id)
+                }
+                Button("Abbrechen", role: .cancel) {}
+            } message: { project in
+                Text("„\(project.displayTitle)“ kommt in den Papierkorb. Verknüpfte Chats, Dokumente, Notes und Romanwelten bleiben, wie sie sind.")
+            }
+    }
+}
+
+private struct ProjectSidebarRow: View {
+    @Environment(AppModel.self) private var app
+    @Environment(\.undoManager) private var undoManager
+    let project: Project
+    let onDelete: () -> Void
+    @State private var targeted = false
+
+    var body: some View {
+        let progress = project.overallProgress
+        SidebarRow(
+            id: project.id,
+            title: project.displayTitle,
+            isSelected: app.openProjectID == project.id,
+            indent: 0,
+            dragPayload: nil,
+            onSelect: { app.openProject(project.id) },
+            onRename: { title in
+                let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !title.isEmpty else { return }
+                app.projects.change(project.id, "Projekt umbenennen", undo: undoManager) { $0.title = title }
+            },
+            leading: {
+                ProjectBadge(project: project, size: 18)
+                    .opacity(project.status == .done ? 0.55 : 1)
+                    .help("Projekt (\(project.status.title))")
+            },
+            trailing: {
+                if progress.total > 0 {
+                    NoteMiniRing(progress: progress, size: 14)
+                        .help("\(progress.percent) % – \(progress.label)")
+                }
+            },
+            menu: {
+                Button("Projektseite öffnen", systemImage: ProjectTab.page.symbol) { app.openProject(project.id, tab: .page) }
+                Button("Aufgaben öffnen", systemImage: ProjectTab.board.symbol) { app.openProject(project.id, tab: .board) }
+                Divider()
+                Button("Umbenennen", systemImage: "pencil") { app.renamingID = project.id }
+                Menu("Status", systemImage: project.status.symbol) {
+                    ForEach(ProjectStatus.allCases) { status in
+                        Button(status.title, systemImage: status.symbol) {
+                            app.projects.change(project.id, "Status ändern", undo: undoManager) { $0.status = status }
+                        }
+                    }
+                }
+                Menu("Farbe", systemImage: "paintpalette") {
+                    ForEach(FolderColor.allCases, id: \.self) { color in
+                        Button { app.projects.change(project.id, "Farbe ändern", undo: undoManager) { $0.color = color } } label: {
+                            Label { Text(color.name) } icon: { Image(nsImage: color.swatch) }
+                        }
+                    }
+                }
+                Divider()
+                Button("Löschen …", systemImage: "trash", role: .destructive, action: onDelete)
+            }
+        )
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(targeted ? project.color.color : .clear, lineWidth: 1.5))
+        .dropDestination(for: String.self) { items, _ in
+            let ids = SidebarDrag.ids(in: items, prefix: SidebarDrag.chat)
+            let refs: [ProjectRef] = ids.compactMap { id in
+                if app.document(id) != nil { return .document(id) }
+                if app.chat(id) != nil { return .chat(id) }
+                return nil
+            }
+            guard !refs.isEmpty else { return false }
+            app.projects.change(project.id, "Mit Projekt verknüpfen", undo: undoManager) { project in
+                for ref in refs where !project.links.contains(ref) { project.links.append(ref) }
+            }
+            return true
+        } isTargeted: { targeted = $0 }
+        .help("Chats und Dokumente hierher ziehen, um sie mit dem Projekt zu verknüpfen")
     }
 }

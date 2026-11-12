@@ -46,6 +46,7 @@ struct PowerPanel: View {
                 case .citation: PowerCitations()
                 case .stories: PowerStories()
                 case .notes: PowerNotes()
+                case .projects: PowerProjects()
                 case .podcasts: PowerPodcasts()
                 }
             }
@@ -69,6 +70,7 @@ struct PowerPanel: View {
             case .citation: return "In den Zitaten suchen"
             case .stories: return "In der Romanwelt suchen"
             case .notes: return "Alle Notes durchsuchen"
+            case .projects: return "Im Projekt suchen"
             case .podcasts: return "Im Skript suchen"
             case .presenter: return "In den Folien suchen"
             default: return "Im Text suchen"
@@ -81,6 +83,7 @@ struct PowerPanel: View {
         case .citation: return "Quellen und Zitate durchsuchen"
         case .stories: return "Romanwelten durchsuchen"
         case .notes: return "Alle Notes durchsuchen"
+        case .projects: return "Projekte durchsuchen"
         case .podcasts: return "Podcasts durchsuchen"
         }
     }
