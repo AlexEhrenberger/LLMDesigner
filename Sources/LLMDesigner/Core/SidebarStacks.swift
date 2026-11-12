@@ -28,7 +28,7 @@ enum StackMode: String, CaseIterable, Identifiable, Sendable {
     var hint: String {
         switch self {
         case .topics: "Das Modell sortiert im Leerlauf nach Inhalt"
-        case .types: "Dokumente, Präsentationen und Chats getrennt"
+        case .types: "Dokumente, Präsentationen, Chats und Podcasts getrennt"
         case .relevance: "Woran du viel arbeitest und was lange ruht"
         }
     }
@@ -114,10 +114,12 @@ enum SidebarStacking {
         let documents = entries.filter { if case .document(let d) = $0 { !d.isPresentation } else { false } }
         let decks = entries.filter { if case .document(let d) = $0 { d.isPresentation } else { false } }
         let chats = entries.filter { if case .chat = $0 { true } else { false } }
+        let podcasts = entries.filter { if case .podcast = $0 { true } else { false } }
         return [
             SidebarStack(id: "type.documents", title: "Dokumente", symbol: StudioApplication.writer.symbol, entries: documents),
             SidebarStack(id: "type.presentations", title: "Präsentationen", symbol: StudioApplication.presenter.symbol, entries: decks),
             SidebarStack(id: "type.chats", title: "Chats", symbol: "bubble.left.and.bubble.right", entries: chats),
+            SidebarStack(id: "type.podcasts", title: "Podcasts", symbol: StudioApplication.podcast.symbol, entries: podcasts),
         ].filter { !$0.entries.isEmpty }
     }
 

@@ -83,7 +83,7 @@ extension AppModel {
     var entriesWithoutTopic: [SidebarEntry] {
         let folderIDs = Set(chatFolders.map(\.id))
         let placed = Set(sidebarStacks.topics.flatMap(\.itemIDs))
-        let all = chats.map(SidebarEntry.chat) + documents.map(SidebarEntry.document)
+        let all = chats.map(SidebarEntry.chat) + documents.map(SidebarEntry.document) + podcasts.podcasts.map(SidebarEntry.podcast)
         return all.filter { !($0.folderID.map(folderIDs.contains) ?? false) && !placed.contains($0.id) && !isEmptyEntry($0) }
     }
 
@@ -91,6 +91,7 @@ extension AppModel {
         switch entry {
         case .chat(let chat): chat.messages.isEmpty
         case .document(let document): document.isEmpty
+        case .podcast(let podcast): podcast.question.isEmpty && podcast.script.isEmpty
         }
     }
 
@@ -103,7 +104,7 @@ extension AppModel {
             return
         }
         let folderIDs = Set(chatFolders.map(\.id))
-        let unfiled = (chats.map(SidebarEntry.chat) + documents.map(SidebarEntry.document))
+        let unfiled = (chats.map(SidebarEntry.chat) + documents.map(SidebarEntry.document) + podcasts.podcasts.map(SidebarEntry.podcast))
             .filter { !($0.folderID.map(folderIDs.contains) ?? false) && !isEmptyEntry($0) }
             .sorted { $0.updatedAt > $1.updatedAt }
         let merging = !everything && !sidebarStacks.topics.isEmpty
@@ -146,6 +147,8 @@ extension AppModel {
         case .document(let document):
             let text = document.isPresentation ? (document.deck?.slides.map(\.markdown).joined(separator: " ") ?? "") : document.markdown
             return .init(id: document.id, kind: document.isPresentation ? "Präsentation" : "Dokument", title: document.displayTitle, snippet: Self.snippet(text))
+        case .podcast(let podcast):
+            return .init(id: podcast.id, kind: "Podcast", title: podcast.displayTitle, snippet: Self.snippet(podcast.question))
         }
     }
 

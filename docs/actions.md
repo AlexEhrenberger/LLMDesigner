@@ -17,7 +17,7 @@ flowchart LR
     SRV --> REG["ActionRegistry<br/>Schema, Regel, Undo, Protokoll"]
     REG --> POL["ActionPolicy<br/>Rule of Two"]
     REG --> APP["ActionApproval<br/>Dialog"]
-    REG --> ACT["Actions<br/>Writer, Presenter, Citation, Stories, Notes, Chat"]
+    REG --> ACT["Actions<br/>Writer, Presenter, Citation, Stories, Notes, Podcast, Chat"]
     ACT --> AM["AppModel und Bibliothek"]
 ```
 
@@ -105,6 +105,17 @@ llmd notes todo check --note Bachelorarbeit --todo 1
 llmd notes note progress --note Bachelorarbeit
 ```
 
+## Podcasts
+
+`podcast.generate` startet die Recherche, das Skript und die Sprachaufnahme im Hintergrund und kehrt sofort zurück; `podcast.status` zeigt Phase und Prozent. `--from fortsetzen` (Vorgabe) macht nur, was fehlt – nach geänderten Zeilen (`podcast.line.update`) also nur deren Aufnahme. Katalog: [Podcast-Actions](plan/Podcast-Actions.md).
+
+```bash
+llmd podcast create --question "Was ist Predictive Coding?" --minutes 10
+llmd podcast participants suggest --podcast "Was ist Predictive Coding?"
+llmd podcast generate --podcast "Was ist Predictive Coding?"
+llmd podcast export --podcast "Was ist Predictive Coding?"
+```
+
 ## MCP
 
 `llmd mcp` ist ein stdio-Server nach Spezifikation 2026-07-28 und versteht auch das ältere `initialize`.
@@ -116,16 +127,16 @@ claude mcp add llmd -- "/Pfad/LLM Designer.app/Contents/Helpers/llmd" mcp --prof
 | Profil | Inhalt |
 |---|---|
 | `core` | der kleine Satz zum Lesen, Schreiben, Präsentieren, Zitieren und Fragen |
-| `writer`, `presenter`, `citation`, `stories`, `notes`, `chat` | ein Studio |
+| `writer`, `presenter`, `citation`, `stories`, `notes`, `podcast`, `chat` | ein Studio |
 | `full` | alles außer privaten Daten |
 
-Jedes Profil hat zusätzlich `llmd_search_actions` und `llmd_run_action`, damit kleine Modelle nicht alle Tools laden müssen. Dazu kommen Resources (`llmd://writer/doc/{id}`, `llmd://presenter/deck/{id}`, `llmd://citation/source/{key}`, `llmd://stories/world/{id}`, `llmd://notes/note/{id}`), Prompts aus Skills und `subscriptions/listen`.
+Jedes Profil hat zusätzlich `llmd_search_actions` und `llmd_run_action`, damit kleine Modelle nicht alle Tools laden müssen. Dazu kommen Resources (`llmd://writer/doc/{id}`, `llmd://presenter/deck/{id}`, `llmd://citation/source/{key}`, `llmd://stories/world/{id}`, `llmd://notes/note/{id}`, `llmd://podcast/podcast/{id}`), Prompts aus Skills und `subscriptions/listen`.
 
 Der Kanal gilt immer als fremd. `memory.*` und `persona.files.*` sind gesperrt, Chats mit privaten Dateien ebenso. Eine Runde, die von hier ausgeht, läuft in einem Chat ohne dessen Werkzeuge.
 
 ## Werkzeuge im Chat
 
-Der Blitz im Eingabefeld schaltet Gruppen zu (Writer, Presenter, Citation, Stories, Notes, andere Chats, Gedächtnis) und stellt ein, wie viel ohne Rückfrage geht. Jede Gruppe enthält nur den Minimalsatz, weil ihre Schemas bei jeder Frage den Kontext belegen. Über `llmd` und die MCP-Profile der Studios sind alle Actions erreichbar. Jeder Schritt erscheint in der Antwort, und der Pfeil unter der Antwort nimmt alle ihre Änderungen zurück, solange die App läuft.
+Der Blitz im Eingabefeld schaltet Gruppen zu (Writer, Presenter, Citation, Stories, Notes, PodcastStudio, andere Chats, Gedächtnis) und stellt ein, wie viel ohne Rückfrage geht. Jede Gruppe enthält nur den Minimalsatz, weil ihre Schemas bei jeder Frage den Kontext belegen. Über `llmd` und die MCP-Profile der Studios sind alle Actions erreichbar. Jeder Schritt erscheint in der Antwort, und der Pfeil unter der Antwort nimmt alle ihre Änderungen zurück, solange die App läuft.
 
 Fremde Ergebnisse kommen in einem Rahmen mit zufälliger Kennung zum Modell. Das hilft dem Modell, schützt aber nicht: Geschützt wird durch die Registry. Ein Chat kann sich keine Nachrichten schicken und seine eigenen Freigaben nicht ändern.
 

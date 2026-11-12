@@ -44,6 +44,7 @@ enum ChatToolGroups {
         ("citation.core", "Citation: Quellen"),
         ("stories.core", "Stories: Romanwelten"),
         ("notes.core", "Notes: ToDos und Fortschritt"),
+        ("podcast.core", "PodcastStudio: Podcasts"),
         ("chat.core", "Andere Chats und Personas fragen"),
         ("chat.private", "Gedächtnis und Persona-Dateien (fragt immer)"),
     ]
@@ -59,6 +60,9 @@ enum ChatToolGroups {
                          "stories.element.read", "stories.element.create", "stories.element.update", "stories.element.usages"],
         "notes.core": ["notes.note.list", "notes.note.create", "notes.note.read", "notes.note.progress", "notes.todo.add", "notes.todo.addMany",
                        "notes.todo.check", "notes.todo.update", "notes.todo.delete"],
+        "podcast.core": ["podcast.list", "podcast.create", "podcast.read", "podcast.status", "podcast.generate", "podcast.participant.add",
+                         "podcast.participant.update", "podcast.participants.suggest", "podcast.reference.add", "podcast.source.add", "podcast.toDocument",
+                         "podcast.play"],
         "chat.core": ["chat.list", "chat.ask", "chat.read", "persona.list", "skill.list"],
         "chat.private": ["memory.list", "memory.profile.get", "persona.files.search"],
     ]

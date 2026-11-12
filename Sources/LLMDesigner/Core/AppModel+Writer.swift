@@ -26,6 +26,7 @@ extension AppModel {
         if citationStudioOpen { return .citation }
         if storiesStudioOpen { return .stories }
         if notesStudioOpen { return .notes }
+        if podcastStudioOpen { return .podcast }
         guard let document = selectedDocument else { return nil }
         return document.isPresentation ? .presenter : .writer
     }
@@ -66,6 +67,7 @@ extension AppModel {
         case .presenter: newPresentation()
         case .stories: openStoriesStudio()
         case .notes: openNotesStudio()
+        case .podcast: newPodcast()
         }
     }
 
@@ -114,6 +116,7 @@ extension AppModel {
         if citationStudioOpen { closeCitationStudio() }
         if storiesStudioOpen { closeStoriesStudio() }
         if notesStudioOpen { closeNotesStudio() }
+        if podcastStudioOpen { closePodcastStudio() }
         guard let id = selectedDocumentID else { return }
         // Dictation and reading belong to the open document.
         if dictationIntoDocument { Task { await stopDictation() } }
@@ -474,6 +477,8 @@ extension AppModel {
     func moveSidebarItem(_ id: UUID, to folderID: Folder.ID?) {
         if document(id) != nil {
             moveDocument(id, to: folderID, reveal: false)
+        } else if podcasts.podcast(id) != nil {
+            movePodcast(id, to: folderID, reveal: false)
         } else {
             moveChat(id, to: folderID, reveal: false)
         }

@@ -33,6 +33,7 @@ flowchart LR
     G --> GW["‹id›.json<br/>eine Romanwelt"]
     G --> GB["Bilder/‹id›/"]
     L --> N["Notizen/<br/>‹id›.json: ein Note"]
+    L --> PO["Podcasts/‹id›/<br/>podcast.json, Schnipsel/, Podcast.m4a"]
     L --> PD["Präsentationen/Designs/<br/>eigene CSS-Designs"]
 ```
 
@@ -190,3 +191,76 @@ Zusätzliche Felder (seit 2026-11-07, alle optional): Eine Folie trägt `"ohnePl
 | `dokumente` | IDs verknüpfter Writer-Dokumente und Präsentationen; die Dokumente bleiben in ihren Ordnern |
 
 Die Dokumente, Präsentationen und Romanwelten selbst ändern sich durch eine Zuordnung nicht. Ein gelöschtes Note kommt in den Papierkorb. Die zuletzt gewählte Anzeige (`notesDefaultStyle`) und das zuletzt offene Note (`notesLastNote`) stehen in den Einstellungen der Bibliothek.
+
+## Podcasts
+
+Jeder Podcast hat einen eigenen Ordner `Podcasts/<id>/`:
+
+| Datei | Inhalt |
+|---|---|
+| `podcast.json` | `{"format": 1, "podcast": {…}}` mit deutschen Schlüsseln |
+| `Schnipsel/<zeilen-id>.wav` | die gesprochene Zeile (24 kHz mono, wie Qwen TTS sie liefert); lange Zeilen sind aus mehreren Stücken zusammengesetzt |
+| `Podcast.m4a` | das fertige Gespräch (AAC), mit 0,25 s Pause zwischen Zeilen derselben Person und 0,45 s beim Sprecherwechsel |
+| `Quellen/<name>.pdf` | Kopien der PDFs, die als eigene Quellen mitgegeben wurden |
+
+```json
+{
+  "format": 1,
+  "podcast": {
+    "id": "…",
+    "titel": "Predictive Coding",
+    "frage": "Was ist Predictive Coding, und ist das ein zeitgemäßes Paradigma?",
+    "laenge": 10,
+    "sprache": "de",
+    "sprachmodell": "klein",
+    "denkmodus": true,
+    "ton": "sachlich",
+    "eigeneQuellen": {
+      "nurDiese": false,
+      "eintraege": [
+        {"art": "url", "url": "https://…"},
+        {"art": "pdf", "titel": "Studie", "datei": "Quellen/studie.pdf"}
+      ]
+    },
+    "ordner": "…",
+    "teilnehmer": [
+      {"id": "…", "rolle": "moderator", "name": "Lena", "beschreibung": "Wissenschaftsjournalistin",
+       "stimme": "serena", "position": "neugierig und unparteiisch"},
+      {"id": "…", "rolle": "diskutant", "name": "Jonas", "beschreibung": "Neurowissenschaftler",
+       "stimme": "aiden", "position": "hält Predictive Coding für das tragende Paradigma"}
+    ],
+    "referenzen": [
+      {"art": "chat", "id": "…"},
+      {"art": "dokument", "id": "…"},
+      {"art": "romanwelt", "welt": "…", "teil": "…"}
+    ],
+    "recherche": {"notizen": "## Kernaussagen\n- …", "quellen": [{"titel": "Predictive Coding", "url": "https://de.wikipedia.org/wiki/…"}]},
+    "gliederung": [{"titel": "Einstieg", "punkte": ["Begrüßung", "Die Frage"]}],
+    "skript": [{"id": "…", "sprecher": "<teilnehmer-id>", "text": "Herzlich willkommen …", "dauer": 4.21}],
+    "phase": "fertig",
+    "dauer": 612.4,
+    "erstellt": "2026-11-11T09:00:00Z",
+    "geaendert": "2026-11-11T09:30:00Z"
+  }
+}
+```
+
+| Schlüssel | Bedeutung |
+|---|---|
+| `laenge` | Minuten: 5, 10 oder 15; anderes wird 10. Das Skript zielt auf etwa 140 Wörter pro Minute |
+| `sprachmodell` | `klein` (Qwen TTS 0.6B, Vorgabe) oder `gross` (1.7B, natürlicher, aber mit gelegentlichem Rauschen) |
+| `denkmodus` | das Modell denkt vor Recherche, Gliederung und Skript nach; fehlt der Schlüssel: an |
+| `ton` | `sachlich`, `lebhaft`, `kontrovers`, `polemisch`, `hitzig`; fehlt er oder ist er unbekannt: `sachlich` |
+| `eigeneQuellen` | Webseiten (`url`) und PDFs (`datei` unterhalb des Podcast-Ordners) der Person; `nurDiese`: keine Web- und Wikipedia-Suche, Faktenblatt und Gespräch stützen sich nur darauf. Wird nicht geschrieben, solange leer |
+| `ordner` | Ordner der Seitenleiste, wie bei Chats und Dokumenten |
+| `rolle` | `moderator` oder `diskutant`; genau eine Moderation |
+| `stimme` | Stimme von Qwen TTS (`serena`, `aiden`, `sohee` …) |
+| `referenzen` | Material: `chat` oder `dokument` (auch Präsentation) mit `id`; `romanwelt` mit `welt` und optional `teil`. Unbekannte Arten werden beim Lesen übergangen |
+| `recherche` | Faktenblatt (`notizen`, Markdown) und die Seiten und Wikipedia-Artikel, die das Modell gelesen hat (`quellen`) |
+| `gliederung` | die geplanten Abschnitte mit ihren Punkten |
+| `skript` | die Beiträge in Reihenfolge; `dauer` (Sekunden) steht erst, wenn die Zeile gesprochen ist |
+| `phase` | `entwurf`, `wartet`, `recherche`, `skript`, `audio`, `fertig`, `gestoppt`, `fehler` (dann mit `fehler`) |
+| `dauer` | Sekunden der fertigen Audiodatei |
+
+Ändert man den Text oder die Person einer Zeile, verliert sie ihren Schnipsel und ihre `dauer`; die Audiodatei gilt dann als veraltet, bis „Audio aktualisieren“ nur diese Zeilen neu spricht. Was beim Beenden der App gerade lief, steht nach dem Start als `gestoppt` da und lässt sich fortsetzen. Ein gelöschter Podcast kommt mit seinem ganzen Ordner in den Papierkorb.
+

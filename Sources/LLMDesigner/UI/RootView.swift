@@ -69,6 +69,9 @@ struct RootView: View {
                     } else if app.notesStudioOpen {
                         NotesStudioScreen()
                             .transition(.opacity)
+                    } else if app.podcastStudioOpen {
+                        PodcastStudioScreen()
+                            .transition(.opacity)
                     } else if app.selectedPresentation != nil {
                         PresenterScreen()
                             .transition(.asymmetric(insertion: .opacity, removal: .opacity))
@@ -92,6 +95,7 @@ struct RootView: View {
             .animation(.easeInOut(duration: 0.25), value: app.citationStudioOpen)
             .animation(.easeInOut(duration: 0.25), value: app.storiesStudioOpen)
             .animation(.easeInOut(duration: 0.25), value: app.notesStudioOpen)
+            .animation(.easeInOut(duration: 0.25), value: app.podcastStudioOpen)
             if showsChatPower, app.isPanelDocked {
                 PowerPanel()
                     .frame(width: Theme.powerWidth)
@@ -126,12 +130,12 @@ struct RootView: View {
     }
 
     private var showsChatOutline: Bool {
-        app.sidebarMode == .chats && app.selectedDocumentID == nil && !app.citationStudioOpen && !app.storiesStudioOpen && !app.notesStudioOpen && app.isOutlinePanelShown && app.selectedChat != nil
+        app.sidebarMode == .chats && app.selectedDocumentID == nil && !app.citationStudioOpen && !app.storiesStudioOpen && !app.notesStudioOpen && !app.podcastStudioOpen && app.isOutlinePanelShown && app.selectedChat != nil
     }
 
     /// The power access stands beside the chat even when the chat has no contents yet.
     private var showsChatPower: Bool {
-        app.sidebarMode == .chats && app.selectedDocumentID == nil && !app.citationStudioOpen && !app.storiesStudioOpen && !app.notesStudioOpen && app.isPanelShown && app.power.isOn
+        app.sidebarMode == .chats && app.selectedDocumentID == nil && !app.citationStudioOpen && !app.storiesStudioOpen && !app.notesStudioOpen && !app.podcastStudioOpen && app.isPanelShown && app.power.isOn
     }
 
     /// What decides whether the sidebars fit: the width and the screen, whose content needs more or less room.
@@ -140,12 +144,12 @@ struct RootView: View {
     }
 
     private var openedKey: String {
-        "\(app.selectedChatID?.uuidString ?? "")|\(app.selectedDocumentID?.uuidString ?? "")|\(app.sidebarMode)|\(app.citationStudioOpen)|\(app.storiesStudioOpen)|\(app.notesStudioOpen)"
+        "\(app.selectedChatID?.uuidString ?? "")|\(app.selectedDocumentID?.uuidString ?? "")|\(app.sidebarMode)|\(app.citationStudioOpen)|\(app.storiesStudioOpen)|\(app.notesStudioOpen)|\(app.podcastStudioOpen)|\(app.selectedPodcastID?.uuidString ?? "")"
     }
 
     /// The room the content needs before a sidebar may stand beside it: the studios have a sheet and a toolbar to show.
     private var contentMinimum: CGFloat {
-        app.sidebarMode == .chats && (app.selectedDocumentID != nil || app.citationStudioOpen || app.storiesStudioOpen || app.notesStudioOpen) ? (app.storiesStudioOpen ? 980 : 880) : 620
+        app.sidebarMode == .chats && (app.selectedDocumentID != nil || app.citationStudioOpen || app.storiesStudioOpen || app.notesStudioOpen || app.podcastStudioOpen) ? (app.storiesStudioOpen ? 980 : 880) : 620
     }
 
     /// The sidebar folds away when the content would get too narrow beside it; the panel on the right before it.

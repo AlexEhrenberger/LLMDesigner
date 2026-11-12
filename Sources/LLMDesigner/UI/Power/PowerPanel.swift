@@ -46,6 +46,7 @@ struct PowerPanel: View {
                 case .citation: PowerCitations()
                 case .stories: PowerStories()
                 case .notes: PowerNotes()
+                case .podcasts: PowerPodcasts()
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -68,6 +69,7 @@ struct PowerPanel: View {
             case .citation: return "In den Zitaten suchen"
             case .stories: return "In der Romanwelt suchen"
             case .notes: return "Alle Notes durchsuchen"
+            case .podcasts: return "Im Skript suchen"
             case .presenter: return "In den Folien suchen"
             default: return "Im Text suchen"
             }
@@ -79,11 +81,12 @@ struct PowerPanel: View {
         case .citation: return "Quellen und Zitate durchsuchen"
         case .stories: return "Romanwelten durchsuchen"
         case .notes: return "Alle Notes durchsuchen"
+        case .podcasts: return "Podcasts durchsuchen"
         }
     }
 }
 
-/// Chats, Writer, Presenter, Citation, Stories, Notes.
+/// Chats, Writer, Presenter, Citation, Stories, Notes, Podcasts.
 private struct PowerModulePicker: View {
     @Environment(AppModel.self) private var app
 

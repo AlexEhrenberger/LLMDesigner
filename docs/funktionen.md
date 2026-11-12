@@ -7,12 +7,12 @@ mermaid: true
 
 [← Übersicht](index.md) · [Architektur](architektur.md) · [Code-Führer](code.md) · [Speicherformate](speicherformate.md)
 
-Das Fenster hat drei Bereiche: links die **Seitenleiste** (Chats, Dokumente, Präsentationen in Ordnern; Skills; Personas), in der Mitte die **Arbeitsfläche** (Chat oder eine der Anwendungen), rechts ein **Panel** (Inhaltsverzeichnis, Lesezeichen, Quellen – oder der Power-Zugriff). Wird das Fenster schmal, klappen die Seitenleisten weg und legen sich bei Bedarf über den Inhalt.
+Das Fenster hat drei Bereiche: links die **Seitenleiste** (Chats, Dokumente, Präsentationen, Podcasts in Ordnern; Skills; Personas), in der Mitte die **Arbeitsfläche** (Chat oder eine der Anwendungen), rechts ein **Panel** (Inhaltsverzeichnis, Lesezeichen, Quellen – oder der Power-Zugriff). Wird das Fenster schmal, klappen die Seitenleisten weg und legen sich bei Bedarf über den Inhalt.
 
 ```mermaid
 flowchart LR
     subgraph Links["Seitenleiste"]
-        C["Chats · Dokumente · Präsentationen"]
+        C["Chats · Dokumente · Präsentationen · Podcasts"]
         S["Skills"]
         P["Personas"]
     end
@@ -23,19 +23,20 @@ flowchart LR
         CI["Citation Studio"]
         ST["Stories Studio"]
         NO["Notes"]
+        PO["PodcastStudio"]
     end
     subgraph Rechts["Panel"]
         O["Inhalt · Lesezeichen · Quellen"]
         DN["Notes dieses Dokuments"]
         PW["Power-Zugriff"]
     end
-    C --> CH & W & PR
+    C --> CH & W & PR & PO
     Mitte <-->|"Text ziehen"| PW
 ```
 
 ## Neu anlegen
 
-Das Stift-Symbol oben in der Seitenleiste (und in den Titelleisten, wenn die Seitenleiste zu ist) öffnet ein Menü: **Neuer Chat** und alle Applikationen – Writer Studio (neues Dokument), Citation Studio, Presenter Studio (neue Präsentation), Stories Studio und Notes. Darunter „Präsentation aus Dokument …“.
+Das Stift-Symbol oben in der Seitenleiste (und in den Titelleisten, wenn die Seitenleiste zu ist) öffnet ein Menü: **Neuer Chat** und alle Applikationen – Writer Studio (neues Dokument), Citation Studio, Presenter Studio (neue Präsentation), Stories Studio, Notes und PodcastStudio (neuer Podcast). Darunter „Präsentation aus Dokument …“.
 
 **Ordner** haben eine zweite Ebene: „Neuer Unterordner“ im Menü eines Ordners, oder einen Ordner auf einen anderen ziehen. Ein Unterordner, der nach draußen gezogen wird, kommt wieder nach oben. Löscht man einen Unterordner und behält den Inhalt, wandert er in den Ordner darüber.
 
@@ -196,6 +197,21 @@ Ein **Note** ist eine ToDo-Liste mit Titel, einer Fortschrittsanzeige und freiem
 
 Ein Note gehört dem Dokument, in dessen Panel es angelegt wurde; „Vorhandenes Note verknüpfen“ ordnet ein bestehendes zu, das Pin-Symbol mit Strich löst es wieder. Im Studio zeigt „Gehört zu“ alle Zuordnungen.
 
+## PodcastStudio
+
+Ein **Podcast** ist ein Gespräch über eine Frage („Was ist Predictive Coding, und ist das ein zeitgemäßes Paradigma?“), 5, 10 oder 15 Minuten lang. Das Modell recherchiert, schreibt das Gespräch, und Qwen TTS spricht es mit einer Stimme je Person; heraus kommt eine M4A-Datei zum Anhören in der App oder zum Exportieren.
+
+- **Teilnehmer**: eine Moderation und Diskutant:innen, jede Person mit Namen (die anderen sprechen sie damit an), Beschreibung (Biologin, Physiker, Taxifahrer …), Stimme aus der Liste von Qwen TTS und Standpunkt. „KI schlägt vor“ leitet eine Runde mit unterschiedlichen Standpunkten aus der Frage ab.
+- **Referenzen**: Chats, Dokumente, Präsentationen, Romanwelten oder ihre Teile, auf die sich das Gespräch stützt. Writer, Presenter und Stories Studio haben dafür einen Knopf „Podcast daraus erzeugen“ in der Titelleiste (Stories: der offene Teil oder die ganze Welt), Chats einen Eintrag im Menü der Seitenleiste.
+- **Erzeugen** läuft im Hintergrund: erst die **Recherche** (das Modell schlägt mit Denkmodus mehrmals in Wikipedia und im Web nach und schreibt ein Faktenblatt mit Quellen), dann **Gliederung und Skript** passend zur Länge (etwa 140 Wörter pro Minute), dann die **Sprachaufnahme** Zeile für Zeile. Es läuft immer ein Podcast; weitere warten. Jeder Podcast steht mit eigenem Symbol in der Seitenleiste, mit einem Ring für den Fortschritt, einer Uhr, wenn er wartet, und seiner Länge, wenn er fertig ist.
+- **Anhören**: Abspielen, 15 Sekunden vor und zurück, Tempo; das Skript zeigt die laufende Zeile und läuft mit („Mitlaufen“ lässt sich ausschalten), ein Klick auf eine Zeit springt dorthin. **Exportieren …** speichert die M4A-Datei.
+- **Nacharbeiten**: Ein Doppelklick bearbeitet eine Zeile, das Menü daneben gibt sie einer anderen Person oder löscht sie. „Audio aktualisieren“ spricht nur die geänderten Zeilen neu. „Neu erzeugen“ bietet alles neu, ein neues Skript auf derselben Recherche oder alle Zeilen neu gesprochen.
+- **Sprachmodell**: Vorgabe ist das kleine Qwen-TTS-Modell; das große klingt natürlicher, erzeugte aber in längeren Aufnahmen gelegentlich Rauschen.
+- **Denkmodus**: an (Vorgabe) denkt das Modell vor Recherche, Gliederung und Skript nach – gründlicher, aber langsamer. Aus geht es mit Kapitsa und Gemma; Qwen in LM Studio denkt immer.
+- **Ton**: ein Regler in fünf Stufen von *sachlich* über *lebhaft*, *kontrovers* und *polemisch* bis *hitzig*. Hitzig klingt wie die Fernsehdebatten der 70er und 80er (etwa Alice Schwarzer gegen Esther Vilar): Man fällt sich ins Wort, wird persönlich, beschimpft und beleidigt sich, die Moderation schlichtet vergeblich. Die Beleidigungen gelten der Person, nicht Gruppen; Drohungen gibt es keine.
+- **Eigene Quellen**: Webadressen und PDFs (das PDF wird in den Podcast kopiert). Das Modell liest sie zuerst; mit **„Nur aus diesen Quellen“** sucht es gar nicht im Web oder in Wikipedia, und Faktenblatt und Gespräch halten sich allein an sie.
+- **Als Writer-Dokument** (über dem Skript und im Menü der Seitenleiste): ein neues Dokument mit Frage, Teilnehmern, dem Gespräch Zeile für Zeile, Faktenblatt und Quellen, im Ordner des Podcasts.
+
 ## Terminal, MCP und Werkzeuge im Chat
 
 Die App lässt sich aus dem Terminal (`llmd`) und über MCP steuern, und der Chat kann auf Wunsch selbst in den Studios arbeiten. Heikle Schritte fragt die App nach, und jeder Schritt ist im Aktivitätsfenster und in der Antwort sichtbar. Siehe [Action-Schicht](actions.md).
@@ -212,6 +228,7 @@ Der Blitz in der Titelleiste (⌥⌘J) verwandelt das rechte Panel in **kompakte
 | Citation | Quellen, Zitate einer Quelle; DOI/ISBN-Import | Text wird ein neues Zitat; Eingabefeld mit Seite | Zitat mit Quellenangabe (im Dokument als Zitations-Pille) |
 | Stories | Romanwelten, Figuren/Spezies/Orte/Events/Reasons/Purposes/Fakten | Text wird ein neues Element (erste Zeile = Name) | Name und Haupttext |
 | Notes | alle Notes (die des offenen Dokuments oben), ein Note zum Abhaken | Text wird ein neues Note (Überschrift = Titel, jede Listenzeile ein ToDo); auf ein offenes Note: ToDos ans Ende | das Note als Aufgabenliste (`- [ ]`) |
+| Podcasts | alle Podcasts mit Stand; ein Podcast mit Abspielen, Fortschritt und Skript; „Zum Dokument“ legt einen Podcast zum offenen Dokument an | Text wird die Frage eines neuen Podcasts (langer Text: seine Überschrift) | eine Zeile „Name: Text“ oder das ganze Skript |
 
 Die **Suche** filtert in der Liste (Titel und Inhalt, mit Textausschnitt) und markiert im geöffneten Element die Treffer, mit Zähler und Pfeilen zum Springen. Jede Änderung aus dem Panel lässt sich unten mit **Rückgängig** zurücknehmen. Rechtsklick auf einen Block: Kopieren, **An der Schreibmarke einfügen**, Bearbeiten (Markdown), Löschen.
 
@@ -234,4 +251,4 @@ sequenceDiagram
 
 ## Bibliotheken
 
-Alles – Chats, Dokumente, Bilder, Personas, Gedächtnis, Skills, Zitate, Romanwelten, Notes, Einstellungen – liegt in einer **Bibliothek** (`Name.llmdlibrary`). Unten links wechselt man zwischen Bibliotheken; sie sehen nichts voneinander. Details: [Speicherformate](speicherformate.md).
+Alles – Chats, Dokumente, Bilder, Personas, Gedächtnis, Skills, Zitate, Romanwelten, Notes, Podcasts, Einstellungen – liegt in einer **Bibliothek** (`Name.llmdlibrary`). Unten links wechselt man zwischen Bibliotheken; sie sehen nichts voneinander. Details: [Speicherformate](speicherformate.md).
