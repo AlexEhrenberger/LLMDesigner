@@ -13,7 +13,7 @@ extension LLMDClient: MCPBackend {
 }
 
 enum MCPProfile {
-    static let names = ["core", "writer", "presenter", "citation", "stories", "notes", "projects", "podcast", "chat", "full"]
+    static let names = ["core", "writer", "presenter", "citation", "stories", "notes", "projects", "data", "research", "learning", "podcast", "chat", "full"]
 
     /// Whether an action belongs to a profile. Private groups never do: the app refuses them on this channel anyway,
     /// and a tool that can only fail just costs a small model context.

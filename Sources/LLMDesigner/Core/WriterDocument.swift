@@ -169,6 +169,7 @@ struct WriterDocumentStore {
         if let deck = document.deck {
             header.append("kind: presentation")
             header.append("backgrounds: \(deck.backgroundsLine)")
+            if let master = deck.masterID { header.append("master: \(master.uuidString)") }
         }
         if let origin = document.provenance, origin != .own { header.append("herkunft: \(origin.rawValue)") }
         if let mode = document.tocMode { header.append("toc: \(mode.rawValue)") }
@@ -194,6 +195,7 @@ struct WriterDocumentStore {
         var body = Substring(text)
         var isPresentation = false
         var backgrounds: RoleBackgrounds?
+        var masterID: UUID?
         if text.hasPrefix("---\n"), let end = text.range(of: "\n---\n", range: text.index(text.startIndex, offsetBy: 4)..<text.endIndex) {
             let header = text[text.index(text.startIndex, offsetBy: 4)..<end.lowerBound]
             for line in header.split(separator: "\n") {
@@ -216,6 +218,7 @@ struct WriterDocumentStore {
                 case "outline": document.outline = try? JSONDecoder.outline.decode(DocumentOutline.self, from: Data(value.utf8))
                 case "kind": isPresentation = value == "presentation"
                 case "backgrounds": backgrounds = PresentationDeck.backgrounds(from: value)
+                case "master": masterID = UUID(uuidString: value)
                 default: break
                 }
             }
@@ -230,6 +233,7 @@ struct WriterDocumentStore {
         if isPresentation {
             var deck = PresentationDeck.parse(String(body))
             if let backgrounds { deck.backgrounds = backgrounds }
+            deck.masterID = masterID
             document.deck = deck
         } else {
             document.markdown = String(body)

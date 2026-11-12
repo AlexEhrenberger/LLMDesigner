@@ -241,6 +241,45 @@ Ein **Podcast** ist ein Gespräch über eine Frage („Was ist Predictive Coding
 - **Eigene Quellen**: Webadressen und PDFs (das PDF wird in den Podcast kopiert). Das Modell liest sie zuerst; mit **„Nur aus diesen Quellen“** sucht es gar nicht im Web oder in Wikipedia, und Faktenblatt und Gespräch halten sich allein an sie.
 - **Als Writer-Dokument** (über dem Skript und im Menü der Seitenleiste): ein neues Dokument mit Frage, Teilnehmern, dem Gespräch Zeile für Zeile, Faktenblatt und Quellen, im Ordner des Podcasts.
 
+## Data Studio
+
+**Datenblöcke** sammeln Angaben unter einem Namen, den man selbst wählt: „Absender“, „User 1“, „Finanzamt“, „Bank“. Jeder Block hat ein **Kürzel** (`absender`) und Felder mit eigenem Kürzel (`strasse`), Namen, Art (Text, mehrzeilig, Datum, Zahl, E-Mail, Telefon, Link) und Wert. Neue Blöcke beginnen mit den Feldern einer **Struktur** (Person, Firma/Behörde, Anschrift, Kontakt, Bankverbindung, frei); Felder kommen per „+ Feld“ dazu, lassen sich umbenennen, umsortieren (ziehen) und löschen. Die **Tabellenansicht** zeigt alle Blöcke einer Gruppe als Zeilen und ihre Felder als Spalten – wie eine kleine Datenbank.
+
+- **Platzhalter**: `{{absender.strasse}}` setzt ein Feld ein, `{{absender}}` den ganzen Block in seiner **Darstellung** (`{vorname} {nachname}\n{strasse}\n{plz} {ort}`; leere Zeilen fallen weg), `{{heute}}` das Datum („12. November 2026“; `{{heute.kurz}}`, `{{heute.iso}}`, `{{heute.jahr}}`).
+- **Writer und Presenter** zeigen ein Feld als Objekt mit dem aktuellen Wert (gepunktet unterstrichen); gespeichert wird der Platzhalter. Einsetzen mit **⌥⌘D**, „/daten“ oder dem Kontextmenü; Doppelklick wählt ein anderes Feld, das Kontextmenü zeigt den Block in Data Studio oder setzt den Wert als festen Text ein. Ändert man den Block, ändert sich jedes Dokument sofort mit. Export, Druck und Markdown setzen die Werte ein.
+- **Notes, Projektseiten und Stories** zeigen in ihren Textfeldern die Werte, solange man nicht darin tippt; ein Klick bringt die Platzhalter zurück, an derselben Stelle.
+- **Kürzel ändern** schreibt auf Wunsch alle Dokumente, Präsentationen, Notes, Projekte und Vorlagen mit um. „Verwendet in“ zeigt, wo ein Block steht.
+- **Vorlagen**: mitgeliefert sind **Brief (DIN 5008)** (Absender, Rücksendeangabe, Anschriftfeld, Datum rechts, Betreff, Gruß) und **Lebenslauf (tabellarisch)** (persönliche Daten, Berufserfahrung und Ausbildung neueste zuerst, Kenntnisse, Ort und Datum) sowie die Masterfolie **Master: Klar**. Eine Vorlage nennt **Rollen** (`absender`, `empfaenger`, `person`); beim Erstellen wählt man für jede Rolle einen Datenblock (oder legt einen an), und aus `{{absender.strasse}}` wird `{{user1.strasse}}` – verknüpft, nicht kopiert. Erstellen über „Neu → Aus Vorlage“, das Kontextmenü der Vorlage oder `data.template.use`. Mitgelieferte Vorlagen lassen sich als Kopie anpassen; „Neu → Aus „…““ macht aus dem zuletzt offenen Dokument eine eigene Vorlage.
+- **Masterfolien** legen Logo (Ecke, Größe), Kopf- und Fußzeile (mit `{{titel}}`, `{{folie}}`, `{{folien}}` und Datenfeldern), Seitenzahlen, eine Linie und auf Wunsch ein Design fest. Eine Präsentation mit Master zeigt ihn auf jeder Folie (außer der Titelfolie, wenn nicht gewünscht) – im Editor, in den Vorschaubildern, beim Vorführen und im PDF. Der Master bleibt verknüpft: Ein neues Logo erscheint in allen Präsentationen.
+- **Power-Zugriff „Data“**: alle Blöcke; Felder und ganze Blöcke lassen sich in Texte ziehen, Werte direkt ändern.
+
+## Rechercherista
+
+Ein **Forschungsauftrag** an das lokale Modell, gründlicher als die Websuche im Chat (eine Art Deep Research für Qwen 3.5 9B):
+
+1. **Orientierung**: Das Modell schlägt die Begriffe bei Wikipedia nach (Treffer und Artikelanfang).
+2. **Rückfrage**: Kann der Auftrag ganz verschiedene Dinge meinen (ein juristischer gegenüber einem kognitionswissenschaftlichen Begriff), fragt Rechercherista „Was meinst du?“ mit Optionen und einem Feld für eigene Worte. Wer den Fokus vorher einträgt, wird nicht gefragt.
+3. **Plan**: drei, fünf oder sieben Teilfragen (Überblick, gründlich, sehr gründlich) – der **Fragenbaum**.
+4. **Recherche je Teilfrage** in den gewählten Quellen: **Wikipedia**, **Websuche** (die besten Seiten werden gelesen), **arXiv** und **OpenAlex** (Fachartikel mit Abstracts und Zitationszahlen; es gehen nur Suchwörter hinaus). Das Modell fasst jede Teilfrage mit Belegen [n] zusammen.
+5. **Lücken**: Bei „gründlich“ und „sehr gründlich“ sucht es danach Folgefragen (Lücken, Widersprüche, fehlende Belege) und recherchiert auch diese.
+6. **Bericht**: Kurzfassung, Abschnitte, Einordnung und Widersprüche, offene Fragen; das Quellenverzeichnis schreibt die App selbst, damit jede Nummer auf eine echte Quelle zeigt.
+
+Die Recherche läuft im Hintergrund (eine nach der anderen), jeder Schritt wird gespeichert; angehalten geht sie dort weiter. Unter **Quellen** nimmt man Quellen an oder verwirft sie und lässt dann den Bericht neu schreiben. Aus dem Bericht wird mit einem Klick ein **Writer-Dokument**, eine **Präsentation** (über „Präsentation aus Dokument“), ein **Podcast** (der Bericht als Material) oder Fachquellen mit DOI/arXiv-Nummer kommen nach **Citation Studio**. Im Chat startet der Rechtsklick „Recherche dazu starten“ (die markierte Stelle oder die Nachricht) eine Recherche und wechselt nach Rechercherista; mit den Chat-Werkzeugen „Rechercherista“ kann das Modell es selbst (`research.start`, mit Rückfrage an dich). Kommt der Auftrag aus einem Chat, der private Persona-Dateien gelesen hat, sucht die Recherche nur in Wikipedia.
+
+## Learning Studio
+
+Die Startseite ist ein **Garten**: Jede **Disziplin** (Psychologie, Informatik …) ist ein Baum – Eiche, Kirschbaum, Ahorn, Birke, Kiefer oder Magnolie –, der vom Keimling zum großen Baum wächst. Blätter kommen mit gelernten Karten, **Blüten** mit regelmäßigem Lernen (Tage in Folge, Behaltensrate), **Früchte** mit abgeschlossenen Kursen und guten Abfragen. Der Himmel folgt der Tageszeit, die Bäume wiegen sich leicht. Unter dem Garten stehen die **Kurse** der gewählten Disziplin mit Fortschrittsring, Fälligen und Prüfungs-Countdown.
+
+- **Karteikarten**: anlegen (Vorder- und Rückseite), viele aus Text („Frage ; Antwort“ je Zeile, auch Tab, „–“ oder „F: … / A: …“), zurückstellen, zurücksetzen. **Lernen**: Leertaste zeigt die Antwort, **1–4** bewerten (Nochmal, Schwer, Gut, Leicht); die Knöpfe zeigen, wann die Karte wiederkommt.
+- **Algorithmus** (Regler oben rechts): **FSRS** (empfohlen; Stabilität und Schwierigkeit je Karte, die gewünschte **Behaltensrate** von 80 bis 97 % bestimmt die Abstände) oder **SM-2** wie Anki (Faktor je Karte, Startfaktor und Intervall-Faktor einstellbar). Lernschritte in Minuten, neue Karten und Wiederholungen pro Tag und Kurs, längstes Intervall.
+- **Lernpause** (Pause-Knopf): für alles, eine Disziplin oder einen Kurs, ab heute oder geplant, mit Ende oder offen. Während der Pause kommen keine Karten; endet sie, rücken alle Karten, die danach fällig waren, um die Pausenlänge weiter – nach zwei Wochen Urlaub wartet kein Berg. Pausentage unterbrechen die Tage in Folge nicht.
+- **Material**: PDFs, eine **Probeklausur**, Text, Links und **YouTube**-Adressen (sie öffnen im Browser), Quellen aus **Citation Studio**. Das Modell schreibt daraus einen **Lernzettel** (Writer-Dokument, mit dem Kurs verknüpft), erstellt **Karten** oder fragt ab.
+- **Abfrage**: Das Modell stellt eine Prüfungsfrage zum Material (eine Probeklausur dient als Vorbild), prüft die Antwort (richtig, teilweise, falsch), erklärt, was fehlt, und zeigt eine Musterantwort; frühere Abfragen bleiben mit ihrem Ergebnis.
+- **Übersicht**: Fällige, neue, junge und gefestigte Karten, Behaltensrate, Antworten der letzten 30 Tage und Fälligkeiten der nächsten 14 Tage als Diagramme.
+- **Verknüpft**: eigene Dokumente, Präsentationen, Notes, Projekte und Chats gehören zum Kurs; neue lassen sich direkt für ihn anlegen.
+- **Power-Zugriff „Lernen“**: alle Kurse mit Fälligen und eine Lernsitzung direkt neben dem Dokument; Text dorthin ziehen legt Karten an.
+- **Chat**: Mit den Werkzeugen „Learning Studio“ kennt das Modell deinen Lernfortschritt (`learning.overview`), fragt dich Karten ab (`learning.due`, dann `learning.review`), legt Karten an oder plant eine Pause.
+
 ## Terminal, MCP und Werkzeuge im Chat
 
 Die App lässt sich aus dem Terminal (`llmd`) und über MCP steuern, und der Chat kann auf Wunsch selbst in den Studios arbeiten. Heikle Schritte fragt die App nach, und jeder Schritt ist im Aktivitätsfenster und in der Antwort sichtbar. Siehe [Action-Schicht](actions.md).

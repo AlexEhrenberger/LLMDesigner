@@ -35,6 +35,10 @@ flowchart LR
     L --> N["Notizen/<br/>‹id›.json: ein Note"]
     L --> PJ["Projekte/<br/>‹id›.json: ein Projekt"]
     L --> PO["Podcasts/‹id›/<br/>podcast.json, Schnipsel/, Podcast.m4a"]
+    L --> DA["Daten/<br/>‹id›.json: ein Datenblock"]
+    L --> VO["Vorlagen/‹id›/<br/>vorlage.json, logo.png"]
+    L --> RE["Recherchen/‹id›/<br/>recherche.json"]
+    L --> LE["Lernen/<br/>lernen.json, ‹id›/kurs.json, ‹id›/Material/"]
     L --> PD["Präsentationen/Designs/<br/>eigene CSS-Designs"]
 ```
 
@@ -323,3 +327,103 @@ Jeder Podcast hat einen eigenen Ordner `Podcasts/<id>/`:
 | `verlauf` | ein Eintrag je Tag, an dem sich etwas geändert hat: offene und erledigte Aufgaben und ToDos zusammen, nie Text; höchstens 400 Tage |
 
 Ein gelöschtes Projekt kommt in den Papierkorb. Ob die Kategorie „Projekte“ in der Seitenleiste eingeklappt ist (`projectsSectionCollapsed`), steht in den Einstellungen der Bibliothek.
+
+## Data Studio
+
+Ein **Datenblock** liegt in `Daten/<id>.json`:
+
+```json
+{
+  "datenblock" : {
+    "darstellung" : "{vorname} {nachname}\n{strasse}\n{plz} {ort}",
+    "erstellt" : "2026-11-12T09:00:00Z",
+    "farbe" : "blue",
+    "felder" : [
+      { "art" : "text", "id" : "…", "kuerzel" : "vorname", "name" : "Vorname", "wert" : "Mara" },
+      { "art" : "datum", "id" : "…", "kuerzel" : "geburtsdatum", "name" : "Geburtsdatum", "wert" : "2001-02-03" }
+    ],
+    "geaendert" : "2026-11-12T09:05:00Z",
+    "gruppe" : "Personen",
+    "id" : "…",
+    "kuerzel" : "absender",
+    "name" : "Absender",
+    "notiz" : "",
+    "symbol" : "person.crop.rectangle"
+  },
+  "format" : 1
+}
+```
+
+`art` ist `text`, `mehrzeilig`, `datum` (gespeichert `yyyy-MM-dd`, eingesetzt `dd.MM.yyyy`), `zahl`, `email`, `telefon` oder `link`. Kürzel bestehen aus Buchstaben, Ziffern, `-` und `_`; die App macht sie aus dem Namen („Straße“ → `strasse`, „User 1“ → `user1`) und hält sie eindeutig. `heute`, `titel`, `folie`, `folien` sind keine Blöcke.
+
+**Platzhalter** in Texten: `{{kuerzel}}` (der ganze Block nach `darstellung`; leer: alle gefüllten Felder untereinander) und `{{kuerzel.feld}}`. Writer, Presenter, Notes und Projekte speichern sie so im Markdown bzw. Text; Export und Druck setzen die Werte ein (mehrzeilige Werte als Zeilen desselben Absatzes).
+
+Eine **Vorlage** liegt in `Vorlagen/<id>/vorlage.json` (eigene Dateien wie `logo.png` daneben):
+
+```json
+{
+  "format" : 1,
+  "vorlage" : {
+    "art" : "presenter",
+    "beschreibung" : "…",
+    "hintergruende" : { "folie" : { "design" : "…", "kind" : "design" }, "kapitel" : null, "titel" : null },
+    "id" : "…",
+    "master" : { "aufTitelfolie" : false, "fusszeile" : "{{titel}} · {{heute.kurz}}", "kopfzeile" : "", "linie" : true,
+                 "logo" : "logo.png", "logoEcke" : "obenRechts", "logoGroesse" : 0.12, "seitenzahlen" : true },
+    "name" : "Firmenmaster",
+    "rollen" : [ { "kuerzel" : "firma", "name" : "Firma", "struktur" : "organisation" } ],
+    "symbol" : "rectangle.on.rectangle"
+  }
+}
+```
+
+Eine Writer-Vorlage (`"art": "writer"`) hat statt `master`, `hintergruende` und `folien` die Schlüssel `text` (Markdown mit Platzhaltern), `schrift` und `seitenformat`. `rollen` sind die Platzhalter, die beim Erstellen einen Datenblock bekommen; `struktur` ist `person`, `organisation`, `anschrift`, `kontakt`, `bank` oder `frei`. Die mitgelieferten Vorlagen (Brief DIN 5008, Lebenslauf, Master: Klar) liegen nicht in der Bibliothek, sondern im Code (`eingebaut`).
+
+Eine **Präsentation mit Master** trägt im Kopf ihres Dokuments `master: <id der Vorlage>`; Logo, Kopf- und Fußzeile kommen bei jedem Zeichnen aus der Vorlage.
+
+## Rechercherista
+
+Eine **Recherche** liegt in `Recherchen/<id>/recherche.json` (`{"format": 1, "recherche": {…}}`):
+
+| Schlüssel | Inhalt |
+|---|---|
+| `titel`, `frage` | Titel und Forschungsauftrag |
+| `quellenarten` | `wikipedia`, `web`, `arxiv`, `openalex` |
+| `tiefe` | `ueberblick`, `gruendlich`, `sehrGruendlich` |
+| `sprache`, `denkmodus` | `de`/`en`, Denkmodus an/aus |
+| `phase` | `entwurf`, `orientierung`, `rueckfrage`, `planen`, `recherchieren`, `luecken`, `bericht`, `fertig`, `gestoppt`, `fehler` (eine laufende Phase wird beim Laden `gestoppt`) |
+| `orientierung` | was Wikipedia zu den Begriffen sagte |
+| `rueckfrage` | `{frage, optionen, antwort}`; `antwort` ist der Fokus (leere Frage mit leerer Antwort: nichts zu fragen) |
+| `baum` | Fragen `{id, eltern, frage, status (offen/laeuft/fertig/uebersprungen), zusammenfassung, suchen, quellen, grund}`; die Wurzel hat kein `eltern` |
+| `quellen` | `{id, nummer, art, titel, url, autoren, jahr, doi, auszug, zitationen, angenommen}`; `angenommen` fehlt (offen), `true` oder `false` (verworfen) |
+| `bericht` | Markdown mit Belegen [n] und Quellenverzeichnis |
+| `protokoll` | jede Suche und gelesene Seite |
+| `chat`, `nurWikipedia` | der Chat, aus dem sie kam; nur Wikipedia, weil er private Dateien gelesen hatte |
+
+## Learning Studio
+
+`Lernen/lernen.json` hält, was keinem Kurs gehört:
+
+```json
+{
+  "disziplinen" : [ { "baum" : "kirsche", "erstellt" : "…", "farbe" : "pink", "id" : "…", "name" : "Psychologie", "symbol" : "leaf" } ],
+  "einstellungen" : { "algorithmus" : "fsrs", "behaltensrate" : 0.9, "intervallFaktor" : 1, "leichtBonus" : 1.3, "lernschritte" : [ 1, 10 ],
+                      "maxIntervall" : 365, "neueProTag" : 20, "neulernschritte" : [ 10 ], "startfaktor" : 2.5, "wiederholungenProTag" : 200 },
+  "format" : 1,
+  "pausen" : [ { "angewandt" : false, "beginn" : "…", "bereich" : "alles", "ende" : "…", "grund" : "Urlaub", "id" : "…" } ]
+}
+```
+
+`bereich` ist `alles`, `disziplin` (mit `disziplin`) oder `kurs` (mit `kurs`); `ende` fehlt bei einer offenen Pause. Ist eine Pause vorbei, verschiebt die App alle Karten im Bereich, die ab `beginn` fällig waren, um ihre Länge und setzt `angewandt`.
+
+Ein **Kurs** liegt in `Lernen/<id>/kurs.json` (`{"format": 1, "kurs": {…}}`), seine PDFs in `Lernen/<id>/Material/`:
+
+| Schlüssel | Inhalt |
+|---|---|
+| `disziplin`, `name`, `beschreibung`, `symbol`, `farbe` | Zuordnung und Aussehen |
+| `pruefung` | Prüfungstag `yyyy-MM-dd` |
+| `karten` | `{id, vorne, hinten, schlagwoerter, material, zustand (neu/lernen/wiederholen/neulernen), faellig, stabilitaet, schwierigkeit, faktor, intervall, schritt, wiederholungen, vergessen, zuletzt, zurueckgestellt, verlauf, erstellt}`; `verlauf` ist `[{datum, bewertung 1–4, zustand, intervall}]` |
+| `material` | `{id, art (pdf/probeklausur/link/youtube/quelle/text), titel, datei, url, zitat (Citekey), text, zusammenfassung, hinzugefuegt}` |
+| `verknuepft`, `projekte` | Verweise wie bei Projekten (`chat`, `dokument`, `note`, `romanwelt`) und Projekt-IDs |
+| `abfragen` | `{id, datum, material, fragen: [{frage, antwort, bewertung (richtig/teilweise/falsch), rueckmeldung, loesung}]}` |
+| `abgeschlossen` | Kurs abgeschlossen (trägt Früchte am Baum) |

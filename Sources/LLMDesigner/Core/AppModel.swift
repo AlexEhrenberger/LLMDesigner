@@ -463,6 +463,19 @@ final class AppModel {
     var notesStudioOpen = false
     /// What an action or another studio wants the Notes studio to show; the open screen takes it over.
     var notesStudioCommand: NotesStudioCommand?
+    /// Data Studio takes the main area (see AppModel+Data.swift).
+    var dataStudioOpen = false
+    var dataStudioCommand: DataStudioCommand?
+    /// The document that was open before a studio took the main area (Data Studio makes templates from it).
+    var lastClosedDocumentID: UUID?
+    /// A template whose "erstellen" sheet is open (roles → data blocks).
+    var templateUseRequest: UUID?
+    /// Rechercherista takes the main area (see AppModel+Research.swift).
+    var researchStudioOpen = false
+    var researchStudioCommand: ResearchStudioCommand?
+    /// Learning Studio takes the main area (see AppModel+Learning.swift).
+    var learningStudioOpen = false
+    var learningStudioCommand: LearningStudioCommand?
     /// The project shown in the main area (see AppModel+Projects.swift).
     var openProjectID: UUID?
     /// Its page or its board of tasks.
@@ -557,6 +570,12 @@ final class AppModel {
     @ObservationIgnored let notes = NoteLibrary(store: .library())
     /// Projects: pages of blocks and boards of tasks that point to chats, documents, notes and novel worlds.
     @ObservationIgnored let projects = ProjectLibrary(store: .library())
+    /// Data Studio: data blocks for `{{…}}` fields and templates for Writer and Presenter.
+    @ObservationIgnored let dataStudio = DataStudio()
+    /// Rechercherista: research assignments with their tree of questions, sources and report.
+    @ObservationIgnored let research = ResearchLibrary()
+    /// Learning Studio: disciplines, courses, flash cards and their schedule.
+    @ObservationIgnored let learning = LearningLibrary()
     /// PodcastStudio: conversations about a question, researched, written and spoken by the model and Qwen TTS.
     @ObservationIgnored let podcasts = PodcastLibrary(store: .library())
     /// The instruction being written in Writer Studio's assistant bar.
@@ -647,6 +666,12 @@ final class AppModel {
         documents = documentStore.loadAll()
         // The sidebar lists the projects from the start.
         projects.loadIfNeeded()
+        // Writer's data fields draw their values from the start.
+        dataStudio.loadIfNeeded()
+        DataFields.openBlock = { [weak self] key in
+            guard let self else { return }
+            self.openDataStudio(DataStudioCommand(tab: .blocks, block: self.dataStudio.block(key: key)?.id))
+        }
         chatFolders = library.loadChatFolders()
         loadSidebarStacks()
         let skillLibrary = library.loadSkills()
@@ -685,6 +710,9 @@ final class AppModel {
         stories.saveAll()
         notes.saveAll()
         projects.saveAll()
+        dataStudio.saveAll()
+        research.saveAll()
+        learning.saveAll()
         podcastPlayer.stop()
         stopAllPodcasts()
         writerFlush?()

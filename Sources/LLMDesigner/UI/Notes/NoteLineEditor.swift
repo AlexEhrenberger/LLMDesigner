@@ -67,10 +67,12 @@ private struct NoteLineHost: NSViewRepresentable {
         textView.isVerticallyResizable = false
         textView.isHorizontallyResizable = false
         textView.font = font
-        textView.string = text
+        textView.dataDisplay.view = textView
+        textView.dataDisplay.set(text)
         textView.placeholder = placeholder
         textView.delegate = context.coordinator
         textView.onWidthChange = { [weak coordinator = context.coordinator] in coordinator?.reportHeight() }
+        textView.dataDisplay.onSwap = { [weak coordinator = context.coordinator] in coordinator?.reportHeight() }
         // Reads the callback of the latest update, so a row that moved still clears its own request.
         textView.onFocus = { [weak coordinator = context.coordinator] in
             guard let done = coordinator?.parent.onFocused else { return }
@@ -85,8 +87,8 @@ private struct NoteLineHost: NSViewRepresentable {
         let coordinator = context.coordinator
         let lookChanged = coordinator.parent.isDone != isDone
         coordinator.parent = self
-        if textView.string != text {
-            textView.string = text
+        if textView.dataDisplay.text != text {
+            textView.dataDisplay.set(text)
             coordinator.applyLook()
             textView.needsDisplay = true
             coordinator.reportHeight()
@@ -125,7 +127,11 @@ private struct NoteLineHost: NSViewRepresentable {
             textView.insertionPointColor = NSColor(Theme.textPrimary)
             if let storage = textView.textStorage, storage.length > 0 {
                 storage.beginEditing()
-                storage.setAttributes(attributes, range: NSRange(location: 0, length: storage.length))
+                // Added, not set: the highlight of data field values stays.
+                let all = NSRange(location: 0, length: storage.length)
+                storage.removeAttribute(.strikethroughStyle, range: all)
+                storage.removeAttribute(.strikethroughColor, range: all)
+                storage.addAttributes(attributes, range: all)
                 storage.endEditing()
             }
         }
@@ -237,6 +243,20 @@ final class NoteLineTextView: NSTextView {
     /// Where the caret goes once the view can take the keyboard.
     var pendingFocus: Caret?
     private var lastWidth: CGFloat = 0
+    /// Values of `{{…}}` fields while the line isn't being edited.
+    let dataDisplay = DataValueDisplay()
+
+    override func becomeFirstResponder() -> Bool {
+        let became = super.becomeFirstResponder()
+        if became { dataDisplay.beginEditing() }
+        return became
+    }
+
+    override func resignFirstResponder() -> Bool {
+        let resigned = super.resignFirstResponder()
+        if resigned { dataDisplay.endEditing() }
+        return resigned
+    }
 
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)

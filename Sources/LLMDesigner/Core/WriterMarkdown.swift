@@ -787,6 +787,17 @@ enum WriterMarkdown {
                 index = end
                 continue
             }
+            // A field from Data Studio: `{{absender.strasse}}`.
+            if character == "{", index + 1 < characters.count, characters[index + 1] == "{",
+               let close = Self.find(["}", "}"], in: characters, from: index + 2), close - index < 90,
+               let ref = DataRef(inner: String(characters[(index + 2)..<close])) {
+                flush()
+                let field = NSMutableAttributedString(attachment: WriterDataFieldAttachment(ref: ref))
+                field.addAttributes(attributes(marks, link: link, bookmark: bookmark, comment: comment, style: style), range: NSRange(location: 0, length: field.length))
+                result.append(field)
+                index = close + 2
+                continue
+            }
             // A citation: `[@key, S. 12]`, `[vgl. @a; @b]` (Pandoc), but not a link `[…](…)`.
             if character == "[", let close = characters[(index + 1)...].firstIndex(where: { $0 == "]" || $0 == "[" || $0 == "\n" }),
                characters[close] == "]", close + 1 >= characters.count || characters[close + 1] != "(",
@@ -1137,9 +1148,10 @@ enum WriterMarkdown {
             let formula = attributes[.attachment] as? WriterMathAttachment
             let citation = attributes[.attachment] as? WriterCitationAttachment
             let footnote = attributes[.attachment] as? WriterFootnoteAttachment
-            guard attributes[.attachment] == nil || formula != nil || citation != nil || footnote != nil else { return }
-            let raw = formula.map { "$" + $0.latex + "$" } ?? citation?.markdown ?? footnote?.markdown ?? (text.string as NSString).substring(with: range)
-            let isObject = formula != nil || citation != nil || footnote != nil
+            let dataField = attributes[.attachment] as? WriterDataFieldAttachment
+            guard attributes[.attachment] == nil || formula != nil || citation != nil || footnote != nil || dataField != nil else { return }
+            let raw = formula.map { "$" + $0.latex + "$" } ?? citation?.markdown ?? footnote?.markdown ?? dataField?.markdown ?? (text.string as NSString).substring(with: range)
+            let isObject = formula != nil || citation != nil || footnote != nil || dataField != nil
             // A footnote closes an underline or strike around it (LaTeX can't carry them over a footnote) and a link.
             let marks = footnote == nil ? WriterInline(attributes) : WriterInline(attributes).subtracting([.underline, .strikethrough, .superscript, .subscript])
             let link: String? = footnote != nil ? nil : (attributes[.link] as? URL)?.absoluteString ?? attributes[.link] as? String

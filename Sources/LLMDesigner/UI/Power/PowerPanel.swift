@@ -48,6 +48,9 @@ struct PowerPanel: View {
                 case .notes: PowerNotes()
                 case .projects: PowerProjects()
                 case .podcasts: PowerPodcasts()
+                case .data: PowerData()
+                case .research: PowerResearch()
+                case .learning: PowerLearning()
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -72,6 +75,9 @@ struct PowerPanel: View {
             case .notes: return "Alle Notes durchsuchen"
             case .projects: return "Im Projekt suchen"
             case .podcasts: return "Im Skript suchen"
+            case .data: return "Im Datenblock suchen"
+            case .research: return "In der Recherche suchen"
+            case .learning: return "Karten suchen"
             case .presenter: return "In den Folien suchen"
             default: return "Im Text suchen"
             }
@@ -85,6 +91,9 @@ struct PowerPanel: View {
         case .notes: return "Alle Notes durchsuchen"
         case .projects: return "Projekte durchsuchen"
         case .podcasts: return "Podcasts durchsuchen"
+        case .data: return "Datenblöcke und Werte durchsuchen"
+        case .research: return "Recherchen durchsuchen"
+        case .learning: return "Kurse und Karten durchsuchen"
         }
     }
 }

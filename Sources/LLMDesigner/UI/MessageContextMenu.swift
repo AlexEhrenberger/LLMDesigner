@@ -48,6 +48,13 @@ enum MessageContextMenu {
                 }
                 menu.addItem(ActionMenuItem("Bearbeiten und abzweigen …", symbol: "pencil") { app.startEditing(messageID) })
             }
+            // The chat turns into a research: Rechercherista takes the question (the marked text or the message).
+            let topic = (selection ?? (message.role == .user ? message.content : "")).trimmingCharacters(in: .whitespacesAndNewlines)
+            menu.addItem(.separator())
+            menu.addItem(ActionMenuItem(topic.isEmpty ? "Recherche zu diesem Chat starten …" : "Recherche dazu starten …", symbol: StudioApplication.research.symbol) {
+                let question = topic.isEmpty ? (app.selectedChat?.title ?? "") : String(topic.prefix(600))
+                app.newResearch(question: question, fromChat: app.selectedChatID)
+            })
             if selection != nil {
                 menu.addItem(.separator())
                 menu.addItem(ActionMenuItem("Markierten Text kopieren", symbol: "text.cursor") {

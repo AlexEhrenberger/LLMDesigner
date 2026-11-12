@@ -71,6 +71,13 @@ struct NewItemMenu: View {
             }
             Divider()
             Button("Präsentation aus Dokument …", systemImage: "doc.text.below.ecg") { app.showDeckFromDocument() }
+            Menu("Aus Vorlage", systemImage: "doc.on.doc") {
+                ForEach(app.dataStudio.allTemplates) { template in
+                    Button(template.displayName, systemImage: template.symbol) { app.templateUseRequest = template.id }
+                }
+                Divider()
+                Button("Vorlagen in Data Studio …", systemImage: "tablecells") { app.openDataStudio(DataStudioCommand(tab: .templates)) }
+            }
         }
     }
 }

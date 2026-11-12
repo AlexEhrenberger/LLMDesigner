@@ -253,6 +253,7 @@ final class WriterTextView: NSTextView {
     }
 
     private func configure() {
+        observeDataFields()
         isRichText = true
         importsGraphics = false
         allowsUndo = true
@@ -1034,6 +1035,9 @@ final class WriterTextView: NSTextView {
         case [.command, .option] where event.keyCode == 46:   // M
             newComment()
             return true
+        case [.command, .option] where event.keyCode == 2:    // D
+            showDataFieldPicker()
+            return true
         case [.command, .option] where event.keyCode == 11:   // B
             if let bookmark = bookmarkAtCaret, selectedRange().length == 0 { removeBookmark(bookmark.id) } else { addBookmark() }
             return true
@@ -1318,6 +1322,7 @@ final class WriterTextView: NSTextView {
             case is WriterTOCAttachment: text = "[Inhaltsverzeichnis]"
             case is WriterBibliographyAttachment: text = "[Literaturverzeichnis]"
             case let citation as WriterCitationAttachment: text = citationStyle.inText(citation.items)
+            case let field as WriterDataFieldAttachment: text = field.value ?? field.markdown
             case let footnote as WriterFootnoteAttachment: text = " [Fußnote: \(WriterMarkdown.inline(footnote.text).string)]"
             default: text = "———"
             }
