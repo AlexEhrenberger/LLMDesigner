@@ -189,12 +189,22 @@ final class ActionRegistry {
                 throw RPCError.denied(reason)
             case .ask(let reason):
                 let request = ApprovalRequest(action: id, summary: descriptor.summary, channel: state.channel, target: preflight.target,
-                                              detail: ActionApproval.abridged(preflight.detail), reason: reason)
+                                              detail: ActionApproval.abridged(preflight.detail), reason: reason, fullText: preflight.review)
                 guard await approval.presenter(request) else {
                     logEntry.decision = "abgelehnt"
                     throw RPCError.denied("Nicht freigegeben: \(reason)")
                 }
                 logEntry.decision = "freigegeben"
+                // While the dialog was open the text may have changed (another agent, a model writing): a place named
+                // by position would now be another place, and what was agreed to was the call on the old text.
+                if let version = preflight.version {
+                    context.flushEditor()
+                    let now = try entry.preflight(args, context).version
+                    if now != version {
+                        throw RPCError(code: RPCError.versionConflictCode, message: "Der Text hat sich geändert, während die Freigabe offen war. Bitte neu lesen.",
+                                       data: .object(["version": .string(now ?? "")]))
+                    }
+                }
             }
 
             // It counts from here on, also if the action then fails half way through.

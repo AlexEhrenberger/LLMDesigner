@@ -209,7 +209,7 @@ extension AppModel {
     }
 
     func renameDocument(_ id: WriterDocument.ID, to title: String) {
-        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = WriterDocument.singleLine(title)
         guard !trimmed.isEmpty else { return }
         modifyDocument(id) {
             $0.title = trimmed
@@ -311,14 +311,28 @@ extension AppModel {
         documentSaveTasks[id]?.cancel()
         documentSaveTasks[id] = nil
         guard let delay else {
-            if let document = document(id) { documentStore.save(document) }
+            writeDocument(id)
             return
         }
         documentSaveTasks[id] = Task { [weak self] in
             try? await Task.sleep(for: delay)
             guard !Task.isCancelled, let self else { return }
             self.documentSaveTasks[id] = nil
-            if let document = self.document(id) { self.documentStore.save(document) }
+            self.writeDocument(id)
+        }
+    }
+
+    /// Writes the file and remembers whether that worked: a failure stays visible until a save succeeds.
+    private func writeDocument(_ id: WriterDocument.ID) {
+        guard let document = document(id) else { return }
+        do {
+            try documentStore.save(document)
+            if documentSaveErrors[id] != nil { documentSaveErrors[id] = nil }
+        } catch {
+            let message = "„\(document.displayTitle)“ konnte nicht gespeichert werden: \(error.localizedDescription)"
+            documentSaveErrors[id] = message
+            // Also where the document isn't open, as a short notice.
+            if selectedDocumentID != id { notice = message }
         }
     }
 
@@ -417,7 +431,12 @@ extension AppModel {
         let used = format == .latex ? input.printFigures : input.figures
         let folder = used.isEmpty ? nil : figureFolderName(for: url)
         if let folder {
-            try copyFigures(Array(used.values), to: url.deletingLastPathComponent().appendingPathComponent(folder, isDirectory: true))
+            let directory = url.deletingLastPathComponent().appendingPathComponent(folder, isDirectory: true)
+            // A link of that name would carry the pictures (and the removal of older ones) somewhere else.
+            guard directory.resolvingSymlinksInPath().deletingLastPathComponent().path == url.deletingLastPathComponent().resolvingSymlinksInPath().path else {
+                throw NSError(domain: "LLMDesigner", code: 1, userInfo: [NSLocalizedDescriptionKey: "„\(folder)“ neben der Datei ist eine Verknüpfung an einen anderen Ort. Die Bilder werden nicht dorthin kopiert."])
+            }
+            try copyFigures(Array(used.values), to: directory)
         }
         let text: String
         if format != .latex {

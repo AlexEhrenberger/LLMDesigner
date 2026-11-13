@@ -61,7 +61,14 @@ struct WriterTarget {
         }
     }
 
-    var document: WriterDocument? { app.document(documentID) }
+    /// The document as the person sees it: what the open editor still holds back (it reports typing after a short
+    /// pause) goes into the model first. An action that waited for a model, Python or a dialog reads the text again
+    /// here before it writes; without this the editor, still holding keys typed meanwhile, would not take the
+    /// action's change and would write its own text over it at the next pause. Cheap when nothing is pending.
+    var document: WriterDocument? {
+        app.writerFlush?()
+        return app.document(documentID)
+    }
 
     var markdown: String {
         guard let document else { return "" }
@@ -95,6 +102,10 @@ struct WriterTarget {
         let before = document
         store(text)
         context.noteChange(of: documentID, before: before)
+        // An agent's change is saved at once, not after a pause as typing is: the agent goes on thinking it is kept.
+        // If it can't be, the action fails and is taken back.
+        app.saveDocument(documentID)
+        if let problem = app.documentSaveErrors[documentID] { throw RPCError.unavailable(problem) }
         return WriterWriteResult(doc: documentID.uuidString, version: version, block: nil, source: nil)
     }
 
@@ -110,6 +121,8 @@ struct WriterWriteResult: Encodable, Sendable {
     var block: String?
     /// The file of a picture the change made.
     var source: String?
+    /// How many places a replacement changed.
+    var count: Int?
 }
 
 extension ActionContext {
@@ -124,10 +137,22 @@ extension ActionContext {
         if let before, before != after {
             let app = self.app
             undoGroup.documents.insert(id)
-            undoGroup.add(UndoStep(label: label ?? undoGroup.label, undo: { app.restoreDocument(before) }, redo: { app.restoreDocument(after) }))
+            undoGroup.add(UndoStep(label: label ?? undoGroup.label, undo: { app.restoreDocument(before) }, redo: { app.restoreDocument(after) },
+                                   document: id, states: UndoStates(found: before.undoState, left: after.undoState, now: { app.document(id)?.undoState })))
         }
         app.highlightActionChange(in: id, channel: channel)
         registry.eventSink?(ActionEvent(kind: ActionEvent.documentChanged, action: undoGroup.label, channel: channel.rawValue, run: run.id, target: id.uuidString))
+    }
+}
+
+extension WriterDocument {
+    /// What undo compares: what the person or an action wrote. The date and the model's table of contents change on
+    /// their own without anyone having written.
+    var undoState: AnyHashable {
+        var state = self
+        state.updatedAt = .distantPast
+        state.outline = nil
+        return AnyHashable(state)
     }
 }
 

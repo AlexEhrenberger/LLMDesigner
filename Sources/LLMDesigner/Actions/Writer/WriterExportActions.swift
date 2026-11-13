@@ -112,7 +112,11 @@ struct WriterExportAction: LLMDAction {
                                                format: current.pageFormat, design: current.pageDesign)
             try pdf.write(to: url, options: .atomic)
         case .latex, .markdown, .plainMarkdown:
-            try app.writeTextExport(input, as: format, paper: app.pdfPaperSize, to: url)
+            do {
+                try app.writeTextExport(input, as: format, paper: app.pdfPaperSize, to: url)
+            } catch {
+                throw RPCError.invalidTarget(error.localizedDescription)
+            }
         }
         let bytes = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int) ?? 0
         return Output(path: url.path, bytes: bytes)

@@ -25,7 +25,8 @@ enum PowerText {
         var chunks: [PowerChunk] = []
         var current: [String] = []
         var fence: String?
-        var inMath = false
+        /// While in display math: the delimiter that ends it.
+        var mathClose: String?
         var divDepth = 0
 
         func close() {
@@ -39,24 +40,25 @@ enum PowerText {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if let open = fence {
                 current.append(line)
-                if trimmed.hasPrefix(open) { fence = nil }
+                if MarkdownParser.closesFence(trimmed, open) { fence = nil }
                 continue
             }
-            if inMath {
+            if let close = mathClose {
                 current.append(line)
-                if trimmed.hasSuffix("$$") || trimmed.hasPrefix("\\]") { inMath = false }
+                // As in `MarkdownParser`: the math ends on the first line that holds its closing delimiter.
+                if line.contains(close) { mathClose = nil }
                 continue
             }
-            if trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") {
+            if let open = MarkdownParser.fenceOpening(trimmed) {
                 if divDepth == 0 { close() }
-                fence = String(trimmed.prefix(3))
+                fence = open
                 current.append(line)
                 continue
             }
-            if trimmed == "$$" || trimmed.hasPrefix("\\[") || (trimmed.hasPrefix("$$") && !trimmed.dropFirst(2).contains("$$")) {
-                inMath = true
+            if let (open, close) = MarkdownParser.displayMathDelimiters(for: trimmed) {
                 current.append(line)
-                if trimmed.count > 2, trimmed.hasSuffix("$$"), trimmed != "$$" { inMath = false }
+                // Math that closes on its own line is done there; otherwise it takes the lines up to its close.
+                if !trimmed.dropFirst(open.count).contains(close) { mathClose = close }
                 continue
             }
             if MarkdownParser.divOpening(line) != nil {
@@ -84,13 +86,13 @@ enum PowerText {
     private static func kind(of markdown: String) -> PowerChunk.Kind {
         let first = markdown.components(separatedBy: "\n").first?.trimmingCharacters(in: .whitespaces) ?? ""
         if MarkdownParser.divOpening(first) != nil { return first.contains(".box") ? .box : first.contains(".\(WriterTableStyle.className)") ? .table : .other }
-        if first.hasPrefix("```") || first.hasPrefix("~~~") { return .code }
-        if first.hasPrefix("$$") || first.hasPrefix("\\[") { return .math }
+        if MarkdownParser.fenceOpening(first) != nil { return .code }
+        if MarkdownParser.displayMathDelimiters(for: first) != nil { return .math }
         if first.hasPrefix("#") {
             let level = first.prefix { $0 == "#" }.count
             if level <= 6, first.dropFirst(level).first == " " { return .heading(level) }
         }
-        if first.hasPrefix("|") { return .table }
+        if first.hasPrefix("|"), let second = markdown.components(separatedBy: "\n").dropFirst().first, MarkdownParser.isTableSeparator(second) { return .table }
         if first.hasPrefix(">") { return .quote }
         if WriterImageReference.parse(first) != nil { return .image }
         if first.hasPrefix("- ") || first.hasPrefix("* ") || first.hasPrefix("+ ")
@@ -133,19 +135,74 @@ enum PowerText {
 
     /// Markdown as plain text: no marks, no fences, no attributes; pictures by their caption, list items with a dot.
     static func plain(_ markdown: String) -> String {
+        // Blocks are what repeats; a whole long text is neither looked up nor kept (`utf8.count` doesn't walk it).
+        let isBlock = markdown.utf8.count < 20_000
+        if isBlock, let cached = plainCache.object(forKey: markdown as NSString) { return cached as String }
+        let lines = plainLines(markdown)
+        let text = markdown.contains("\\") ? restoreEscapes(lines) : lines
+        if isBlock { plainCache.setObject(text as NSString, forKey: markdown as NSString) }
+        return text
+    }
+
+    /// Blocks are converted again and again (lists, searches, addresses); a block that didn't change gives the same.
+    nonisolated(unsafe) private static let plainCache: NSCache<NSString, NSString> = {
+        let cache = NSCache<NSString, NSString>()
+        cache.countLimit = 20_000
+        return cache
+    }()
+
+    /// What a backslash escapes is text: it is set aside as a character of its own while the marks go, so no pattern
+    /// takes it for a mark (`\*Stern\*`, `\<span…>`, `\$5`), and comes back at the end.
+    private static let escapeBase: UInt32 = 0xF0000
+
+    static func protectEscapes(_ text: String) -> String {
+        guard text.contains("\\") else { return text }
+        var scalars = String.UnicodeScalarView()
+        var iterator = text.unicodeScalars.makeIterator()
+        var pending = iterator.next()
+        while let scalar = pending {
+            let next = iterator.next()
+            if scalar == "\\", let escaped = next, (33...126).contains(escaped.value),
+               !CharacterSet.alphanumerics.contains(escaped), let placeholder = UnicodeScalar(escapeBase + escaped.value) {
+                scalars.append(placeholder)
+                pending = iterator.next()
+                continue
+            }
+            scalars.append(scalar)
+            pending = next
+        }
+        return String(scalars)
+    }
+
+    static func restoreEscapes(_ text: String) -> String {
+        guard text.unicodeScalars.contains(where: { $0.value >= escapeBase && $0.value < escapeBase + 128 }) else { return text }
+        var scalars = String.UnicodeScalarView()
+        for scalar in text.unicodeScalars {
+            if scalar.value >= escapeBase, scalar.value < escapeBase + 128, let original = UnicodeScalar(scalar.value - escapeBase) {
+                scalars.append(original)
+            } else {
+                scalars.append(scalar)
+            }
+        }
+        return String(scalars)
+    }
+
+    private static func plainLines(_ markdown: String) -> String {
         var lines: [String] = []
-        var inFence = false
-        for raw in WriterBookmark.strip(markdown).components(separatedBy: "\n") {
-            var line = raw
+        var fence: String?
+        for raw in markdown.components(separatedBy: "\n") {
+            let bare = raw.trimmingCharacters(in: .whitespaces)
+            if let open = fence {
+                // In code a backslash is a backslash.
+                if MarkdownParser.closesFence(bare, open) { fence = nil } else { lines.append(raw) }
+                continue
+            }
+            if let open = MarkdownParser.fenceOpening(bare) {
+                fence = open
+                continue
+            }
+            var line = WriterBookmark.strip(protectEscapes(raw))
             let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") {
-                inFence.toggle()
-                continue
-            }
-            if inFence {
-                lines.append(line)
-                continue
-            }
             if MarkdownParser.divOpening(trimmed) != nil || MarkdownParser.isDivClosing(trimmed) { continue }
             if let image = WriterImageReference.parse(trimmed) {
                 lines.append(image.caption.isEmpty ? "[Bild]" : "[Bild: \(image.caption)]")

@@ -43,11 +43,11 @@ enum WriterLines {
         for (index, line) in lines.enumerated() {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if let open = fence {
-                if trimmed.hasPrefix(open) { fence = nil }
+                if MarkdownParser.closesFence(trimmed, open) { fence = nil }
                 continue
             }
-            if trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") {
-                fence = String(trimmed.prefix(3))
+            if let open = MarkdownParser.fenceOpening(trimmed) {
+                fence = open
                 continue
             }
             body(index, trimmed)

@@ -207,13 +207,28 @@ enum WriterImageStore {
         return folderName + "/" + fileName
     }
 
-    /// The file of a Markdown source, if it is on this Mac. Pictures on the web are not loaded.
+    /// The file of a Markdown source, if it is there. Pictures on the web are not loaded.
     static func url(for source: String) -> URL? {
+        guard let url = targetURL(for: source), FileManager.default.fileExists(atPath: url.path) else { return nil }
+        return url
+    }
+
+    /// Where a picture's file is or will be (also when it doesn't exist yet), and only ever in the picture folder.
+    /// A source is Markdown that an agent, a model or an imported page may have written: an absolute path, a file URL
+    /// or a `..` would reach any file on this Mac, to show it, copy it out with an export, write over it or delete
+    /// it with its document. Everything the app makes lives in `Bilder/`; anything else has no file.
+    static func targetURL(for source: String) -> URL? {
         let path = source.removingPercentEncoding ?? source
-        if path.hasPrefix("file://") { return URL(string: source).flatMap { FileManager.default.fileExists(atPath: $0.path) ? $0 : nil } }
-        if path.contains("://") { return nil }
-        let url = path.hasPrefix("/") ? URL(fileURLWithPath: path) : documentsDirectory.appendingPathComponent(path)
-        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+        guard !path.hasPrefix("/"), !path.contains("://") else { return nil }
+        let folder = documentsDirectory.appendingPathComponent(folderName, isDirectory: true).standardizedFileURL
+        let url = documentsDirectory.appendingPathComponent(path).standardizedFileURL
+        guard url.path.hasPrefix(folder.path + "/") else { return nil }
+        // A link in the folder (a library made elsewhere) must not lead out either. Checked only where there can be
+        // one, because this runs for every picture the editor draws.
+        if url.deletingLastPathComponent().path != folder.path || (try? FileManager.default.destinationOfSymbolicLink(atPath: url.path)) != nil {
+            guard url.resolvingSymlinksInPath().path.hasPrefix(folder.resolvingSymlinksInPath().path + "/") else { return nil }
+        }
+        return url
     }
 
     /// The picture's size in points (pixels at its resolution).
@@ -275,7 +290,10 @@ enum WriterImageStore {
         let used = Set(documents.joined())
         for source in Set(sources) where source.hasPrefix(folderName + "/") && !used.contains(source) {
             for variant in [source, darkVariant(of: source), pdfVariant(of: source), infoVariant(of: source), mermaidVariant(of: source)] {
-                if let url = url(for: variant) { try? FileManager.default.removeItem(at: url) }
+                // Files only: a source never names a folder, and removing one would take all in it.
+                var isFolder: ObjCBool = false
+                guard let url = url(for: variant), FileManager.default.fileExists(atPath: url.path, isDirectory: &isFolder), !isFolder.boolValue else { continue }
+                try? FileManager.default.removeItem(at: url)
             }
         }
     }
@@ -331,29 +349,32 @@ enum WriterImageStore {
         let name = kind.filePrefix + "-" + UUID().uuidString.prefix(13).lowercased()
         let source = folderName + "/" + name + ".png"
         try write(images, to: source)
-        try recipe.write(to: targetURL(for: recipeVariant(of: source, kind: kind)), options: .atomic)
+        guard let recipeURL = targetURL(for: recipeVariant(of: source, kind: kind)) else { throw AttachmentError.writeFailed }
+        try recipe.write(to: recipeURL, options: .atomic)
         return source
     }
 
     /// Writes a figure's pictures anew in place (a chart that follows its table): the editor shows them at once.
     static func write(_ images: WriterFigureImages, to source: String) throws {
         _ = directory
-        try images.light.write(to: targetURL(for: source), options: .atomic)
-        try images.dark.write(to: targetURL(for: darkVariant(of: source)), options: .atomic)
-        try images.pdf.write(to: targetURL(for: pdfVariant(of: source)), options: .atomic)
+        guard let light = targetURL(for: source), let dark = targetURL(for: darkVariant(of: source)),
+              let pdf = targetURL(for: pdfVariant(of: source)) else { throw AttachmentError.writeFailed }
+        try images.light.write(to: light, options: .atomic)
+        try images.dark.write(to: dark, options: .atomic)
+        try images.pdf.write(to: pdf, options: .atomic)
         forget(source)
     }
 
     /// The recipe of a figure, if it has one.
     static func recipe(for reference: WriterImageReference) -> Data? {
         guard let kind = reference.figure else { return nil }
-        return try? Data(contentsOf: targetURL(for: recipeVariant(of: reference.source, kind: kind)))
+        return targetURL(for: recipeVariant(of: reference.source, kind: kind)).flatMap { try? Data(contentsOf: $0) }
     }
 
     /// Drops what is remembered of a picture's files, so they are read again.
     static func forget(_ source: String) {
         for variant in [source, darkVariant(of: source)] {
-            let path = targetURL(for: variant).path
+            guard let path = targetURL(for: variant)?.path else { continue }
             sizes[path] = nil
             images.removeObject(forKey: path as NSString)
         }

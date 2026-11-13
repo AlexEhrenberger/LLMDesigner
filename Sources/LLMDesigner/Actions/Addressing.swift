@@ -35,8 +35,27 @@ struct WriterBlockInfo: Sendable, Encodable, Equatable {
     var text: String
     var level: Int?
 
-    static func id(index: Int, markdown: String) -> String {
-        "b\(index)-\(ActionVersion.of(markdown).prefix(6))"
+    /// The id of the block at `index`. Equal blocks (two rules, a repeated line) are told apart by how many equal ones
+    /// come before: otherwise, after a block above them goes, the id of the first would fit the second.
+    static func id(index: Int, in chunks: [PowerChunk]) -> String {
+        let markdown = chunks[index].markdown
+        let earlier = chunks[..<index].filter { $0.markdown == markdown }.count
+        return id(index: index, markdown: markdown, equalBefore: earlier)
+    }
+
+    /// All ids at once, for a whole list.
+    static func ids(of chunks: [PowerChunk]) -> [String] {
+        var seen: [String: Int] = [:]
+        return chunks.map { chunk in
+            let earlier = seen[chunk.markdown, default: 0]
+            seen[chunk.markdown] = earlier + 1
+            return id(index: chunk.id, markdown: chunk.markdown, equalBefore: earlier)
+        }
+    }
+
+    private static func id(index: Int, markdown: String, equalBefore: Int) -> String {
+        // A block without an equal one before it keeps the id it always had.
+        "b\(index)-\(ActionVersion.of(equalBefore == 0 ? markdown : markdown + "\u{1F}\(equalBefore)").prefix(6))"
     }
 
     static func typeName(_ kind: PowerChunk.Kind) -> String {
@@ -69,11 +88,13 @@ enum ResolvedAddress: Equatable {
 @MainActor
 enum WriterAddressing {
     static func blocks(of markdown: String) -> [WriterBlockInfo] {
-        PowerText.chunks(of: markdown).map { chunk in
+        let chunks = PowerText.chunks(of: markdown)
+        let ids = WriterBlockInfo.ids(of: chunks)
+        return chunks.map { chunk in
             var level: Int?
             if case .heading(let depth) = chunk.kind { level = depth }
             let plain = chunk.plain
-            return WriterBlockInfo(id: WriterBlockInfo.id(index: chunk.id, markdown: chunk.markdown), type: WriterBlockInfo.typeName(chunk.kind),
+            return WriterBlockInfo(id: ids[chunk.id], type: WriterBlockInfo.typeName(chunk.kind),
                                    text: plain.count > 80 ? String(plain.prefix(80)) + "…" : plain, level: level)
         }
     }
@@ -115,7 +136,7 @@ enum WriterAddressing {
         guard id.hasPrefix("b"), let number = Int(id.dropFirst().prefix { $0.isNumber }) else {
             throw RPCError.invalidParams("„\(id)“ ist keine Block-ID.")
         }
-        guard chunks.indices.contains(number), WriterBlockInfo.id(index: number, markdown: chunks[number].markdown) == id else {
+        guard chunks.indices.contains(number), WriterBlockInfo.id(index: number, in: chunks) == id else {
             throw RPCError(code: RPCError.versionConflictCode, message: "Block \(id) gibt es so nicht mehr. Bitte writer.blocks.list neu aufrufen.")
         }
         return number
@@ -142,7 +163,7 @@ enum WriterAddressing {
             guard let first = matching.first else { throw RPCError.notFound("Überschrift „\(path)“ gibt es nicht.") }
             if part == parts.last, matching.count > 1 {
                 throw RPCError.ambiguous("Mehrere Überschriften passen zu „\(path)“. Bitte den Pfad verlängern oder eine Block-ID nehmen.",
-                                         candidates: matching.map { WriterBlockInfo.id(index: $0.index, markdown: chunks[$0.index].markdown) })
+                                         candidates: matching.map { WriterBlockInfo.id(index: $0.index, in: chunks) })
             }
             found = first.index
             let end = candidates.first { $0.index > first.index && $0.level <= first.level }?.index ?? chunks.count
@@ -153,19 +174,31 @@ enum WriterAddressing {
     }
 
     /// Searches the text as it reads, so a word finds its place even where marks run through it.
-    private static func find(_ query: String, occurrence: Int?, in chunks: [PowerChunk]) throws -> ResolvedAddress {
-        guard !query.isEmpty else { throw RPCError.invalidParams("Leerer Suchtext.") }
+    /// Whether `match` looks into a block: not into code, formulas and pictures, whose text isn't running text.
+    static func isSearched(_ kind: PowerChunk.Kind) -> Bool {
+        kind != .code && kind != .math && kind != .image
+    }
+
+    /// The places of a text, counted as `match` with `occurrence` counts them: in the text as it reads, block by block,
+    /// one after the other. `writer.find` numbers its hits with the same count, so its numbers can be used here.
+    static func hits(of query: String, in chunks: [PowerChunk], options: NSString.CompareOptions = []) -> [(block: Int, range: NSRange)] {
         var hits: [(block: Int, range: NSRange)] = []
-        for chunk in chunks where chunk.kind != .code && chunk.kind != .math && chunk.kind != .image {
-            let string = WriterMarkdown.attributedString(from: chunk.markdown).string as NSString
+        for chunk in chunks where isSearched(chunk.kind) {
+            let string = visibleText(of: chunk.markdown)
             var start = 0
             while start < string.length {
-                let found = string.range(of: query, options: [], range: NSRange(location: start, length: string.length - start))
+                let found = string.range(of: query, options: options, range: NSRange(location: start, length: string.length - start))
                 guard found.location != NSNotFound else { break }
                 hits.append((chunk.id, found))
                 start = NSMaxRange(found)
             }
         }
+        return hits
+    }
+
+    private static func find(_ query: String, occurrence: Int?, in chunks: [PowerChunk]) throws -> ResolvedAddress {
+        guard !query.isEmpty else { throw RPCError.invalidParams("Leerer Suchtext.") }
+        let hits = hits(of: query, in: chunks)
         guard !hits.isEmpty else { throw RPCError.notFound("„\(query)“ kommt im Text nicht vor.") }
         if let occurrence {
             guard hits.indices.contains(occurrence - 1) else {
@@ -180,6 +213,21 @@ enum WriterAddressing {
         return .text(block: hits[0].block, range: hits[0].range)
     }
 
+    /// The text of a block as the editor shows it. Converting a block is the slow part of finding a word, and an
+    /// agent finds many in the same text: a block that didn't change is converted once.
+    static func visibleText(of block: String) -> NSString {
+        if let cached = visibleTexts.object(forKey: block as NSString) { return cached }
+        let text = WriterMarkdown.attributedString(from: block).string as NSString
+        visibleTexts.setObject(text, forKey: block as NSString)
+        return text
+    }
+
+    private static let visibleTexts: NSCache<NSString, NSString> = {
+        let cache = NSCache<NSString, NSString>()
+        cache.countLimit = 20_000
+        return cache
+    }()
+
     private static func sourceRange(_ text: String, in markdown: String) throws -> Range<String.Index> {
         let parts = text.split(separator: ":")
         guard parts.count == 2, let start = Int(parts[0]), let length = Int(parts[1]), start >= 0, length >= 0 else {
@@ -190,6 +238,35 @@ enum WriterAddressing {
             throw RPCError.invalidParams("Der Bereich \(text) liegt außerhalb des Texts (\(markdown.count) Zeichen).")
         }
         return lower..<upper
+    }
+
+    /// An address made for `old`, for the text as it is now. While a model wrote or a dialog was open, the person may
+    /// have typed: a range then moves with the text before it, or is a conflict when the change reaches into it; the
+    /// n-th hit of a word is a conflict, because nobody can tell which one is meant now. Blocks carry their
+    /// fingerprint, headings and single hits are found by their content anyway.
+    static func rebase(_ address: WriterAddress, from old: String, to new: String) throws -> WriterAddress {
+        guard old != new else { return address }
+        let conflict = RPCError(code: RPCError.versionConflictCode, message: "Der Text hat sich an dieser Stelle geändert, während die Action lief. Bitte neu lesen.",
+                                data: .object(["version": .string(ActionVersion.of(new))]))
+        if address.match != nil, address.occurrence != nil { throw conflict }
+        guard let range = address.range else { return address }
+        let parts = range.split(separator: ":")
+        guard parts.count == 2, let start = Int(parts[0]), let length = Int(parts[1]) else { return address }
+        // The changed stretch: what lies between the common beginning and the common end of both texts.
+        let oldCharacters = Array(old), newCharacters = Array(new)
+        var prefix = 0
+        while prefix < min(oldCharacters.count, newCharacters.count), oldCharacters[prefix] == newCharacters[prefix] { prefix += 1 }
+        var suffix = 0
+        while suffix < min(oldCharacters.count, newCharacters.count) - prefix,
+              oldCharacters[oldCharacters.count - 1 - suffix] == newCharacters[newCharacters.count - 1 - suffix] { suffix += 1 }
+        var moved = address
+        if start + length <= prefix {
+            return address
+        } else if start >= oldCharacters.count - suffix {
+            moved.range = "\(start + newCharacters.count - oldCharacters.count):\(length)"
+            return moved
+        }
+        throw conflict
     }
 
     /// The block and text stretch a source range lies in, for changes that work on attributed text.

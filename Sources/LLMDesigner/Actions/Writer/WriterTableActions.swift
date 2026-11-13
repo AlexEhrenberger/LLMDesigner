@@ -164,7 +164,7 @@ enum WriterChartLink {
             chart.takeData(from: table.plainCells, formulas: table.style.formulas)
             guard chart != before, let images = WriterFigureRenderer.images(of: chart, family: family) else { continue }
             try? WriterImageStore.write(images, to: reference.source)
-            try? chart.json.write(to: WriterImageStore.targetURL(for: WriterImageStore.recipeVariant(of: reference.source, kind: .chart)), options: .atomic)
+            if let url = WriterImageStore.targetURL(for: WriterImageStore.recipeVariant(of: reference.source, kind: .chart)) { try? chart.json.write(to: url, options: .atomic) }
         }
     }
 }
@@ -239,7 +239,7 @@ struct WriterTableReadAction: LLMDAction {
     )
 
     static func preflight(_ args: Args, context: ActionContext) throws -> ActionPreflight {
-        try WriterTarget(args.target, app: context.app).readPreflight
+        try WriterTarget(args.target, app: context.app).readPreflight(ifVersion: args.target.ifVersion)
     }
 
     static func run(_ args: Args, context: ActionContext) async throws -> Output {
@@ -249,7 +249,7 @@ struct WriterTableReadAction: LLMDAction {
         let table = found.table
         func name(_ place: WriterCellPosition) -> String { WriterTableCalc.cellName(row: place.row, column: place.column) }
         return Output(
-            block: WriterBlockInfo.id(index: found.block, markdown: PowerText.chunks(of: markdown)[found.block].markdown),
+            block: WriterBlockInfo.id(index: found.block, in: PowerText.chunks(of: markdown)),
             number: found.number, name: table.style.id, rows: table.rows, columns: table.columns, cells: table.plainCells, markdown: table.cells,
             alignments: table.alignments.map { $0 == .center ? "center" : $0 == .trailing ? "right" : "left" },
             widths: table.widths,

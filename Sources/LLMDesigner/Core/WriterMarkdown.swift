@@ -799,7 +799,7 @@ enum WriterMarkdown {
                 continue
             }
             // A citation: `[@key, S. 12]`, `[vgl. @a; @b]` (Pandoc), but not a link `[…](…)`.
-            if character == "[", let close = characters[(index + 1)...].firstIndex(where: { $0 == "]" || $0 == "[" || $0 == "\n" }),
+            if character == "[", let close = Self.firstUnescaped(["]", "[", "\n"], in: characters, after: index),
                characters[close] == "]", close + 1 >= characters.count || characters[close + 1] != "(",
                characters[(index + 1)..<close].contains("@"), let items = CitationMarkup.parse(String(characters[(index + 1)..<close])) {
                 flush()
@@ -819,6 +819,20 @@ enum WriterMarkdown {
             index += 1
         }
         flush()
+    }
+
+    /// The first of `stops` after `start` that no backslash escapes: `[@a\]` is a bracket and text, not a citation.
+    private static func firstUnescaped(_ stops: Set<Character>, in characters: [Character], after start: Int) -> Int? {
+        var scan = start + 1
+        while scan < characters.count {
+            if characters[scan] == "\\" {
+                scan += 2
+                continue
+            }
+            if stops.contains(characters[scan]) { return scan }
+            scan += 1
+        }
+        return nil
     }
 
     private static func find(_ pattern: [Character], in characters: [Character], from start: Int) -> Int? {
@@ -954,7 +968,10 @@ enum WriterMarkdown {
             switch kind {
             case .code:
                 let language = currentLanguage ?? ""
-                blocks.append(OutputBlock(text: "```\(language)\n" + pending.joined(separator: "\n") + "\n```", div: nil, box: pendingBox, section: pendingSection))
+                let code = pending.joined(separator: "\n")
+                // Code that shows a fence itself gets a longer one, or its fence would end the block.
+                let fence = MarkdownParser.fence(for: code)
+                blocks.append(OutputBlock(text: "\(fence)\(language)\n" + code + "\n\(fence)", div: nil, box: pendingBox, section: pendingSection))
             default:
                 blocks.append(OutputBlock(text: pending.joined(separator: "\n"), div: pendingFormat.divOpening, box: pendingBox, section: pendingSection))
             }
@@ -1259,16 +1276,25 @@ enum WriterMarkdown {
     static func escape(_ text: String, atLineStart: Bool) -> String {
         var output = ""
         var lineStart = atLineStart
+        // Only spaces so far on this line: the block parsers look at the line trimmed.
+        var lineBlank = atLineStart
         let characters = Array(text)
         for (index, character) in characters.enumerated() {
-            if "\\*_`[]<~$".contains(character) {
+            if character == "[", lineBlank {
+                // `\[` at the start of a line opens display math. The bracket stays as it is: with every `]`
+                // escaped, it can't start a link, a citation or the table of contents.
+                output.append(character)
+            } else if "\\*_`[]<~$".contains(character) {
                 output += "\\" + String(character)
-            } else if lineStart, "#>".contains(character) {
+            } else if lineBlank, character == "-", isRuleLine(characters, from: index) {
+                // "---" alone would be a rule.
+                output += "\\-"
+            } else if lineBlank, "#>|".contains(character) {
                 output += "\\" + String(character)
-            } else if lineStart, character == ":", index + 2 < characters.count, characters[index + 1] == ":", characters[index + 2] == ":" {
+            } else if lineBlank, character == ":", index + 2 < characters.count, characters[index + 1] == ":", characters[index + 2] == ":" {
                 // ":::" would open or close a div.
                 output += "\\:"
-            } else if lineStart, "-+".contains(character), index + 1 < characters.count, characters[index + 1] == " " {
+            } else if lineBlank, "-+".contains(character), index + 1 < characters.count, characters[index + 1] == " " {
                 output += "\\" + String(character)
             } else if character == ".", index + 1 < characters.count, characters[index + 1] == " ",
                       startsNumberedLine(characters, before: index, atLineStart: atLineStart) {
@@ -1277,15 +1303,28 @@ enum WriterMarkdown {
                 output.append(character)
             }
             lineStart = character == lineSeparator || character == "\n"
+            lineBlank = lineStart || (lineBlank && (character == " " || character == "\t"))
         }
         return output
     }
 
-    /// Whether only digits stand between the start of the line and `index` ("1. " would start a list).
+    /// Whether the line from `index` on holds only dashes and spaces, at least three dashes: a rule.
+    private static func isRuleLine(_ characters: [Character], from index: Int) -> Bool {
+        var dashes = 0
+        var scan = index
+        while scan < characters.count, characters[scan] != "\n", characters[scan] != lineSeparator {
+            if characters[scan] == "-" { dashes += 1 } else if characters[scan] != " " { return false }
+            scan += 1
+        }
+        return dashes >= 3
+    }
+
+    /// Whether only digits, after spaces, stand between the start of the line and `index` ("1. " would start a list).
     private static func startsNumberedLine(_ characters: [Character], before index: Int, atLineStart: Bool) -> Bool {
         var scan = index - 1
         while scan >= 0, characters[scan].isNumber { scan -= 1 }
         guard scan < index - 1 else { return false }
+        while scan >= 0, characters[scan] == " " || characters[scan] == "\t" { scan -= 1 }
         if scan < 0 { return atLineStart }
         return characters[scan] == lineSeparator || characters[scan] == "\n"
     }

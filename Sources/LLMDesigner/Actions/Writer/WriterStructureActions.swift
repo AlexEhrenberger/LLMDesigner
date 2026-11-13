@@ -175,7 +175,7 @@ struct WriterBookmarksListAction: LLMDAction {
         id: "writer.bookmarks.list", summary: "Listet die Lesezeichen eines Textes", kind: .read, security: .plainRead,
         input: .object(WriterTargetArgs.schemaProperties), output: .freeObject()
     )
-    static func preflight(_ args: Args, context: ActionContext) throws -> ActionPreflight { try WriterTarget(args.target, app: context.app).readPreflight }
+    static func preflight(_ args: Args, context: ActionContext) throws -> ActionPreflight { try WriterTarget(args.target, app: context.app).readPreflight(ifVersion: args.target.ifVersion) }
     static func run(_ args: Args, context: ActionContext) async throws -> Output {
         let markdown = try WriterTarget(args.target, app: context.app).markdown
         return Output(bookmarks: WriterBookmark.entries(in: markdown).map { Item(id: $0.id, title: $0.title, excerpt: $0.excerpt, section: $0.section) })
@@ -275,7 +275,7 @@ struct WriterCommentsListAction: LLMDAction {
         id: "writer.comments.list", summary: "Listet die Kommentare eines Textes mit ihrem Verlauf", kind: .read, security: .plainRead,
         input: .object(WriterTargetArgs.schemaProperties), output: .freeObject()
     )
-    static func preflight(_ args: Args, context: ActionContext) throws -> ActionPreflight { try WriterTarget(args.target, app: context.app).readPreflight }
+    static func preflight(_ args: Args, context: ActionContext) throws -> ActionPreflight { try WriterTarget(args.target, app: context.app).readPreflight(ifVersion: args.target.ifVersion) }
     static func run(_ args: Args, context: ActionContext) async throws -> Output {
         var items: [Item] = []
         var index: [String: Int] = [:]
@@ -434,7 +434,7 @@ struct WriterCitationsListAction: LLMDAction {
         id: "writer.citations.list", summary: "Listet die Belege eines Textes", kind: .read, security: .plainRead,
         input: .object(WriterTargetArgs.schemaProperties), output: .freeObject()
     )
-    static func preflight(_ args: Args, context: ActionContext) throws -> ActionPreflight { try WriterTarget(args.target, app: context.app).readPreflight }
+    static func preflight(_ args: Args, context: ActionContext) throws -> ActionPreflight { try WriterTarget(args.target, app: context.app).readPreflight(ifVersion: args.target.ifVersion) }
     static func run(_ args: Args, context: ActionContext) async throws -> Output {
         let markdown = try WriterTarget(args.target, app: context.app).markdown
         context.app.citations.loadIfNeeded()

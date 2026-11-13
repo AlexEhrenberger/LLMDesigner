@@ -32,12 +32,6 @@ extension WriterImageStore {
         (source as NSString).deletingPathExtension + ".json"
     }
 
-    /// Where a picture's file is or will be (also when it doesn't exist yet).
-    static func targetURL(for source: String) -> URL {
-        let path = source.removingPercentEncoding ?? source
-        return path.hasPrefix("/") ? URL(fileURLWithPath: path) : documentsDirectory.appendingPathComponent(path)
-    }
-
     /// A new, unused place for a generated picture.
     static func newGeneratedSource() -> String {
         _ = directory
@@ -46,7 +40,7 @@ extension WriterImageStore {
 
     static func generationInfo(for source: String) -> GeneratedImageInfo? {
         if let cached = infos[source] { return cached }
-        guard let data = try? Data(contentsOf: targetURL(for: infoVariant(of: source))),
+        guard let url = targetURL(for: infoVariant(of: source)), let data = try? Data(contentsOf: url),
               let info = try? JSONDecoder.iso.decode(GeneratedImageInfo.self, from: data) else { return nil }
         infos[source] = info
         return info
@@ -57,8 +51,8 @@ extension WriterImageStore {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
-        guard let data = try? encoder.encode(info) else { return }
-        try? data.write(to: targetURL(for: infoVariant(of: source)), options: .atomic)
+        guard let data = try? encoder.encode(info), let url = targetURL(for: infoVariant(of: source)) else { return }
+        try? data.write(to: url, options: .atomic)
     }
 
     nonisolated(unsafe) private static var infos: [String: GeneratedImageInfo] = [:]
@@ -142,11 +136,13 @@ final class ImageGenerationCenter {
 
     /// Makes the picture at `source` (a file that doesn't exist yet) from `info`.
     func generate(source: String, info: GeneratedImageInfo) {
+        // A source outside the picture folder gets no picture: Draw Things would write it anywhere.
+        guard let url = WriterImageStore.targetURL(for: source) else { return }
         cancel(source)
         var info = info
         if info.seed == nil { info.seed = UInt32.random(in: 1...UInt32.max) }
         WriterImageStore.saveGenerationInfo(info, for: source)
-        queue.append(Job(source: source, url: WriterImageStore.targetURL(for: source), info: info))
+        queue.append(Job(source: source, url: url, info: info))
         phases[source] = .queued
         notify(source)
         startWorker()

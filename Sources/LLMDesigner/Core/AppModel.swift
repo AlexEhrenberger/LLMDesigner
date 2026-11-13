@@ -529,6 +529,8 @@ final class AppModel {
     }
     @ObservationIgnored let documentStore = WriterDocumentStore()
     @ObservationIgnored var documentSaveTasks: [WriterDocument.ID: Task<Void, Never>] = [:]
+    /// Documents whose last save failed, with the reason; it stays until a save succeeds.
+    var documentSaveErrors: [WriterDocument.ID: String] = [:]
     /// Set by the open editor: hands over edits it hasn't reported yet.
     @ObservationIgnored var writerFlush: (() -> Void)?
     /// The find bar of the open document or presentation (⌘F).

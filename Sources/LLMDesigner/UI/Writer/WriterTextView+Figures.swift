@@ -245,7 +245,7 @@ extension WriterTextView {
             guard chart != before, let images = WriterFigureRenderer.images(of: chart, family: family) else { return }
             let source = attachment.reference.source
             try? WriterImageStore.write(images, to: source)
-            try? chart.json.write(to: WriterImageStore.targetURL(for: WriterImageStore.recipeVariant(of: source, kind: .chart)), options: .atomic)
+            if let url = WriterImageStore.targetURL(for: WriterImageStore.recipeVariant(of: source, kind: .chart)) { try? chart.json.write(to: url, options: .atomic) }
             redraw.append(range.location)
         }
         for location in redraw {
