@@ -51,7 +51,7 @@ extension WriterEditAction {
     static func preflight(_ args: Args, context: ActionContext) throws -> ActionPreflight {
         let target = try WriterTarget(self.target(of: args), app: context.app)
         try target.checkVersion(self.target(of: args).ifVersion)
-        return ActionPreflight(target: target.document?.displayTitle)
+        return target.writePreflight
     }
 
     static func run(_ args: Args, context: ActionContext) async throws -> WriterWriteResult {
@@ -267,26 +267,68 @@ struct WriterTextReplaceAllAction: WriterEditAction {
         var target: WriterTargetArgs
         var find: String
         var replace: String
+        var caseSensitive: Bool?
         init(from decoder: Decoder) throws {
             target = try WriterTargetArgs(from: decoder)
             let container = try decoder.container(keyedBy: Keys.self)
             find = try container.decode(String.self, forKey: .find)
             replace = try container.decode(String.self, forKey: .replace)
+            caseSensitive = try container.decodeIfPresent(Bool.self, forKey: .caseSensitive)
         }
-        enum Keys: String, CodingKey { case find, replace }
+        enum Keys: String, CodingKey { case find, replace, caseSensitive }
     }
     typealias Output = WriterWriteResult
     static let descriptor = ActionDescriptor(
-        id: "writer.text.replaceAll", summary: "Ersetzt alle Vorkommen eines Texts", kind: .write, security: .localWrite,
-        input: .object(WriterTargetArgs.schemaProperties.merging(["find": .string("Gesuchter Text"), "replace": .string("Ersatz")]) { _, new in new }, required: ["find", "replace"]),
+        id: "writer.text.replaceAll", summary: "Ersetzt einen Text überall, wo er zu lesen ist; Code, Formeln und Bilder bleiben", kind: .write, security: .localWrite,
+        input: .object(WriterTargetArgs.schemaProperties.merging([
+            "find": .string("Gesuchter Text, wie er zu lesen ist"), "replace": .string("Ersatz, als Text"),
+            "caseSensitive": .boolean("Groß- und Kleinschreibung beachten; Standard: ja"),
+        ]) { _, new in new }, required: ["find", "replace"]),
         output: .freeObject(), groups: ["writer.core"]
     )
     static func target(of args: Args) -> WriterTargetArgs { args.target }
 
     static func edit(_ args: Args, markdown: String, context: ActionContext) throws -> String {
+        try replaced(args, in: markdown).text
+    }
+
+    static func run(_ args: Args, context: ActionContext) async throws -> WriterWriteResult {
+        let target = try WriterTarget(args.target, app: context.app)
+        let change = try replaced(args, in: target.markdown)
+        var result = try target.replaceText(with: change.text, ifVersion: args.target.ifVersion, context: context)
+        result.count = change.count
+        return result
+    }
+
+    /// In the text as it reads, block by block, the way the editor's own replace works: not in the Markdown, where it
+    /// would hit picture paths, addresses and marks. The replacement takes the look of the place it goes to.
+    private static func replaced(_ args: Args, in markdown: String) throws -> (text: String, count: Int) {
         guard !args.find.isEmpty else { throw RPCError.invalidParams("Leerer Suchtext.") }
-        guard markdown.contains(args.find) else { throw RPCError.notFound("„\(args.find)“ kommt im Text nicht vor.") }
-        return markdown.replacingOccurrences(of: args.find, with: args.replace)
+        let options: NSString.CompareOptions = args.caseSensitive == false ? [.caseInsensitive] : []
+        var editor = BlockEditor(markdown: markdown)
+        var count = 0
+        // From the end, so the blocks before keep their places.
+        for chunk in PowerText.chunks(of: markdown).reversed() where BlockEditor.holdsText(chunk.kind) {
+            guard WriterAddressing.visibleText(of: chunk.markdown).range(of: args.find, options: options).location != NSNotFound else { continue }
+            editor.edit(chunk.id) { text in
+                let string = text.string as NSString
+                var hits: [NSRange] = []
+                var start = 0
+                while start < string.length {
+                    let found = string.range(of: args.find, options: options, range: NSRange(location: start, length: string.length - start))
+                    guard found.location != NSNotFound else { break }
+                    hits.append(found)
+                    start = NSMaxRange(found)
+                }
+                for hit in hits.reversed() {
+                    let look = text.attributes(at: hit.location, effectiveRange: nil)
+                    text.replaceCharacters(in: hit, with: NSAttributedString(string: args.replace, attributes: look))
+                }
+                count += hits.count
+            }
+        }
+        guard count > 0 else { throw RPCError.notFound("„\(args.find)“ kommt im Text nicht vor.") }
+        return (editor.markdown, count)
     }
 }
 
@@ -410,12 +452,13 @@ struct WriterEditUndoAction: LLMDAction {
         var undone: String?
     }
     static let descriptor = ActionDescriptor(
-        id: "writer.edit.undo", summary: "Nimmt die letzte Action zurück", kind: .write, security: .localWrite,
+        id: "writer.edit.undo", summary: "Nimmt die letzte Action zurück; über MCP und im Chat nur eine des eigenen Laufs", kind: .write, security: .localWrite,
         input: .object(["doc": .string("Nur in diesem Dokument")]), output: .freeObject(), groups: ["writer.core"]
     )
     static func run(_ args: WriterUndoArgs, context: ActionContext) async throws -> Output {
         let id = try args.doc.map { try context.app.actionAnyDocument($0).id }
-        let undone = context.registry.undoStack.undo { id == nil || $0.documents.contains(id!) }
+        let own = context.ownRunOnly
+        let undone = try context.registry.undoStack.undo { (id == nil || $0.documents.contains(id!)) && (own == nil || $0.runID == own) }
         guard let undone else { throw RPCError.notFound("Es gibt nichts zurückzunehmen.") }
         return Output(undone: undone)
     }
@@ -426,14 +469,23 @@ struct WriterEditRedoAction: LLMDAction {
         var redone: String?
     }
     static let descriptor = ActionDescriptor(
-        id: "writer.edit.redo", summary: "Stellt die zuletzt zurückgenommene Action wieder her", kind: .write, security: .localWrite,
+        id: "writer.edit.redo", summary: "Stellt die zuletzt zurückgenommene Action wieder her; über MCP und im Chat nur eine des eigenen Laufs", kind: .write, security: .localWrite,
         input: .object(["doc": .string("Nur in diesem Dokument")]), output: .freeObject(), groups: ["writer.core"]
     )
     static func run(_ args: WriterUndoArgs, context: ActionContext) async throws -> Output {
         let id = try args.doc.map { try context.app.actionAnyDocument($0).id }
-        let redone = context.registry.undoStack.redo { id == nil || $0.documents.contains(id!) }
+        let own = context.ownRunOnly
+        let redone = try context.registry.undoStack.redo { (id == nil || $0.documents.contains(id!)) && (own == nil || $0.runID == own) }
         guard let redone else { throw RPCError.notFound("Es gibt nichts wiederherzustellen.") }
         return Output(redone: redone)
+    }
+}
+
+extension ActionContext {
+    /// The run whose changes this call may take back: a client on MCP or a chat's model only its own; the person at
+    /// the app or in the terminal any.
+    var ownRunOnly: String? {
+        channel == .mcp || channel == .chat ? run.id : nil
     }
 }
 

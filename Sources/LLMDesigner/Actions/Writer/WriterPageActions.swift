@@ -230,7 +230,7 @@ struct WriterSpeechReadAction: LLMDAction {
         id: "writer.speech.read", summary: "Liest einen Text oder eine Stelle vor", kind: .write, security: .localWrite,
         input: .object(WriterEditArgs.properties()), output: .freeObject()
     )
-    static func preflight(_ args: Args, context: ActionContext) throws -> ActionPreflight { try WriterTarget(args.target, app: context.app).readPreflight }
+    static func preflight(_ args: Args, context: ActionContext) throws -> ActionPreflight { try WriterTarget(args.target, app: context.app).readPreflight(ifVersion: args.target.ifVersion) }
     static func run(_ args: Args, context: ActionContext) async throws -> Output {
         let target = try WriterTarget(args.target, app: context.app)
         var text = target.markdown

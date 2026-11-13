@@ -663,7 +663,7 @@ struct WriterFigureReadAction: LLMDAction {
         input: .object(Args.referenced), output: .freeObject()
     )
     static func preflight(_ args: Args, context: ActionContext) throws -> ActionPreflight {
-        try WriterTarget(args.target, app: context.app).readPreflight
+        try WriterTarget(args.target, app: context.app).readPreflight(ifVersion: args.target.ifVersion)
     }
     static func run(_ args: Args, context: ActionContext) async throws -> Output {
         let target = try WriterTarget(args.target, app: context.app)

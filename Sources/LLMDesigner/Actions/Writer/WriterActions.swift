@@ -62,7 +62,7 @@ extension AppModel {
         document.font = documents.first { !$0.isPresentation }?.font ?? .serif
         document.provenance = provenance
         document.markdown = markdown
-        if let title, !title.trimmingCharacters(in: .whitespaces).isEmpty {
+        if let title = title.map(WriterDocument.singleLine), !title.isEmpty {
             document.title = title
             document.hasCustomTitle = true
         } else {

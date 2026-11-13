@@ -244,7 +244,7 @@ struct WriterFormulaListAction: LLMDAction {
         input: .object(WriterTargetArgs.schemaProperties), output: .freeObject()
     )
     static func preflight(_ args: Args, context: ActionContext) throws -> ActionPreflight {
-        try WriterTarget(args.target, app: context.app).readPreflight
+        try WriterTarget(args.target, app: context.app).readPreflight(ifVersion: args.target.ifVersion)
     }
     static func run(_ args: Args, context: ActionContext) async throws -> Output {
         let target = try WriterTarget(args.target, app: context.app)
@@ -252,7 +252,7 @@ struct WriterFormulaListAction: LLMDAction {
         let chunks = PowerText.chunks(of: markdown)
         let items = WriterFormulaAddressing.all(in: markdown).enumerated().map { index, found in
             Item(number: index + 1, latex: found.latex, display: found.isDisplay ? "block" : "inline",
-                 block: WriterBlockInfo.id(index: found.block, markdown: chunks[found.block].markdown))
+                 block: WriterBlockInfo.id(index: found.block, in: chunks))
         }
         return Output(formulas: items, version: target.version)
     }

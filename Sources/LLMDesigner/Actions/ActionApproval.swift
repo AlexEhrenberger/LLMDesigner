@@ -10,6 +10,8 @@ struct ApprovalRequest: Sendable, Equatable {
     var target: String?
     var detail: String?
     var reason: String
+    /// The whole text, when agreeing means having read it.
+    var fullText: String?
 }
 
 /// Approval levels per channel and kind of action (in the library's settings), and the dialog.
@@ -43,17 +45,45 @@ final class ActionApproval {
     static func presentAlert(_ request: ApprovalRequest) async -> Bool {
         guard NSApp != nil else { return false }
         NSApp.activate()
+        return makeAlert(for: request).runModal() == .alertSecondButtonReturn
+    }
+
+    /// The dialog of a request. "Not allowed" comes first, so Return says no.
+    static func makeAlert(for request: ApprovalRequest) -> NSAlert {
         let alert = NSAlert()
         alert.messageText = "\(request.channel.label) möchte: \(request.summary)"
         var lines = ["Action: \(request.action)"]
         if let target = request.target { lines.append("Ziel: \(target)") }
-        if let detail = abridged(request.detail) { lines.append("Daten: \(detail)") }
+        if request.fullText == nil, let detail = abridged(request.detail) { lines.append("Daten: \(detail)") }
+        if let text = request.fullText {
+            lines.append("Der ganze Text steht unten (\(text.count) Zeichen), so wie er gespeichert ist – auch, was im Editor nicht zu sehen wäre.")
+        }
         lines.append("")
         lines.append("Grund der Rückfrage: \(request.reason)")
         alert.informativeText = lines.joined(separator: "\n")
         alert.alertStyle = .warning
         alert.addButton(withTitle: "Nicht erlauben")
         alert.addButton(withTitle: "Erlauben")
-        return alert.runModal() == .alertSecondButtonReturn
+        if let text = request.fullText { alert.accessoryView = reviewView(text) }
+        return alert
+    }
+
+    /// The text to read, whole and as written: scrollable, selectable, not editable.
+    private static func reviewView(_ text: String) -> NSView {
+        let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: 520, height: 300))
+        scroll.hasVerticalScroller = true
+        scroll.borderType = .bezelBorder
+        let view = NSTextView(frame: scroll.contentView.bounds)
+        view.isEditable = false
+        view.isSelectable = true
+        view.isRichText = false
+        view.font = .monospacedSystemFont(ofSize: 11.5, weight: .regular)
+        view.textContainerInset = NSSize(width: 6, height: 6)
+        view.isVerticallyResizable = true
+        view.autoresizingMask = [.width]
+        view.textContainer?.widthTracksTextView = true
+        view.string = text
+        scroll.documentView = view
+        return scroll
     }
 }

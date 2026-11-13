@@ -219,8 +219,16 @@ struct WriterAIWriteAction: LLMDAction {
         }
         let text = WriterPrompts.clean(raw)
         guard !text.isEmpty else { throw RPCError.internal("Das Modell hat nichts geschrieben.") }
-        // The person may have typed while the model wrote.
-        let result = try target.insertBlocks(text, at: args.address, position: args.position, ifVersion: args.target.ifVersion, context: context)
+        // The person may have typed while the model wrote: the place is taken over into the text as it is now.
+        let address: WriterAddress
+        do {
+            address = try WriterAddressing.rebase(args.address, from: markdown, to: target.markdown)
+        } catch let error as RPCError {
+            var data = error.data?.objectValue ?? [:]
+            data["text"] = .string(text)
+            throw RPCError(code: error.code, message: error.message + " Der Text des Modells steht in data.text.", data: .object(data))
+        }
+        let result = try target.insertBlocks(text, at: address, position: args.position, ifVersion: args.target.ifVersion, context: context)
         return WriterAIResult(doc: result.doc, version: result.version, text: text, block: result.block, applied: true)
     }
 }
@@ -230,7 +238,8 @@ struct WriterAIWriteAction: LLMDAction {
 private func rewritePassage(_ args: WriterAIArgs, instruction: String, kind: String, context: ActionContext) async throws -> WriterAIResult {
     let request = try WriterAIRequest(args, context: context)
     let target = request.target
-    let passage = try markedPassage(args.address, in: target.markdown)
+    let original = target.markdown
+    let passage = try markedPassage(args.address, in: original)
     guard !passage.selection.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw RPCError.invalidTarget("Die Stelle enthält keinen Text.") }
     let messages = WriterPrompts.rewrite(document: request.document(passage.marked), selection: passage.selection, instruction: instruction)
     let raw = try await context.app.writerAIJobs.run(kind: kind, doc: target.documentID) {
@@ -241,8 +250,23 @@ private func rewritePassage(_ args: WriterAIArgs, instruction: String, kind: Str
     guard args.apply != false else {
         return WriterAIResult(doc: target.documentID.uuidString, version: target.version, text: text, block: nil, applied: false)
     }
-    // Resolved again: if the passage changed meanwhile, this fails instead of hitting something else.
-    let new = try WriterTextInsertMarkdownAction.place(text, at: args.address, position: "replace", in: target.markdown)
+    // The person may have typed while the model wrote. The passage is looked for again in the text as it is now; if it
+    // isn't there as the model read it, this is a conflict instead of overwriting what the person wrote. The model's
+    // text comes back with it, so the work isn't lost.
+    let current = target.markdown
+    let address: WriterAddress
+    do {
+        address = try WriterAddressing.rebase(args.address, from: original, to: current)
+        if current != original, try markedPassage(address, in: current).selection != passage.selection {
+            throw RPCError.versionConflict(current: ActionVersion.of(current))
+        }
+    } catch let error as RPCError {
+        var data = error.data?.objectValue ?? [:]
+        data["text"] = .string(text)
+        throw RPCError(code: RPCError.versionConflictCode, message: "Die Stelle hat sich geändert, während das Modell schrieb. Sein Text steht in data.text.",
+                       data: .object(data))
+    }
+    let new = try WriterTextInsertMarkdownAction.place(text, at: address, position: "replace", in: current)
     let result = try target.replaceText(with: new, ifVersion: args.target.ifVersion, context: context)
     return WriterAIResult(doc: result.doc, version: result.version, text: text, block: nil, applied: true)
 }
@@ -291,7 +315,7 @@ struct WriterAIAnswerAction: LLMDAction {
         input: .object(Args.properties(["question": .string("Die Frage")]), required: ["question"]), output: .freeObject()
     )
     static func preflight(_ args: Args, context: ActionContext) throws -> ActionPreflight {
-        try WriterTarget(args.target, app: context.app).readPreflight
+        try WriterTarget(args.target, app: context.app).readPreflight(ifVersion: args.target.ifVersion)
     }
     static func run(_ args: Args, context: ActionContext) async throws -> Output {
         let request = try WriterAIRequest(args, context: context)
@@ -382,7 +406,7 @@ struct WriterAICheckAction: LLMDAction {
         input: .object(Args.properties(["kind": .choice(WriterPrompts.Check.allCases.map(\.rawValue), "Standard: language")])), output: .freeObject()
     )
     static func preflight(_ args: Args, context: ActionContext) throws -> ActionPreflight {
-        try WriterTarget(args.target, app: context.app).readPreflight
+        try WriterTarget(args.target, app: context.app).readPreflight(ifVersion: args.target.ifVersion)
     }
     static func run(_ args: Args, context: ActionContext) async throws -> Output {
         let request = try WriterAIRequest(args, context: context)

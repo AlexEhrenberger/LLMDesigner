@@ -15,7 +15,14 @@ extension ActionRegistry {
 extension WriterTarget {
     /// Reading this text marks the run if it is of foreign origin.
     var readPreflight: ActionPreflight {
-        ActionPreflight(readsUntrusted: document?.isForeign == true, target: document?.displayTitle)
+        ActionPreflight(readsUntrusted: document?.isForeign == true, target: document?.displayTitle, version: version)
+    }
+
+    /// For reads that take `ifVersion`: a read of another version than the caller expects is a conflict too, as the
+    /// parameter promises.
+    func readPreflight(ifVersion: String?) throws -> ActionPreflight {
+        try checkVersion(ifVersion)
+        return readPreflight
     }
 }
 
@@ -51,7 +58,7 @@ struct WriterDocReadAction: LLMDAction {
     )
 
     static func preflight(_ args: Args, context: ActionContext) throws -> ActionPreflight {
-        try WriterTarget(args.target, app: context.app).readPreflight
+        try WriterTarget(args.target, app: context.app).readPreflight(ifVersion: args.target.ifVersion)
     }
 
     static func run(_ args: Args, context: ActionContext) async throws -> Output {
@@ -85,7 +92,7 @@ struct WriterBlocksListAction: LLMDAction {
         input: .object(targetProperties()), output: .freeObject(), groups: ["core", "writer.core"]
     )
     static func preflight(_ args: WriterTargetArgs, context: ActionContext) throws -> ActionPreflight {
-        try WriterTarget(args, app: context.app).readPreflight
+        try WriterTarget(args, app: context.app).readPreflight(ifVersion: args.ifVersion)
     }
     static func run(_ args: WriterTargetArgs, context: ActionContext) async throws -> Output {
         let target = try WriterTarget(args, app: context.app)
@@ -108,14 +115,15 @@ struct WriterOutlineGetAction: LLMDAction {
         input: .object(targetProperties()), output: .freeObject(), groups: ["writer.core"]
     )
     static func preflight(_ args: WriterTargetArgs, context: ActionContext) throws -> ActionPreflight {
-        try WriterTarget(args, app: context.app).readPreflight
+        try WriterTarget(args, app: context.app).readPreflight(ifVersion: args.ifVersion)
     }
     static func run(_ args: WriterTargetArgs, context: ActionContext) async throws -> Output {
         let target = try WriterTarget(args, app: context.app)
-        let headings = PowerText.chunks(of: target.markdown).compactMap { chunk -> Heading? in
+        let chunks = PowerText.chunks(of: target.markdown)
+        let ids = WriterBlockInfo.ids(of: chunks)
+        let headings = chunks.compactMap { chunk -> Heading? in
             guard case .heading(let level) = chunk.kind else { return nil }
-            return Heading(level: level, title: chunk.plain.trimmingCharacters(in: .whitespacesAndNewlines),
-                           block: WriterBlockInfo.id(index: chunk.id, markdown: chunk.markdown))
+            return Heading(level: level, title: chunk.plain.trimmingCharacters(in: .whitespacesAndNewlines), block: ids[chunk.id])
         }
         return Output(version: target.version, headings: headings)
     }
@@ -136,7 +144,10 @@ struct WriterFindAction: LLMDAction {
     }
     struct Hit: Encodable, Sendable {
         var block: String
-        var occurrence: Int
+        /// The text as it stands there, and which place of it this is: `match` and `occurrence` hit exactly this one.
+        /// In code, formulas and pictures `match` doesn't look, so only the block names the place.
+        var match: String?
+        var occurrence: Int?
         var excerpt: String
     }
     struct Output: Encodable, Sendable {
@@ -145,26 +156,45 @@ struct WriterFindAction: LLMDAction {
         var hits: [Hit]
     }
     static let descriptor = ActionDescriptor(
-        id: "writer.find", summary: "Sucht im Text und liefert Treffer mit Adresse", kind: .read, security: .plainRead,
-        input: .object(targetProperties(["query": .string("Suchtext"), "caseSensitive": .boolean("Groß-/Kleinschreibung beachten")]), required: ["query"]),
+        id: "writer.find", summary: "Sucht im Text; jeder Treffer nennt match und occurrence, die genau ihn adressieren", kind: .read, security: .plainRead,
+        input: .object(targetProperties(["query": .string("Suchtext"), "caseSensitive": .boolean("Groß-/Kleinschreibung beachten; Standard: nein")]), required: ["query"]),
         output: .freeObject(), groups: ["writer.core"]
     )
     static func preflight(_ args: Args, context: ActionContext) throws -> ActionPreflight {
-        try WriterTarget(args.target, app: context.app).readPreflight
+        try WriterTarget(args.target, app: context.app).readPreflight(ifVersion: args.target.ifVersion)
     }
     static func run(_ args: Args, context: ActionContext) async throws -> Output {
         let target = try WriterTarget(args.target, app: context.app)
+        guard !args.query.isEmpty else { throw RPCError.invalidParams("Leerer Suchtext.") }
+        let chunks = PowerText.chunks(of: target.markdown)
+        let ids = WriterBlockInfo.ids(of: chunks)
+        let options: NSString.CompareOptions = args.caseSensitive == true ? [] : [.caseInsensitive, .diacriticInsensitive]
+        // Each exact text found, with the places `match` counts for it.
+        var places: [String: [(block: Int, location: Int)]] = [:]
+        func occurrence(of text: String, block: Int, location: Int) -> Int? {
+            if places[text] == nil {
+                places[text] = WriterAddressing.hits(of: text, in: chunks).map { ($0.block, $0.range.location) }
+            }
+            return places[text]?.firstIndex { $0.block == block && $0.location == location }.map { $0 + 1 }
+        }
+        func excerpt(_ string: NSString, around found: NSRange) -> String {
+            let lower = max(0, found.location - 30)
+            let piece = string.substring(with: NSRange(location: lower, length: min(string.length - lower, found.length + 60)))
+            return piece.replacingOccurrences(of: "\u{FFFC}", with: "").replacingOccurrences(of: String(WriterMarkdown.lineSeparator), with: " ")
+        }
         var hits: [Hit] = []
-        for chunk in PowerText.chunks(of: target.markdown) {
-            let string = chunk.plain as NSString
+        for chunk in chunks {
+            // Running text as the editor shows it; code and formulas as they are written, so a search finds them too.
+            let searched = WriterAddressing.isSearched(chunk.kind)
+            let string = searched ? WriterAddressing.visibleText(of: chunk.markdown) : chunk.plain as NSString
             var start = 0
-            let options: NSString.CompareOptions = args.caseSensitive == true ? [] : [.caseInsensitive, .diacriticInsensitive]
             while start < string.length {
                 let found = string.range(of: args.query, options: options, range: NSRange(location: start, length: string.length - start))
                 guard found.location != NSNotFound else { break }
-                let lower = max(0, found.location - 30)
-                let excerpt = string.substring(with: NSRange(location: lower, length: min(string.length - lower, found.length + 60)))
-                hits.append(Hit(block: WriterBlockInfo.id(index: chunk.id, markdown: chunk.markdown), occurrence: hits.count + 1, excerpt: excerpt))
+                let text = string.substring(with: found)
+                hits.append(Hit(block: ids[chunk.id], match: searched ? text : nil,
+                                occurrence: searched ? occurrence(of: text, block: chunk.id, location: found.location) : nil,
+                                excerpt: excerpt(string, around: found)))
                 start = NSMaxRange(found)
             }
         }
@@ -188,6 +218,8 @@ struct WriterStatsAction: LLMDAction {
     )
     static func run(_ args: WriterTargetArgs, context: ActionContext) async throws -> Output {
         let target = try WriterTarget(args, app: context.app)
+        // Counts carry no words of the text, so reading them doesn't mark the run; the version is checked all the same.
+        try target.checkVersion(args.ifVersion)
         let plain = PowerText.plain(target.markdown)
         let words = plain.split(whereSeparator: \.isWhitespace).count
         return Output(words: words, characters: plain.count, blocks: PowerText.chunks(of: target.markdown).count,

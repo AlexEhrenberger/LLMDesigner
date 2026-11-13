@@ -190,7 +190,7 @@ struct PresenterMoreActionTests {
         let id = try await make()
         try await h.call("presenter.slide.setText", ["deck": .string(id), "slideIndex": 1, "markdown": "# Titel\n\nDieser Absatz geht weg.\n\nDieser bleibt."])
         let chunks = PowerText.chunks(of: deck(id).slides[0].markdown)
-        let block = WriterBlockInfo.id(index: 1, markdown: chunks[1].markdown)
+        let block = WriterBlockInfo.id(index: 1, in: chunks)
         let made = try #require(try await h.call("presenter.field.detachSelection", ["deck": .string(id), "slideIndex": 1, "block": .string(block)])["id"]?.stringValue)
         #expect(try field(id, made).text == "Dieser Absatz geht weg.")
         #expect(deck(id).slides[0].markdown.trimmingCharacters(in: .newlines) == "# Titel\n\nDieser bleibt.")

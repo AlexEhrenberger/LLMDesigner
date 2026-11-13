@@ -40,12 +40,12 @@ extension WriterTarget {
         var result = try replaceText(with: text, ifVersion: ifVersion, context: context)
         let chunks = PowerText.chunks(of: text)
         if let block, chunks.indices.contains(block) {
-            result.block = WriterBlockInfo.id(index: block, markdown: chunks[block].markdown)
+            result.block = WriterBlockInfo.id(index: block, in: chunks)
         }
         return result
     }
 
-    var writePreflight: ActionPreflight { ActionPreflight(target: document?.displayTitle) }
+    var writePreflight: ActionPreflight { ActionPreflight(target: document?.displayTitle, version: version) }
 }
 
 /// Whether a value is a colour, in the forms Writer knows: six hex digits with or without `#`, or a name.

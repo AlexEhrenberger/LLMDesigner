@@ -93,14 +93,13 @@ enum MarkdownParser {
             let line = lines[index]
             let trimmed = line.trimmingCharacters(in: .whitespaces)
 
-            if trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") {
+            if let fence = fenceOpening(trimmed) {
                 flushParagraph()
-                let fence = String(trimmed.prefix(3))
-                let language = trimmed.dropFirst(3).trimmingCharacters(in: .whitespaces)
+                let language = trimmed.dropFirst(fence.count).trimmingCharacters(in: .whitespaces)
                 var code: [String] = []
                 index += 1
                 while index < lines.count {
-                    if lines[index].trimmingCharacters(in: .whitespaces).hasPrefix(fence) {
+                    if closesFence(lines[index].trimmingCharacters(in: .whitespaces), fence) {
                         index += 1
                         break
                     }
@@ -264,9 +263,40 @@ enum MarkdownParser {
         return blocks
     }
 
-    private static func displayMathDelimiters(for line: String) -> (open: String, close: String)? {
+    /// The fence a (trimmed) line opens: three or more backticks or tildes, all of the run. A longer fence holds code
+    /// that has a shorter one in it, as in a block that shows Markdown.
+    static func fenceOpening(_ trimmed: String) -> String? {
+        guard let mark = trimmed.first, mark == "`" || mark == "~" else { return nil }
+        let run = trimmed.prefix { $0 == mark }
+        return run.count >= 3 ? String(run) : nil
+    }
+
+    /// Whether a (trimmed) line closes `fence`: at least as many of the same mark and nothing after them.
+    static func closesFence(_ trimmed: String, _ fence: String) -> Bool {
+        guard let mark = fence.first else { return false }
+        let run = trimmed.prefix { $0 == mark }
+        return run.count >= fence.count && trimmed.dropFirst(run.count).allSatisfy(\.isWhitespace)
+    }
+
+    /// A fence for `code`: longer than any fence inside it, so the code can't close it.
+    static func fence(for code: String) -> String {
+        let longest = code.components(separatedBy: "\n").compactMap { fenceOpening($0.trimmingCharacters(in: .whitespaces)) }
+            .filter { $0.first == "`" }.map(\.count).max() ?? 0
+        return String(repeating: "`", count: max(3, longest + 1))
+    }
+
+    /// The delimiters of display math that a (trimmed) line opens. Shared with `PowerText`, so both cut the text alike.
+    static func displayMathDelimiters(for line: String) -> (open: String, close: String)? {
         if line.hasPrefix("$$") { return ("$$", "$$") }
-        if line.hasPrefix("\\[") { return ("\\[", "\\]") }
+        if line.hasPrefix("\\[") {
+            // `\[1\] Müller` is an escaped bracket, as earlier versions wrote "[1] Müller" at the start of a line:
+            // display math that closes on its line stands there alone.
+            if let end = line.range(of: "\\]", range: line.index(line.startIndex, offsetBy: 2)..<line.endIndex),
+               !line[end.upperBound...].trimmingCharacters(in: .whitespaces).isEmpty {
+                return nil
+            }
+            return ("\\[", "\\]")
+        }
         return nil
     }
 
@@ -313,7 +343,7 @@ enum MarkdownParser {
         return nil
     }
 
-    private static func isTableSeparator(_ line: String) -> Bool {
+    static func isTableSeparator(_ line: String) -> Bool {
         let trimmed = line.trimmingCharacters(in: .whitespaces)
         guard trimmed.hasPrefix("|"), trimmed.contains("-") else { return false }
         return trimmed.allSatisfy { "|-: ".contains($0) }

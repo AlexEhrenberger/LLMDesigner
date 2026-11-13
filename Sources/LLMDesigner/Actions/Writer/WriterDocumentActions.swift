@@ -91,7 +91,8 @@ struct WriterDocCreateAction: LLMDAction {
         }
         let created = document
         context.undoGroup.documents.insert(created.id)
-        context.undoGroup.add(UndoStep(label: "Dokument anlegen", undo: { app.removeDocumentForActionUndo(created.id) }, redo: { app.reinsertDocumentForActionRedo(created) }))
+        context.undoGroup.add(UndoStep(label: "Dokument anlegen", undo: { app.removeDocumentForActionUndo(created.id) }, redo: { app.reinsertDocumentForActionRedo(created) },
+                                       document: created.id, states: UndoStates(found: nil, left: created.undoState, now: { app.document(created.id)?.undoState })))
         return Output(id: created.id.uuidString, title: created.displayTitle, version: ActionVersion.of(created.markdown))
     }
 }
@@ -203,7 +204,8 @@ struct WriterDocDuplicateAction: LLMDAction {
         copy.provenance = context.mergedProvenance(copy.provenance)
         app.reinsertDocumentForActionRedo(copy)
         let made = copy
-        context.undoGroup.add(UndoStep(label: "Dokument kopieren", undo: { app.removeDocumentForActionUndo(made.id) }, redo: { app.reinsertDocumentForActionRedo(made) }))
+        context.undoGroup.add(UndoStep(label: "Dokument kopieren", undo: { app.removeDocumentForActionUndo(made.id) }, redo: { app.reinsertDocumentForActionRedo(made) },
+                                       document: made.id, states: UndoStates(found: nil, left: made.undoState, now: { app.document(made.id)?.undoState })))
         return OKOutput(id: made.id.uuidString)
     }
 }
@@ -253,6 +255,8 @@ struct WriterDocConfirmAction: LLMDAction {
         var check = ActionPreflight(target: document.displayTitle)
         check.needsConsent = "Danach gilt der Text als deiner: Anweisungen darin würden nicht mehr als fremd behandelt. Hast du ihn gelesen?"
         check.detail = String(document.markdown.prefix(ActionApproval.detailLimit))
+        // Vouching for an excerpt would vouch for what comes after it unread: the dialog shows all of it.
+        check.review = document.deck?.serialized ?? document.markdown
         return check
     }
     static func run(_ args: DocumentArgs, context: ActionContext) async throws -> OKOutput {

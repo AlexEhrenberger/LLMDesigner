@@ -221,14 +221,31 @@ struct WriterScreen: View {
 // MARK: Audio
 
 /// A pill at the bottom of the sheet while the document is dictated into or read aloud, and for notices
-/// such as Qwen TTS not being reachable.
+/// such as Qwen TTS not being reachable. A document that can't be saved says so first, and stays saying it.
 struct WriterAudioStatus: View {
     @Environment(AppModel.self) private var app
     let controller: WriterEditorController
 
     var body: some View {
         Group {
-            if app.dictationIntoDocument {
+            if let id = app.selectedDocumentID, let problem = app.documentSaveErrors[id] {
+                pill {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.warning)
+                    Text(problem)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Theme.textPrimary)
+                        .lineLimit(2)
+                    Button("Erneut versuchen") {
+                        app.writerFlush?()
+                        app.saveDocument(id)
+                    }
+                    .buttonStyle(.borderless)
+                    .font(.system(size: 12, weight: .medium))
+                    .help("Das Dokument noch einmal speichern")
+                }
+            } else if app.dictationIntoDocument {
                 pill {
                     MicrophoneLevel(level: app.dictationLevel, isListening: app.dictationStatus == .listening)
                     Text(dictationText)
@@ -266,6 +283,7 @@ struct WriterAudioStatus: View {
         .animation(.spring(response: 0.35, dampingFraction: 0.85), value: app.dictationIntoDocument)
         .animation(.spring(response: 0.35, dampingFraction: 0.85), value: app.speakingDocumentID)
         .animation(.easeOut(duration: 0.2), value: app.notice)
+        .animation(.easeOut(duration: 0.2), value: app.documentSaveErrors)
     }
 
     private var dictationText: String {

@@ -50,6 +50,12 @@ struct ActionPreflight: Sendable {
     var target: String?
     /// For the dialog: an excerpt of the data.
     var detail: String?
+    /// For the dialog: a whole text the person vouches for by agreeing. An excerpt would let what stands after it
+    /// pass unread.
+    var review: String?
+    /// The version of the text the call is about. When the person has to agree first, the text may change while the
+    /// dialog is open; then the call no longer fits what it was made for.
+    var version: String?
 }
 
 /// No parameters.

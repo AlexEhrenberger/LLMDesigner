@@ -34,22 +34,64 @@ struct WriterCodeArgs: Decodable, Sendable {
         "codeBlock": .string("Code-Block: Nummer im Text ab 1 oder Block-ID; ohne Angabe der einzige"),
     ]) { _, new in new }
 
-    /// The code block as a chunk.
+    /// The code block, at the top of the text or inside a box or columns.
     @MainActor
-    func chunk(in markdown: String) throws -> PowerChunk {
-        let blocks = PowerText.chunks(of: markdown).filter { $0.kind == .code }
-        return try WriterReference.pick(codeBlock, from: blocks, label: "Code-Block", markdown: markdown) { $0.markdown == $1 }
+    func location(in markdown: String) throws -> WriterCodeLocation {
+        try WriterReference.pick(codeBlock, from: WriterCodeLocation.all(in: markdown), label: "Code-Block", markdown: markdown) { $0.blockMarkdown == $1 }
+    }
+}
+
+/// A fenced code block and where it is: its block of the text, and its lines in that block (all of them, or some
+/// inside a box or columns, which are one block with what they hold).
+struct WriterCodeLocation {
+    let block: Int
+    let lines: Range<Int>
+    let markdown: String
+    let blockMarkdown: String
+
+    @MainActor
+    static func all(in markdown: String) -> [WriterCodeLocation] {
+        var found: [WriterCodeLocation] = []
+        for chunk in PowerText.chunks(of: markdown) {
+            let lines = chunk.markdown.components(separatedBy: "\n")
+            if chunk.kind == .code {
+                found.append(WriterCodeLocation(block: chunk.id, lines: 0..<lines.count, markdown: chunk.markdown, blockMarkdown: chunk.markdown))
+                continue
+            }
+            guard chunk.kind == .box || chunk.kind == .other else { continue }
+            var start: Int?
+            var fence: String?
+            for (index, line) in lines.enumerated() {
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                if let open = fence {
+                    guard MarkdownParser.closesFence(trimmed, open), let first = start else { continue }
+                    found.append(WriterCodeLocation(block: chunk.id, lines: first..<(index + 1), markdown: lines[first...index].joined(separator: "\n"),
+                                                    blockMarkdown: chunk.markdown))
+                    (fence, start) = (nil, nil)
+                } else if let open = MarkdownParser.fenceOpening(trimmed) {
+                    (fence, start) = (open, index)
+                }
+            }
+        }
+        return found
+    }
+
+    /// The text with this code block replaced by `new`.
+    @MainActor
+    func replacing(with new: String, in markdown: String) -> String {
+        var blockLines = blockMarkdown.components(separatedBy: "\n")
+        blockLines.replaceSubrange(lines, with: new.components(separatedBy: "\n"))
+        return PowerText.replacing(block, with: blockLines.joined(separator: "\n"), in: markdown)
     }
 }
 
 /// The code of a fenced block, and the words on its fence.
 private func fenced(_ markdown: String) -> (fence: String, language: String, code: String)? {
     var lines = markdown.components(separatedBy: "\n")
-    guard lines.count >= 2, let first = lines.first, first.trimmingCharacters(in: .whitespaces).hasPrefix("```") || first.trimmingCharacters(in: .whitespaces).hasPrefix("~~~") else { return nil }
-    let opening = first.trimmingCharacters(in: .whitespaces)
+    guard lines.count >= 2, let opening = lines.first?.trimmingCharacters(in: .whitespaces), let fence = MarkdownParser.fenceOpening(opening) else { return nil }
     lines.removeFirst()
-    if lines.last?.trimmingCharacters(in: .whitespaces).hasPrefix(String(opening.prefix(3))) == true { lines.removeLast() }
-    return (String(opening.prefix(3)), opening.dropFirst(3).trimmingCharacters(in: .whitespaces), lines.joined(separator: "\n"))
+    if let last = lines.last, MarkdownParser.closesFence(last.trimmingCharacters(in: .whitespaces), fence) { lines.removeLast() }
+    return (fence, opening.dropFirst(fence.count).trimmingCharacters(in: .whitespaces), lines.joined(separator: "\n"))
 }
 
 struct WriterCodeInsertAction: WriterTargetedAction {
@@ -65,12 +107,10 @@ struct WriterCodeInsertAction: WriterTargetedAction {
     static func target(of args: Args) -> WriterTargetArgs { args.target }
     static func change(_ args: Args, markdown: String, target: WriterTarget, context: ActionContext) async throws -> (text: String, block: Int?) {
         let code = args.code ?? ""
-        // A fence inside the code would end the block.
-        guard !code.components(separatedBy: "\n").contains(where: { $0.trimmingCharacters(in: .whitespaces).hasPrefix("```") }) else {
-            throw RPCError.invalidParams("Der Code enthält selbst eine Zeile mit ```.")
-        }
+        // Code that shows a fence gets a longer one, so it can't end the block.
+        let fence = MarkdownParser.fence(for: code)
         let index = try WriterPlacement.index(args.address, position: args.position, in: markdown)
-        return (PowerText.inserting("```\(args.language ?? "")\n\(code)\n```", at: index, into: markdown), index)
+        return (PowerText.inserting("\(fence)\(args.language ?? "")\n\(code)\n\(fence)", at: index, into: markdown), index)
     }
 }
 
@@ -84,11 +124,11 @@ struct WriterCodeSetLanguageAction: WriterTargetedAction {
     )
     static func target(of args: Args) -> WriterTargetArgs { args.target }
     static func change(_ args: Args, markdown: String, target: WriterTarget, context: ActionContext) async throws -> (text: String, block: Int?) {
-        let chunk = try args.chunk(in: markdown)
-        guard let block = fenced(chunk.markdown) else { throw RPCError.invalidTarget("Dieser Block ist kein Code.") }
+        let location = try args.location(in: markdown)
+        guard let block = fenced(location.markdown) else { throw RPCError.invalidTarget("Dieser Block ist kein Code.") }
         let language = args.language == "none" ? "" : args.language ?? ""
         let new = "\(block.fence)\(language)\n\(block.code)\n\(block.fence)"
-        return (PowerText.replacing(chunk.id, with: new, in: markdown), chunk.id)
+        return (location.replacing(with: new, in: markdown), location.block)
     }
 }
 
@@ -101,12 +141,12 @@ struct WriterCodeFormatAction: WriterTargetedAction {
     )
     static func target(of args: Args) -> WriterTargetArgs { args.target }
     static func change(_ args: Args, markdown: String, target: WriterTarget, context: ActionContext) async throws -> (text: String, block: Int?) {
-        let chunk = try args.chunk(in: markdown)
-        guard let block = fenced(chunk.markdown), let language = CodeLanguage(fence: block.language) ?? CodeSnippet.snippets(in: chunk.markdown).first?.language else {
+        let location = try args.location(in: markdown)
+        guard let block = fenced(location.markdown), let language = CodeLanguage(fence: block.language) ?? CodeSnippet.snippets(in: location.markdown).first?.language else {
             throw RPCError.invalidTarget("Für diesen Code ist keine Sprache gewählt. Python und SQL lassen sich formatieren.")
         }
         let formatted = CodeFormatter.format(block.code, language: language)
-        return (PowerText.replacing(chunk.id, with: "\(block.fence)\(block.language)\n\(formatted)\n\(block.fence)", in: markdown), chunk.id)
+        return (location.replacing(with: "\(block.fence)\(block.language)\n\(formatted)\n\(block.fence)", in: markdown), location.block)
     }
 }
 
@@ -119,8 +159,8 @@ struct WriterCodeFlowchartAction: WriterTargetedAction {
     )
     static func target(of args: Args) -> WriterTargetArgs { args.target }
     static func change(_ args: Args, markdown: String, target: WriterTarget, context: ActionContext) async throws -> (text: String, block: Int?) {
-        let chunk = try args.chunk(in: markdown)
-        guard let snippet = CodeSnippet.snippets(in: chunk.markdown).first else {
+        let location = try args.location(in: markdown)
+        guard let snippet = CodeSnippet.snippets(in: location.markdown).first else {
             throw RPCError.invalidTarget("Flussdiagramme gibt es für Python und SQL. Bitte die Sprache setzen.")
         }
         let graphs = snippet.flowcharts()

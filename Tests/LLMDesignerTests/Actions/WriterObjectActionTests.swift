@@ -381,7 +381,9 @@ struct WriterObjectActionTests {
         try await h.call("writer.code.setLanguage", ["doc": .string(id), "codeBlock": "1", "language": "rust"])
         #expect(h.text(id).contains("```rust\n"))
         #expect(await h.errorCode("writer.code.format", ["doc": .string(id)]) == RPCError.invalidTargetCode)
-        #expect(await h.errorCode("writer.code.insert", ["doc": .string(id), "code": "a\n```\nb"]) == RPCError.invalidParamsCode)
+        // Code that shows a fence gets a longer one instead of being refused.
+        try await h.call("writer.code.insert", ["doc": .string(id), "code": "a\n```\nb"])
+        #expect(h.text(id).contains("````\na\n```\nb\n````"))
     }
 
     @Test func flowchartGoesBelowTheCode() async throws {

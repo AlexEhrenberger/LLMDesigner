@@ -55,6 +55,11 @@ struct WriterDocument: Identifiable, Hashable, Sendable {
         return sources
     }
 
+    /// A title is one line: the file keeps it in one line of its header, and a break in it would come back as a space.
+    static func singleLine(_ title: String) -> String {
+        title.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.joined(separator: " ")
+    }
+
     static func newPresentation() -> WriterDocument {
         var document = WriterDocument()
         document.deck = .new()
@@ -136,12 +141,10 @@ struct WriterDocumentStore {
             .sorted { $0.updatedAt > $1.updatedAt }
     }
 
-    func save(_ document: WriterDocument) {
-        do {
-            try Self.encode(document).write(to: url(for: document.id), atomically: true, encoding: .utf8)
-        } catch {
-            print("LLMDesigner: Dokument \(document.id) konnte nicht gespeichert werden: \(error)")
-        }
+    /// Throws when the file can't be written (a full or read-only disk, a library on a drive that went away): the
+    /// app has to say so, or the person goes on writing into nothing.
+    func save(_ document: WriterDocument) throws {
+        try Self.encode(document).write(to: url(for: document.id), atomically: true, encoding: .utf8)
     }
 
     func delete(_ id: UUID) {

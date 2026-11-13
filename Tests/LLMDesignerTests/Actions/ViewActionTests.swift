@@ -66,7 +66,7 @@ struct ViewActionTests {
 
     private func blockID(_ id: String, _ index: Int) throws -> String {
         let chunks = PowerText.chunks(of: h.text(id))
-        return WriterBlockInfo.id(index: index, markdown: chunks[index].markdown)
+        return WriterBlockInfo.id(index: index, in: chunks)
     }
 
     @Test func aRepeatedBlockIsFoundInItsPlace() async throws {
