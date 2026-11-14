@@ -392,12 +392,11 @@ extension AppModel {
         let (client, model) = try studioModel()
         var messages = [ChatPayloadMessage(role: "system", content: system), ChatPayloadMessage(role: "user", content: user)]
         if !client.provider.switchesThinking, model.thinksOnThinkToken { messages[0].content = "<|think|>" + system }
-        var raw = ""
-        for try await event in client.streamChat(model: model.id, messages: messages, temperature: 0.4, thinking: true) {
-            if case .content(let text) = event { raw += text }
-            try Task.checkCancellation()
-        }
-        return ThinkingSplitter.split(raw).content.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Read off the main thread: token by token on the main actor, a long report kept the whole app busy.
+        let outcome = await StreamRound.read(client.streamChat(model: model.id, messages: messages, temperature: 0.4, thinking: true)) { _ in }
+        try Task.checkCancellation()
+        if let error = outcome.error { throw error }
+        return ThinkingSplitter.split(outcome.round.raw).content.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     // MARK: What comes of it

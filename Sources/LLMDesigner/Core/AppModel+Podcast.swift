@@ -392,17 +392,12 @@ extension AppModel {
     /// One answer of the model, with thinking on where it can be switched; the thinking itself is dropped.
     /// `thinking` switches it where the server allows (Kapitsa); Qwen in LM Studio thinks regardless.
     private func podcastRound(_ client: LLMClient, model: String, messages: [ChatPayloadMessage], tools: [ToolDefinition]?, temperature: Double, thinking: Bool) async throws -> PodcastRound {
-        var raw = ""
-        var calls: [ToolCall] = []
-        for try await event in client.streamChat(model: model, messages: messages, temperature: temperature, tools: tools, thinking: thinking) {
-            switch event {
-            case .content(let text): raw += text
-            case .toolCalls(let requested): calls = requested
-            default: break
-            }
-            try Task.checkCancellation()
-        }
-        var content = ThinkingSplitter.split(raw).content
+        // Read off the main thread: token by token on the main actor, a long script kept the whole app busy.
+        let outcome = await StreamRound.read(client.streamChat(model: model, messages: messages, temperature: temperature, tools: tools, thinking: thinking)) { _ in }
+        try Task.checkCancellation()
+        if let error = outcome.error { throw error }
+        let calls = outcome.round.toolCalls
+        var content = ThinkingSplitter.split(outcome.round.raw).content
         if let leaked = WebTools.leakedCallStart(in: content) { content = String(content[..<leaked]) }
         return PodcastRound(content: content.trimmingCharacters(in: .whitespacesAndNewlines), calls: calls)
     }

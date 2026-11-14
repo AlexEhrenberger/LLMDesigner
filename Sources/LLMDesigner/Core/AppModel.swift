@@ -1261,10 +1261,10 @@ final class AppModel {
             var timedTokens = 0
             var streamingSeconds = 0.0
             var reasoningSeconds = 0.0
-            var lastFlush = Date.distantPast
+            var reportedModel: String?
             var failure: String?
 
-            // Shows the accumulated stream in the answer; called at most ~20×/s to keep the UI smooth.
+            // Shows the accumulated stream in the answer; `StreamRound` calls it at most ~20×/s.
             @MainActor func flush() {
                 let parts = ThinkingSplitter.split(raw)
                 if roundFirstContent == nil, !parts.content.isEmpty { roundFirstContent = Date() }
@@ -1324,36 +1324,32 @@ final class AppModel {
                     let stream = client.streamChat(
                         model: modelId, messages: conversation, temperature: temperature, tools: offered, thinking: thinking
                     )
-                    var calls: [ToolCall] = []
-
-                    for try await event in stream {
-                        let now = Date()
-                        switch event {
-                        case .content(let text):
-                            if roundStart == nil { roundStart = now }
-                            raw += text
-                            roundEvents += 1
-                        case .reasoning(let text):
-                            if roundStart == nil { roundStart = now }
-                            reasoningField += text
-                            roundEvents += 1
-                        case .usage(let prompt, let completion, let cached):
-                            promptTokens = prompt
-                            roundCompletion = completion
-                            if !sawUsage {
-                                sawUsage = true
-                                cachedPromptTokens = cached
-                            }
-                        case .model(let answering):
+                    @MainActor func take(_ round: StreamRound) {
+                        raw = round.raw
+                        reasoningField = round.reasoning
+                        roundStart = round.start
+                        roundEvents = round.events
+                        if let answering = round.model, answering != reportedModel {
+                            reportedModel = answering
                             self?.updateMessage(chatID, messageID) { $0.model = answering }
-                        case .toolCalls(let requested):
-                            calls = requested
-                        }
-                        if now.timeIntervalSince(lastFlush) >= 0.05 {
-                            lastFlush = now
-                            flush()
                         }
                     }
+                    let outcome = await StreamRound.read(stream) { round in
+                        take(round)
+                        flush()
+                    }
+                    let round = outcome.round
+                    take(round)
+                    if round.sawUsage {
+                        promptTokens = round.promptTokens
+                        roundCompletion = round.completionTokens
+                        if !sawUsage {
+                            sawUsage = true
+                            cachedPromptTokens = round.cachedPromptTokens
+                        }
+                    }
+                    let calls = round.toolCalls
+                    if let error = outcome.error { throw error }
 
                     let roundText = closeRound()
                     if offered == nil, tools != nil {

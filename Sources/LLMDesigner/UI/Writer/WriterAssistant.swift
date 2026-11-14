@@ -133,6 +133,30 @@ final class WriterAssistant {
 
     func requestFocus() { focusRequest += 1 }
 
+    // MARK: Streaming
+
+    /// Reads the model's answer off the main thread and shows the text so far at most ~20×/s (see `StreamRound`).
+    /// Reading it token by token on the main actor let the view fall minutes behind: every token waited for the
+    /// previous redraw, and a long proposal or answer redraws slowly. A failure ends up in `error`; the text up to
+    /// there is returned all the same.
+    private static func stream(
+        _ request: Request,
+        _ messages: [ChatPayloadMessage],
+        temperature: Double,
+        into assistant: WriterAssistant?,
+        show: @escaping @MainActor (WriterAssistant, String) -> Void
+    ) async -> String {
+        let stream = request.client.streamChat(model: request.model, messages: messages, temperature: temperature)
+        let outcome = await StreamRound.read(stream) { [weak assistant] round in
+            guard let assistant else { return }
+            show(assistant, round.raw)
+        }
+        if let error = outcome.error, !(error is CancellationError), !Task.isCancelled {
+            assistant?.error = describe(error)
+        }
+        return outcome.round.raw
+    }
+
     // MARK: Writing at the AI cursor
 
     func write(_ instruction: String) {
@@ -145,19 +169,11 @@ final class WriterAssistant {
         let messages = WriterPrompts.write(document: document, instruction: instruction)
 
         task = Task { [weak self] in
-            var raw = ""
-            do {
-                for try await event in request.client.streamChat(model: request.model, messages: messages, temperature: 0.7) {
-                    guard case .content(let piece) = event else { continue }
-                    raw += piece
-                    let text = WriterPrompts.cleanPartial(raw)
-                    guard let self, !text.isEmpty else { continue }
-                    self.activity = .writing
-                    self.textView?.updateAIWriting(text)
-                }
-            } catch is CancellationError {
-            } catch {
-                if !Task.isCancelled { self?.error = Self.describe(error) }
+            let raw = await Self.stream(request, messages, temperature: 0.7, into: self) { assistant, raw in
+                let text = WriterPrompts.cleanPartial(raw)
+                guard !text.isEmpty else { return }
+                assistant.activity = .writing
+                assistant.textView?.updateAIWriting(text)
             }
             guard let self else { return }
             self.textView?.finishAIWriting(WriterPrompts.clean(raw))
@@ -189,19 +205,11 @@ final class WriterAssistant {
         let messages = WriterPrompts.rewrite(document: document, selection: selection, instruction: instruction)
 
         task = Task { [weak self] in
-            var raw = ""
-            do {
-                for try await event in request.client.streamChat(model: request.model, messages: messages, temperature: 0.6) {
-                    guard case .content(let piece) = event else { continue }
-                    raw += piece
-                    let text = WriterPrompts.cleanPartial(raw)
-                    guard let self, !text.isEmpty else { continue }
-                    self.activity = .rewriting
-                    self.proposal?.text = text
-                }
-            } catch is CancellationError {
-            } catch {
-                if !Task.isCancelled { self?.error = Self.describe(error) }
+            let raw = await Self.stream(request, messages, temperature: 0.6, into: self) { assistant, raw in
+                let text = WriterPrompts.cleanPartial(raw)
+                guard !text.isEmpty else { return }
+                assistant.activity = .rewriting
+                assistant.proposal?.text = text
             }
             guard let self else { return }
             self.proposal?.text = WriterPrompts.clean(raw)
@@ -265,19 +273,11 @@ final class WriterAssistant {
         let messages = WriterPrompts.answer(document: document, selection: selection, question: question)
 
         task = Task { [weak self] in
-            var raw = ""
-            do {
-                for try await event in request.client.streamChat(model: request.model, messages: messages, temperature: 0.4) {
-                    guard case .content(let piece) = event else { continue }
-                    raw += piece
-                    let text = ThinkingSplitter.split(raw).content
-                    guard let self, !text.isEmpty else { continue }
-                    self.activity = .answering
-                    self.answer?.text = text
-                }
-            } catch is CancellationError {
-            } catch {
-                if !Task.isCancelled { self?.error = Self.describe(error) }
+            let raw = await Self.stream(request, messages, temperature: 0.4, into: self) { assistant, raw in
+                let text = ThinkingSplitter.split(raw).content
+                guard !text.isEmpty else { return }
+                assistant.activity = .answering
+                assistant.answer?.text = text
             }
             guard let self else { return }
             let text = ThinkingSplitter.split(raw).content.trimmingCharacters(in: .whitespacesAndNewlines)

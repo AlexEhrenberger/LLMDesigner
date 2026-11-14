@@ -133,11 +133,11 @@ private struct WriterAIRequest {
     }
 
     func stream(_ messages: [ChatPayloadMessage], temperature: Double) async throws -> String {
-        var raw = ""
-        for try await event in client.streamChat(model: model, messages: messages, temperature: temperature) {
-            if case .content(let piece) = event { raw += piece }
-        }
-        return raw
+        // Read off the main thread, so the app stays responsive while an agent's request is answered.
+        let outcome = await StreamRound.read(client.streamChat(model: model, messages: messages, temperature: temperature)) { _ in }
+        try Task.checkCancellation()
+        if let error = outcome.error { throw error }
+        return outcome.round.raw
     }
 }
 
