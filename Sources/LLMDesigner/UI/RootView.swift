@@ -90,8 +90,9 @@ struct RootView: View {
                         LearningStudioScreen()
                             .transition(.opacity)
                     } else if app.selectedPresentation != nil {
+                        // Opens at once, like a document: no fade so the slide can be worked on right away.
                         PresenterScreen()
-                            .transition(.asymmetric(insertion: .opacity, removal: .opacity))
+                            .transition(.asymmetric(insertion: .identity, removal: .opacity))
                     } else if app.selectedDocumentID != nil {
                         WriterScreen()
                             .transition(.asymmetric(insertion: .identity, removal: .opacity))

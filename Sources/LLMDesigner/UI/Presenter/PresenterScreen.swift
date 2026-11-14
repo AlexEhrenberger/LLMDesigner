@@ -9,7 +9,6 @@ struct PresenterScreen: View {
     @State private var controller = WriterEditorController()
     @State private var assistant = WriterAssistant()
     @State private var analysisScrollTarget: ContentAnalysisModule?
-    @State private var appeared = false
     /// The free pictures while one is dragged (see `SlideImageEditor`).
     @State private var dragImages: [SlideImage]?
     /// The slide's text area while it is dragged.
@@ -68,8 +67,6 @@ struct PresenterScreen: View {
                 }
             }
             .background(Theme.background)
-            .opacity(appeared ? 1 : 0)
-            .scaleEffect(appeared ? 1 : 0.985)
             .onAppear {
                 app.presentationPlayer.app = app
                 controller.find.isPresentation = true
@@ -85,7 +82,6 @@ struct PresenterScreen: View {
                     }
                     app.runPresenterIntent(intent, instruction: text, in: presentation.id)
                 }
-                withAnimation(.easeOut(duration: 0.35)) { appeared = true }
             }
             .onDisappear {
                 app.writerFlush = nil
