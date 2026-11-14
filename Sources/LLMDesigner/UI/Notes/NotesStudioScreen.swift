@@ -150,6 +150,7 @@ private struct NotesTopBar: View {
                 model.query = ""
                 model.selectedID = app.newNote().id
             }
+            PowerButton()
             IconButton(systemName: "xmark", help: "Notes schließen und zurück zum Chat", size: 12.5, frameSize: Theme.titleBarControlSize) {
                 withAnimation(.easeInOut(duration: 0.25)) { app.closeNotesStudio() }
             }

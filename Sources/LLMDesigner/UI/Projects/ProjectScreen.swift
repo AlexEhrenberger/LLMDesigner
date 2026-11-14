@@ -91,6 +91,7 @@ private struct ProjectTopBar: View {
                 .buttonStyle(.plain)
                 .help(app.projectPageEditing ? "Gestalten beenden" : "Seite gestalten: Bausteine hinzufügen, verschieben, in der Größe ändern und formatieren")
             }
+            PowerButton()
             IconButton(systemName: "xmark", help: "Projekt schließen und zurück zum Chat", size: 12.5, frameSize: Theme.titleBarControlSize) {
                 withAnimation(.easeInOut(duration: 0.25)) { app.closeProject() }
             }

@@ -35,6 +35,11 @@ struct PresenterScreen: View {
                             .transition(.opacity)
                     }
                 }
+                // While the panel slides in or out the slide would be scaled again in every frame (editor
+                // magnification, background, pictures, shadow), which stutters; it takes its new size at once instead.
+                .transaction(value: app.power.isOn) { $0.animation = nil }
+                .transaction(value: app.isPanelDocked) { $0.animation = nil }
+                .transaction(value: app.rightPanelWidth) { $0.animation = nil }
                 if app.isPanelDocked, app.writerTab == .document, !assistant.isPanelShown {
                     Group {
                         if app.power.isOn {

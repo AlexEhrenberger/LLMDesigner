@@ -60,6 +60,7 @@ private struct PodcastTopBar: View {
             IconButton(systemName: "plus", help: "Neuer Podcast", size: 13, frameSize: Theme.titleBarControlSize) {
                 app.newPodcast()
             }
+            PowerButton()
             IconButton(systemName: "xmark", help: "PodcastStudio schließen und zurück zum Chat", size: 12.5, frameSize: Theme.titleBarControlSize) {
                 withAnimation(.easeInOut(duration: 0.25)) { app.closePodcastStudio() }
             }

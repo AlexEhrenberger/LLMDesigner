@@ -154,10 +154,15 @@ struct RootView: View {
         app.sidebarMode == .chats && app.selectedDocumentID == nil && !app.citationStudioOpen && !app.storiesStudioOpen && !app.notesStudioOpen && app.openProjectID == nil && !app.podcastStudioOpen && !app.newStudioOpen && app.isOutlinePanelShown && app.selectedChat != nil
     }
 
-    /// The power access stands beside the chat even when the chat has no contents yet, and beside Data Studio,
-    /// Rechercherista and Learning Studio (their own pages have no right-hand panel).
+    /// The power access stands beside the chat even when the chat has no contents yet, and beside the studios whose
+    /// pages have no right-hand panel of their own: Stories, Notes, project pages, PodcastStudio, Data Studio,
+    /// Rechercherista and Learning Studio, and beside Skills and Personas. Writer and Presenter put it into their own panel.
     private var showsChatPower: Bool {
-        app.sidebarMode == .chats && app.selectedDocumentID == nil && !app.citationStudioOpen && !app.storiesStudioOpen && !app.notesStudioOpen && app.openProjectID == nil && !app.podcastStudioOpen && app.isPanelShown && app.power.isOn
+        guard app.isPanelShown, app.power.isOn else { return false }
+        switch app.sidebarMode {
+        case .chats: return app.selectedDocumentID == nil && !app.citationStudioOpen
+        case .skills, .personas: return true
+        }
     }
 
     /// What decides whether the sidebars fit: the width and the screen, whose content needs more or less room.

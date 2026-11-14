@@ -2,7 +2,7 @@ import SwiftUI
 
 /// The applications the power access reaches from the right-hand panel.
 enum PowerModule: String, CaseIterable, Identifiable {
-    case chats, writer, presenter, citation, stories, notes, projects, podcasts, data, research, learning
+    case chats, writer, presenter, citation, stories, notes, projects, podcasts, data, research, learning, skills, personas
 
     var id: String { rawValue }
 
@@ -19,6 +19,8 @@ enum PowerModule: String, CaseIterable, Identifiable {
         case .data: "Data"
         case .research: "Recherche"
         case .learning: "Lernen"
+        case .skills: "Skills"
+        case .personas: "Personas"
         }
     }
 
@@ -35,6 +37,8 @@ enum PowerModule: String, CaseIterable, Identifiable {
         case .data: StudioApplication.data.symbol
         case .research: StudioApplication.research.symbol
         case .learning: StudioApplication.learning.symbol
+        case .skills: Skill.defaultSymbol
+        case .personas: Persona.symbol
         }
     }
 }
@@ -59,6 +63,8 @@ final class PowerAccess {
     var researchID: UUID?
     var courseID: UUID?
     var podcastID: UUID?
+    var skillID: Skill.ID?
+    var personaID: Persona.ID?
     var storyKind: StoryElementKind = .figure
     /// The last change made here, which "Rückgängig" takes back.
     var lastChange: Change?
@@ -83,6 +89,8 @@ final class PowerAccess {
         case .data: dataBlockID != nil
         case .research: researchID != nil
         case .learning: courseID != nil
+        case .skills: skillID != nil
+        case .personas: personaID != nil
         }
     }
 
@@ -99,6 +107,8 @@ final class PowerAccess {
         case .data: dataBlockID = nil
         case .research: researchID = nil
         case .learning: courseID = nil
+        case .skills: skillID = nil
+        case .personas: personaID = nil
         }
         query = ""
     }

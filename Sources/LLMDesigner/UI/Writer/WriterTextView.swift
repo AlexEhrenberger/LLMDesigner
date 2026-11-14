@@ -416,6 +416,15 @@ final class WriterTextView: NSTextView {
         }
     }
 
+    /// The layout manager asks to redraw only the text column, but heading numbers, data-field bars and comment
+    /// bubbles sit in the margins beside a line; without the full width they would linger where a line used to be.
+    override func setNeedsDisplay(_ rect: NSRect, avoidAdditionalLayout flag: Bool) {
+        var wide = rect
+        wide.origin.x = bounds.minX
+        wide.size.width = bounds.width
+        super.setNeedsDisplay(wide, avoidAdditionalLayout: flag)
+    }
+
     override func drawBackground(in rect: NSRect) {
         if slideLayout != nil { return drawSlideBackground(in: rect) }
         palette.windowBackground.setFill()
@@ -449,6 +458,7 @@ final class WriterTextView: NSTextView {
             let characters = layoutManager.characterRange(forGlyphRange: glyphs, actualGlyphRange: nil)
             drawOutlineMarks(in: characters, origin: origin)
             drawCommentMarks(in: characters, origin: origin)
+            drawDataFieldMarks(in: characters, origin: origin)
         }
     }
 
@@ -474,6 +484,7 @@ final class WriterTextView: NSTextView {
             let glyphs = layoutManager.glyphRange(forBoundingRect: NSRect(x: 0, y: inContainer.minY - 40, width: container.size.width, height: inContainer.height + 80), in: container)
             let characters = layoutManager.characterRange(forGlyphRange: glyphs, actualGlyphRange: nil)
             drawOutlineMarks(in: characters, origin: origin)
+            drawDataFieldMarks(in: characters, origin: origin)
         }
     }
 

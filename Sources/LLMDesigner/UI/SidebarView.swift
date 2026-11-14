@@ -142,6 +142,7 @@ private struct ChatList: View {
     @State private var pendingDocumentDelete: WriterDocument?
     @State private var pendingPodcastDelete: Podcast?
     @State private var pendingFolderDelete: Folder?
+    @State private var pendingProjectDelete: Project?
     @Environment(\.undoManager) private var undoManager
 
     var body: some View {
@@ -153,7 +154,7 @@ private struct ChatList: View {
 
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 1) {
-                ProjectSidebarSection()
+                ProjectSidebarSection { pendingProjectDelete = $0 }
                 if !sections.isEmpty {
                     SectionHeader(title: "Ordner")
                     ForEach(sections) { section in
@@ -215,6 +216,15 @@ private struct ChatList: View {
             Button("Abbrechen", role: .cancel) {}
         } message: { document in
             Text("„\(document.displayTitle)“ wird dauerhaft gelöscht.")
+        }
+        .alert("Projekt löschen?", isPresented: isPresent($pendingProjectDelete), presenting: pendingProjectDelete) { project in
+            Button("Löschen", role: .destructive) {
+                if app.openProjectID == project.id { app.closeProject() }
+                app.projects.deleteProject(project.id)
+            }
+            Button("Abbrechen", role: .cancel) {}
+        } message: { project in
+            Text("„\(project.displayTitle)“ kommt in den Papierkorb. Verknüpfte Chats, Dokumente, Notes und Romanwelten bleiben, wie sie sind.")
         }
         .alert("Podcast löschen?", isPresented: isPresent($pendingPodcastDelete), presenting: pendingPodcastDelete) { podcast in
             Button("Löschen", role: .destructive) { app.deletePodcast(podcast.id, undo: undoManager) }
@@ -1284,7 +1294,8 @@ private struct SidebarFooter: View {
 /// dragged onto a project is linked to it; it stays where it is in the list.
 private struct ProjectSidebarSection: View {
     @Environment(AppModel.self) private var app
-    @State private var pendingDelete: Project?
+    /// The alert lives on the list: an alert hung on an EmptyView inside a LazyVStack is never rendered.
+    let onDelete: (Project) -> Void
 
     var body: some View {
         let query = app.chatSearchQuery
@@ -1323,7 +1334,7 @@ private struct ProjectSidebarSection: View {
             .padding(.bottom, 2)
             if !collapsed {
                 ForEach(projects) { project in
-                    ProjectSidebarRow(project: project) { pendingDelete = project }
+                    ProjectSidebarRow(project: project) { onDelete(project) }
                 }
                 if projects.isEmpty && query.isEmpty {
                     Button {
@@ -1346,16 +1357,6 @@ private struct ProjectSidebarSection: View {
                 }
             }
         }
-        EmptyView()
-            .alert("Projekt löschen?", isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }), presenting: pendingDelete) { project in
-                Button("Löschen", role: .destructive) {
-                    if app.openProjectID == project.id { app.closeProject() }
-                    app.projects.deleteProject(project.id)
-                }
-                Button("Abbrechen", role: .cancel) {}
-            } message: { project in
-                Text("„\(project.displayTitle)“ kommt in den Papierkorb. Verknüpfte Chats, Dokumente, Notes und Romanwelten bleiben, wie sie sind.")
-            }
     }
 }
 

@@ -3,7 +3,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 /// The power access in the right-hand panel: a small version of each application (chats, documents, presentations,
-/// sources and quotes, novel worlds) next to what is open in the main area. Everything here is text to drag out, into
+/// sources and quotes, novel worlds, skills and personas) next to what is open in the main area. Everything here is text to drag out, into
 /// the document, a slide or the chat; text dragged in becomes blocks, slides, quotes or story elements.
 struct PowerPanel: View {
     @Environment(AppModel.self) private var app
@@ -51,6 +51,8 @@ struct PowerPanel: View {
                 case .data: PowerData()
                 case .research: PowerResearch()
                 case .learning: PowerLearning()
+                case .skills: PowerSkills()
+                case .personas: PowerPersonas()
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -78,6 +80,7 @@ struct PowerPanel: View {
             case .data: return "Im Datenblock suchen"
             case .research: return "In der Recherche suchen"
             case .learning: return "Karten suchen"
+            case .skills, .personas: return "Durchsuchen"
             case .presenter: return "In den Folien suchen"
             default: return "Im Text suchen"
             }
@@ -94,31 +97,40 @@ struct PowerPanel: View {
         case .data: return "Datenblöcke und Werte durchsuchen"
         case .research: return "Recherchen durchsuchen"
         case .learning: return "Kurse und Karten durchsuchen"
+        case .skills: return "Skills durchsuchen"
+        case .personas: return "Personas durchsuchen"
         }
     }
 }
 
-/// Chats, Writer, Presenter, Citation, Stories, Notes, Podcasts.
+/// Every module in two rows: in one row thirteen icons and names were squeezed past legibility in a narrow panel.
 private struct PowerModulePicker: View {
     @Environment(AppModel.self) private var app
 
+    private static let columns = Array(
+        repeating: GridItem(.flexible(), spacing: 2),
+        count: (PowerModule.allCases.count + 1) / 2
+    )
+
     var body: some View {
-        HStack(spacing: 2) {
+        LazyVGrid(columns: Self.columns, spacing: 2) {
             ForEach(PowerModule.allCases) { module in
                 let isSelected = app.power.module == module
                 Button {
                     app.power.module = module
                 } label: {
-                    VStack(spacing: 2) {
+                    VStack(spacing: 3) {
                         Image(systemName: module.symbol)
-                            .font(.system(size: 12, weight: .medium))
+                            .font(.system(size: 14, weight: .medium))
+                            .frame(height: 17)
                         Text(module.title)
-                            .font(.system(size: 10, weight: isSelected ? .semibold : .medium))
+                            .font(.system(size: 10.5, weight: isSelected ? .semibold : .medium))
                             .lineLimit(1)
+                            .minimumScaleFactor(0.85)
                     }
                     .foregroundStyle(isSelected ? Theme.textPrimary : Theme.textTertiary)
                     .frame(maxWidth: .infinity)
-                    .frame(height: 38)
+                    .frame(height: 44)
                     .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(isSelected ? Theme.ink.opacity(0.08) : .clear))
                     .contentShape(Rectangle())
                 }

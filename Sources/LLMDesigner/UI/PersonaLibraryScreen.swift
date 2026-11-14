@@ -18,6 +18,7 @@ struct PersonaLibraryScreen: View {
                     .foregroundStyle(Theme.textPrimary)
                     .padding(.horizontal, 10)
                 Spacer(minLength: 0)
+                PowerButton()
             }
             .padding(.leading, app.isSidebarDocked ? 14 : Theme.trafficLightInset)
             .padding(.trailing, 14)

@@ -208,6 +208,7 @@ private struct StoriesTopBar: View {
             if let world {
                 PodcastFromButton(reference: podcastReference(in: world), help: podcastHelp(in: world))
             }
+            PowerButton()
             IconButton(systemName: "xmark", help: "Stories Studio schließen und zurück zum Chat", size: 12.5, frameSize: Theme.titleBarControlSize) {
                 withAnimation(.easeInOut(duration: 0.25)) { app.closeStoriesStudio() }
             }

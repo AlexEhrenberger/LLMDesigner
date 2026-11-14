@@ -145,6 +145,23 @@ struct ViewActionTests {
         h.app.writerTab = .document
     }
 
+    /// Skills and personas are modules of the power access like the studios: each remembers what is open in it.
+    @Test func powerSkillAndPersonaModules() {
+        let power = h.app.power
+        #expect(PowerModule.allCases.contains(.skills) && PowerModule.allCases.contains(.personas))
+        power.module = .skills
+        power.skillID = UUID()
+        #expect(power.hasOpenItem)
+        power.closeItem()
+        #expect(power.skillID == nil && !power.hasOpenItem)
+        power.module = .personas
+        power.personaID = UUID()
+        #expect(power.hasOpenItem)
+        power.closeItem()
+        #expect(power.personaID == nil)
+        power.module = .writer
+    }
+
     // MARK: Attachments
 
     /// A neutral PDF with a line of text.

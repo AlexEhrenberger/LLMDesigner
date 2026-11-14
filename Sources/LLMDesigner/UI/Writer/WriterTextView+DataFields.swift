@@ -89,6 +89,33 @@ extension WriterTextView {
         NotificationCenter.default.addObserver(self, selector: #selector(dataFieldsDidChange(_:)), name: DataFields.changed, object: nil)
     }
 
+    // MARK: Margin marks
+
+    /// A thin bar in the left margin beside every line that holds a field: the fields are easy to find while
+    /// skimming without the text itself getting louder. Lines next to each other share one bar.
+    func drawDataFieldMarks(in characters: NSRange, origin: NSPoint) {
+        guard isEditable, let layoutManager, let storage = textStorage, storage.length > 0 else { return }
+        var spans: [(minY: CGFloat, maxY: CGFloat, missing: Bool)] = []
+        storage.enumerateAttribute(.attachment, in: characters) { value, range, _ in
+            guard let field = value as? WriterDataFieldAttachment else { return }
+            let glyph = layoutManager.glyphIndexForCharacter(at: range.location)
+            guard glyph < layoutManager.numberOfGlyphs else { return }
+            let fragment = layoutManager.lineFragmentUsedRect(forGlyphAt: glyph, effectiveRange: nil)
+            let missing = field.value == nil
+            if let last = spans.last, fragment.minY - last.maxY < 6 {
+                spans[spans.count - 1] = (last.minY, max(last.maxY, fragment.maxY), last.missing || missing)
+            } else {
+                spans.append((fragment.minY, fragment.maxY, missing))
+            }
+        }
+        for span in spans {
+            let tint = span.missing ? NSColor(hex: 0xF2B14C) : NSColor(hex: 0x3FB8B8)
+            let bar = NSRect(x: origin.x - 8, y: origin.y + span.minY + 2, width: 2.5, height: max(6, span.maxY - span.minY - 4))
+            tint.withAlphaComponent(palette.isLight ? 0.55 : 0.6).setFill()
+            NSBezierPath(roundedRect: bar, xRadius: 1.25, yRadius: 1.25).fill()
+        }
+    }
+
     // MARK: The picker (⌥⌘D, "/daten")
 
     func showDataFieldPicker(replacing location: Int? = nil) {
@@ -231,7 +258,7 @@ final class WriterDataFieldCell: NSTextAttachmentCell {
         let decorated = view?.isEditable == true
         if decorated {
             let box = NSBezierPath(roundedRect: frame.insetBy(dx: 0, dy: 1), xRadius: 3, yRadius: 3)
-            tint.withAlphaComponent(isSelected ? 0.26 : (palette.isLight ? 0.09 : 0.13)).setFill()
+            tint.withAlphaComponent(isSelected ? 0.26 : (palette.isLight ? 0.12 : 0.15)).setFill()
             box.fill()
             if isSelected {
                 tint.setStroke()
