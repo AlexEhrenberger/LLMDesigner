@@ -135,9 +135,9 @@ final class LibraryGit {
             var old: [String: Data] = [:]
             for path in deleted { old[path] = try? await repository.run(["show", "HEAD:\(path)"]).output }
             let root = self.root
-            let resolver = LibraryItemResolver { path in
+            let resolver = LibraryItemResolver(read: { path in
                 old[path] ?? (try? Data(contentsOf: root.appendingPathComponent(path)))
-            }
+            }, pictureOwners: pictureOwners())
             let groups = resolver.group(status.entries.map(\.path)).map { group in
                 GitChangeGroup(item: group.item, entries: status.entries.filter { group.paths.contains($0.path) })
             }
@@ -284,7 +284,7 @@ final class LibraryGit {
         scheduleRefresh()
         guard ownOperations == 0, changes.headChanged || !changes.paths.isEmpty, let app else { return }
         let root = self.root
-        let resolver = LibraryItemResolver { try? Data(contentsOf: root.appendingPathComponent($0)) }
+        let resolver = LibraryItemResolver(read: { try? Data(contentsOf: root.appendingPathComponent($0)) }, pictureOwners: pictureOwners())
         let items = Set(changes.paths.map(resolver.item(for:)))
         let pending = app.pendingSaveIDs()
         let touched = items.filter { $0.recordID.map(pending.contains) ?? false }
@@ -372,6 +372,20 @@ extension AppModel {
 }
 
 extension LibraryGit {
+    /// Which document uses each picture in `Documents/Bilder/` (path → document id), from the documents as the app
+    /// holds them. A picture several documents use belongs to the first.
+    func pictureOwners() -> [String: String] {
+        guard let app else { return [:] }
+        var owners: [String: String] = [:]
+        for document in app.documents {
+            for source in document.pictureSources where source.hasPrefix("Bilder/") {
+                let path = "Documents/" + source
+                if owners[path] == nil { owners[path] = document.id.uuidString }
+            }
+        }
+        return owners
+    }
+
     /// Where each kind keeps the file that names a record.
     static func mainPaths(for id: UUID) -> [String] {
         let id = id.uuidString

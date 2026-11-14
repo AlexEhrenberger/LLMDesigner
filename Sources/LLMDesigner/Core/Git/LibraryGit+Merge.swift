@@ -103,7 +103,8 @@ extension LibraryGit {
                 return result?.succeeded == true ? result?.output : nil
             }
             let base = await stage(1), ours = await stage(2), theirs = await stage(3)
-            let resolver = LibraryItemResolver { $0 == path ? (ours ?? theirs ?? base) : (try? Data(contentsOf: self.root.appendingPathComponent($0))) }
+            let resolver = LibraryItemResolver(read: { $0 == path ? (ours ?? theirs ?? base) : (try? Data(contentsOf: self.root.appendingPathComponent($0))) },
+                                               pictureOwners: pictureOwners())
             var file = GitConflictFile(path: path, item: resolver.item(for: path))
             if Self.isMergeableText(path) {
                 file.base = base.map { String(decoding: $0, as: UTF8.self) }

@@ -107,7 +107,14 @@ struct GitFormatTests {
         #expect(groups.count == 2)
         #expect(groups[0].item.kind == .document)
         #expect(groups[1].paths.count == 2)
-        #expect(resolver.item(for: "Documents/Bilder/plot.png").title == "plot.png (Dokument)")
+        // Pictures have names of their own: they belong to the document that uses them, or to one group.
+        let picture1 = "Documents/Bilder/\(UUID().uuidString).jpg", picture2 = "Documents/Bilder/\(UUID().uuidString).jpg"
+        #expect(resolver.item(for: picture1).title == "Bilder ohne Dokument")
+        #expect(resolver.group([picture1, picture2]).count == 1)
+        let owned = LibraryItemResolver(read: { files[$0].map { Data($0.utf8) } }, pictureOwners: [picture1: doc.uuidString])
+        let item = owned.item(for: picture1)
+        #expect(item.title == "Hausarbeit" && item.key == doc.uuidString)
+        #expect(owned.group(["Documents/\(doc.uuidString).md", picture1]).count == 1)
     }
 
     @Test func externalChangesAreSorted() {

@@ -99,14 +99,15 @@ extension LibraryGit {
     func changedItems(in commit: GitCommit) async throws -> [GitChangeGroup] {
         let paths = try await changedPaths(in: commit.id)
         var contents: [String: Data] = [:]
+        let owners = pictureOwners()
         for path in paths {
-            let main = LibraryItemResolver.place(of: path).mainPath ?? path
+            let main = owners[path].map { "Documents/\($0).md" } ?? LibraryItemResolver.place(of: path).mainPath ?? path
             if contents[main] == nil {
                 contents[main] = try await content(of: main, at: commit.id)
                 if contents[main] == nil, let parent = commit.parents.first { contents[main] = try await content(of: main, at: parent) }
             }
         }
-        let resolver = LibraryItemResolver { contents[$0] }
+        let resolver = LibraryItemResolver(read: { contents[$0] }, pictureOwners: owners)
         return resolver.group(paths).map { group in
             GitChangeGroup(item: group.item, entries: group.paths.map { GitStatus.Entry(path: $0, change: .modified, isStaged: true) })
         }

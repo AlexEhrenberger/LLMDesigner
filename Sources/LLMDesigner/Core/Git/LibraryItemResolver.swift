@@ -84,6 +84,10 @@ struct LibraryItem: Sendable, Hashable, Identifiable {
 struct LibraryItemResolver {
     /// The content of a file at the version in question.
     var read: (String) -> Data?
+    /// Pictures in `Documents/Bilder/` have names of their own; this says which document uses one (its id).
+    var pictureOwners: [String: String] = [:]
+
+    static let picturesKey = "Documents/Bilder"
 
     /// Where an item lives: kind, key and the file that names it.
     static func place(of path: String) -> (kind: LibraryItemKind, key: String, mainPath: String?) {
@@ -98,6 +102,8 @@ struct LibraryItemResolver {
         switch first {
         case "Documents":
             if parts.count == 2, let id = uuid(second) { return (.document, id, path) }
+            // Pictures are named on their own, not by the document; `item(for:)` finds their document.
+            if second == "Bilder" { return (.document, picturesKey, nil) }
             // Side files carry the document's id in their name, as the content analyses do.
             if let id = firstUUID(in: path) { return (.document, id, "Documents/\(id).md") }
             return (.document, "Documents/\(second ?? "")", nil)
@@ -145,7 +151,13 @@ struct LibraryItemResolver {
     }
 
     func item(for path: String) -> LibraryItem {
-        let place = Self.place(of: path)
+        var place = Self.place(of: path)
+        if place.key == Self.picturesKey {
+            guard let owner = pictureOwners[path] else {
+                return LibraryItem(kind: .document, key: Self.picturesKey, title: "Bilder ohne Dokument", mainPath: nil)
+            }
+            place = (.document, owner, "Documents/\(owner).md")
+        }
         var kind = place.kind
         var title: String?
         if let main = place.mainPath, let data = read(main) {

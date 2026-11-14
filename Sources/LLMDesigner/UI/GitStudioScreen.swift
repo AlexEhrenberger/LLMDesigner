@@ -11,6 +11,8 @@ final class GitStudioModel {
     var stashes: [GitStash] = []
     var selectedCommitID: String?
     var selectedItems: [GitChangeGroup] = []
+    /// The commit `selectedItems` belong to.
+    var itemsCommitID: String?
     var query = ""
     var isLoading = false
     var canLoadMore = false
@@ -85,7 +87,8 @@ struct GitStudioScreen: View {
         .background(Theme.background)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .task(id: git.status?.head ?? "") { await load(more: false) }
-        .onChange(of: model.selectedCommitID) { _, _ in Task { await loadSelection() } }
+        // A new selection cancels the loading of the previous one, so an older answer can't overwrite the list.
+        .task(id: model.selectedCommitID) { await loadSelection() }
         .sheet(item: $newBranch) { request in
             GitNameSheet(title: request.at == nil ? "Neuer Branch" : "Neuer Branch an diesem Commit", prompt: "Name, z. B. experiment",
                          action: "Anlegen und wechseln") { name in
@@ -249,8 +252,17 @@ struct GitStudioScreen: View {
     }
 
     private func loadSelection() async {
-        guard let commit = model.selectedCommit else { return model.selectedItems = [] }
-        model.selectedItems = (try? await app.git.changedItems(in: commit)) ?? []
+        guard let commit = model.selectedCommit else {
+            model.selectedItems = []
+            model.itemsCommitID = nil
+            return
+        }
+        // The list of the previous commit stays out of sight until this one's is there.
+        if model.itemsCommitID != commit.id { model.selectedItems = [] }
+        let items = (try? await app.git.changedItems(in: commit)) ?? []
+        guard !Task.isCancelled, model.selectedCommitID == commit.id else { return }
+        model.selectedItems = items
+        model.itemsCommitID = commit.id
     }
 
     private func run(_ label: String, _ body: () async throws -> Void) async {
@@ -564,6 +576,7 @@ private struct GitCommitDetail: View {
     let onTag: (String) -> Void
     let onRevert: (GitCommit) -> Void
     @State private var confirmsRevert = false
+    @State private var showsAll = false
 
     var body: some View {
         if let commit = model.selectedCommit {
@@ -603,11 +616,31 @@ private struct GitCommitDetail: View {
                     if !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, model.selectedItems.isEmpty {
                         Text(body).font(.system(size: 12)).foregroundStyle(Theme.textSecondary).textSelection(.enabled)
                     }
-                    Text("GEÄNDERT (\(model.selectedItems.count))")
-                        .font(.system(size: 10.5, weight: .semibold))
-                        .foregroundStyle(Theme.textTertiary)
-                        .padding(.top, 4)
-                    ForEach(model.selectedItems) { group in
+                    let isFirst = commit.parents.isEmpty
+                    let isLoaded = model.itemsCommitID == commit.id
+                    HStack {
+                        Text("\(isFirst ? "AUFGENOMMEN" : "GEÄNDERT") (\(isLoaded ? "\(model.selectedItems.count)" : "…"))")
+                            .font(.system(size: 10.5, weight: .semibold))
+                            .foregroundStyle(Theme.textTertiary)
+                        Spacer()
+                        if isFirst && isLoaded && !model.selectedItems.isEmpty {
+                            Button(showsAll ? "Ausblenden" : "Alle zeigen") { showsAll.toggle() }
+                                .buttonStyle(.plain)
+                                .font(.system(size: 11))
+                                .foregroundStyle(Theme.accent)
+                        }
+                    }
+                    .padding(.top, 4)
+                    if isFirst {
+                        Text("Der erste Commit nimmt alles auf, was es beim Einschalten von Git in der Bibliothek gab. Was sich danach ändert, zeigen die Commits darüber.")
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(Theme.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    if !isLoaded {
+                        ProgressView().controlSize(.small)
+                    }
+                    ForEach(isFirst && !showsAll ? [] : model.selectedItems) { group in
                         Button {
                             app.compare(CompareRequest(item: group.item, left: commit.parents.first.map { .commit($0) } ?? .commit("\(commit.id)^"),
                                                        right: .commit(commit.id), allowsTakingOver: false))
