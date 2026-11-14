@@ -67,6 +67,10 @@ flowchart LR
 | `Core/Math/`, `Core/Code/` | Formelbaum, Plots über Python, Code-Hervorhebung, Flussdiagramme |
 | `Core/Speech/` | Diktat, Vorlesen, Qwen TTS, Gesprächsmodus |
 | `Core/PowerText.swift`, `AppModel+Power.swift` | Power-Zugriff: Blöcke, Klartext, Änderungen mit Rückgängig |
+| `Core/Git/`, `AppModel+Git.swift` | Git je Bibliothek: `GitClient` (git als Prozess, feste Sicherheitsoptionen, Prüfung der Konfiguration), `GitStatus`, `GitSetup` (Einschalten, `.gitignore`, große Dateien), `LibraryItemResolver` (Pfad → Ding mit Titel), `LibraryWatcher` (FSEvents, Änderungen von außen), `LibraryGit+Operations/+Merge/+Branches`, `GitGraph` (Spuren des Baums) |
+| `Core/Compare/` | Vergleichen: `TextDiff` (Blöcke, Wörter, Verschiebungen), `Comparison` (Dokument, Folien, JSON-Einträge, Bilder), `CompareSession` (Laden beider Seiten, Übernehmen), Fassungen |
+| `Sources/LibraryMerge/` | Zusammenführen nach Bausteinen ohne AppKit, für App und `llmd git merge-file` (Merge-Treiber): `Diff3`, `MergeText` (Blöcke, Kopf, Folien), `LibraryMerge` |
+| `UI/Power/PowerGit.swift`, `UI/GitViews.swift`, `UI/CompareView.swift`, `UI/MergeView.swift`, `UI/GitStudioScreen.swift` | Git im Power-Zugriff, Statuszeile und Hinweisleiste, Vergleichsansicht, Konfliktansicht, Git Studio |
 | `Actions/` | Action-Schicht: `ActionRegistry`, `ActionPolicy`, `ActionServer`, Adressen, Herkunft, je Studio ein Ordner; siehe [Action-Schicht](actions.md) |
 | `Sources/LLMDProtocol/` | Protokoll zwischen App und `llmd`: JSON-Werte, Schemas, Descriptoren, Nachrichten |
 | `Sources/llmd/` | Terminal-Werkzeug und MCP-Adapter (`MCP/`) |

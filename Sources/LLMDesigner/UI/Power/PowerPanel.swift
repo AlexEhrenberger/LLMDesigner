@@ -53,6 +53,7 @@ struct PowerPanel: View {
                 case .learning: PowerLearning()
                 case .skills: PowerSkills()
                 case .personas: PowerPersonas()
+                case .git: PowerGit()
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -80,7 +81,7 @@ struct PowerPanel: View {
             case .data: return "Im Datenblock suchen"
             case .research: return "In der Recherche suchen"
             case .learning: return "Karten suchen"
-            case .skills, .personas: return "Durchsuchen"
+            case .skills, .personas, .git: return "Durchsuchen"
             case .presenter: return "In den Folien suchen"
             default: return "Im Text suchen"
             }
@@ -99,6 +100,7 @@ struct PowerPanel: View {
         case .learning: return "Kurse und Karten durchsuchen"
         case .skills: return "Skills durchsuchen"
         case .personas: return "Personas durchsuchen"
+        case .git: return "Änderungen filtern"
         }
     }
 }

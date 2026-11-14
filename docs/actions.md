@@ -145,6 +145,28 @@ llmd learning card addMany --course "Statistik 2" --text "Was ist Varianz? ; Mit
 llmd learning pause --until 2026-12-28 --reason Urlaub
 ```
 
+## Git
+
+Ist Git für die Bibliothek eingeschaltet (Power-Zugriff → Git oder `llmd git enable`), nennen alle Git-Actions Dinge mit Titel statt Pfad. `git.commit` nimmt alles oder nur die genannten Dinge, `git.restore` committet vorher den jetzigen Stand. `git.push` wirkt nach außen und fragt deshalb immer nach; den Remote setzt nur die Oberfläche, nie ein Agent. Git läuft ohne Hooks und prüft die Konfiguration der Bibliothek, bevor es etwas tut. Konzept: [Git-Modul](plan/Git-Modul.md).
+
+```bash
+llmd git status
+llmd git commit --message "Kapitel 3 überarbeitet" --items Hausarbeit
+llmd git log --item Hausarbeit --limit 10
+llmd git restore --item Hausarbeit --commit HEAD~2
+llmd git push
+llmd git flush        # schreibt Ausstehendes, z. B. vor einem Commit im Terminal
+llmd git branch create --name experiment
+llmd git branch switch --name main
+llmd git merge --branch experiment
+llmd git conflicts
+llmd git conflict resolve --path Documents/….md --choice theirs
+llmd git merge finish
+llmd git tag --name Abgabe-Hausarbeit
+```
+
+`git.merge` führt nach Absätzen, Folien und Einträgen zusammen; Konflikte warten, bis jemand sie löst, und jede Datei bleibt dabei lesbar (keine `<<<<<<<`). Für `git merge` im Terminal trägt die App `llmd git merge-file` als Merge-Treiber in `.git/config` ein.
+
 ## MCP
 
 `llmd mcp` ist ein stdio-Server nach Spezifikation 2026-07-28 und versteht auch das ältere `initialize`.

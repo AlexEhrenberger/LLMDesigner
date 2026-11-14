@@ -109,6 +109,10 @@ Writer erweitert Markdown Pandoc-kompatibel:
 | Inhaltsverzeichnis | `[TOC]` oder `[TOC]{.dynamic}` |
 | Seitenumbruch | `\newpage` |
 
+### Fassungen
+
+Eine Fassung ist ein eigenes Dokument mit `fassungVon: <id>` im Kopf: der ID der Hauptfassung, aus der sie entstand (auch bei einer Fassung einer Fassung). Fehlt das Feld, ist das Dokument eine Hauptfassung. Fassungen lassen sich mit der Hauptfassung vergleichen und Absatz für Absatz in sie übernehmen.
+
 ### Herkunft
 
 Der Kopf eines Dokuments kann `herkunft: fremd` oder `herkunft: intern` tragen. Fehlt das Feld, gilt der Text als eigener; so bleiben alle älteren Dokumente, wie sie sind. Skills haben dasselbe als optionales Feld `provenance`. Chats speichern ihre zugeschalteten Werkzeuggruppen in `actionGroups` und die Freigabestufe in `actionApproval`. In den Einstellungen der Bibliothek liegen `actionApprovalLevels` und `actionExportFolder`. Siehe [Action-Schicht](actions.md).
@@ -449,3 +453,7 @@ Ein **Kurs** liegt in `Lernen/<id>/kurs.json` (`{"format": 1, "kurs": {…}}`), 
 | `verknuepft`, `projekte` | Verweise wie bei Projekten (`chat`, `dokument`, `note`, `romanwelt`) und Projekt-IDs |
 | `abfragen` | `{id, datum, material, fragen: [{frage, antwort, bewertung (richtig/teilweise/falsch), rueckmeldung, loesung}]}` |
 | `abgeschlossen` | Kurs abgeschlossen (trägt Früchte am Baum) |
+
+## Git
+
+Ist Git eingeschaltet, ist die Bibliothek selbst das Repository (`.git/` im Paket). Die App legt `.gitignore` und `.gitattributes` an; beide darf man ändern. Nicht versioniert werden `Einstellungen.plist` (enthält API-Schlüssel), `Chats/`, `ChatFolders.json`, `Attachments/`, `Personas/`, `SidebarStacks.json`, `llmd.token`/`llmd.sock`, `Podcasts/*/Schnipsel/`, die Schnappschüsse von Aufträgen und Dateien über 50 MB (die App trägt sie unter einer eigenen Überschrift in `.gitignore` ein). Commits der App haben unter dem Betreff eine Zeile je Ding (`- Dokument „Hausarbeit“: 2 Absätze geändert`); Commits von Agenten zusätzlich die Trailer `Auftrag:` und `Schritt:`. Ein optionaler `pre-commit`-Hook ruft `llmd git flush` auf; die App selbst ruft Git immer ohne Hooks auf. In `.git/config` steht der Merge-Treiber der App (`merge.llmd.driver = "…/Contents/Helpers/llmd" git merge-file %O %A %B %P`), den `.gitattributes` für `Documents/*.md` und `*.json` nennt; fehlt er (Klon auf einem anderen Mac), führt Git zeilenweise zusammen, und die App repariert Dateien mit Konfliktmarken beim nächsten Lesen. Den Wert schreibt die App bei jedem Start selbst; andere Programme startende Einstellungen in `.git/config` lehnt sie ab.

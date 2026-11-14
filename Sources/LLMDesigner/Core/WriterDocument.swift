@@ -19,6 +19,8 @@ struct WriterDocument: Identifiable, Hashable, Sendable {
     /// The lines at the top and bottom of the printed pages; nil: the page number in the middle of the foot.
     var runningHeads: WriterRunningHeads?
     var markdown = ""
+    /// Set on a "Fassung": the document it was made from, to compare with and take changes back into.
+    var variantOf: UUID?
     /// How the contents panel lists the document; nil: by its headings if it has any, else dynamically.
     var tocMode: WriterTOCMode?
     /// The model's table of contents (dynamic mode).
@@ -144,6 +146,8 @@ struct WriterDocumentStore {
     /// Throws when the file can't be written (a full or read-only disk, a library on a drive that went away): the
     /// app has to say so, or the person goes on writing into nothing.
     func save(_ document: WriterDocument) throws {
+        // Git removes the folder when its last file goes (a branch without documents); it comes back here.
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try Self.encode(document).write(to: url(for: document.id), atomically: true, encoding: .utf8)
     }
 
@@ -175,6 +179,7 @@ struct WriterDocumentStore {
             if let master = deck.masterID { header.append("master: \(master.uuidString)") }
         }
         if let origin = document.provenance, origin != .own { header.append("herkunft: \(origin.rawValue)") }
+        if let original = document.variantOf { header.append("fassungVon: \(original.uuidString)") }
         if let mode = document.tocMode { header.append("toc: \(mode.rawValue)") }
         if document.pageFormat != .standard { header.append("format: \(document.pageFormat.rawValue)") }
         if let setup = document.pageSetup, let json = jsonLine(setup) { header.append("page: \(json)") }
@@ -222,6 +227,7 @@ struct WriterDocumentStore {
                 case "kind": isPresentation = value == "presentation"
                 case "backgrounds": backgrounds = PresentationDeck.backgrounds(from: value)
                 case "master": masterID = UUID(uuidString: value)
+                case "fassungVon": document.variantOf = UUID(uuidString: value)
                 default: break
                 }
             }

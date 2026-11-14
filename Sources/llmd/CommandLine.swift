@@ -59,6 +59,10 @@ enum LLMDCommandLine {
     }
 
     static func main(arguments: [String]) async -> Int32 {
+        // git's merge driver works on files only and must not need the app (a merge in the Terminal, a clone).
+        if arguments.count >= 2, arguments[0] == "git", arguments[1] == "merge-file" {
+            return MergeDriver.run(Array(arguments.dropFirst(2)))
+        }
         do {
             let globals = try parseGlobals(arguments)
             return try await execute(globals)

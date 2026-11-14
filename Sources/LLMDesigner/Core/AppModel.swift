@@ -509,6 +509,29 @@ final class AppModel {
     var runningPodcastID: UUID?
     @ObservationIgnored var podcastStarts: [UUID: PodcastStart] = [:]
     @ObservationIgnored var podcastTask: Task<Void, Never>?
+
+    // MARK: Git (see AppModel+Git.swift)
+
+    /// Git for this library; off until the person turns it on.
+    let git = LibraryGit(root: AppLibrary.current.url)
+    /// Set by the session: reads the same library anew, as a library switch does.
+    @ObservationIgnored var onLibraryReload: (() -> Void)?
+    /// Records whose pending changes must not be written when the model closes: the version on disk won.
+    @ObservationIgnored var discardOnClose: Set<UUID> = []
+    /// Two versions shown side by side (see `CompareView`).
+    var compareRequest: CompareRequest?
+    /// The conflict view of a merge in progress (see `MergeView`).
+    var mergeViewOpen = false
+    /// Git Studio is shown in the main area.
+    var gitStudioOpen = false
+
+    /// What runs now and would stop if the library reloaded; nil when nothing does.
+    var runningWorkDescription: String? {
+        if !generationTasks.isEmpty || !streamingMessageIDs.isEmpty { return "Eine Antwort" }
+        if podcastTask != nil { return "Ein Podcast" }
+        if research.records.records.contains(where: { $0.phase.isRunning }) { return "Eine Recherche" }
+        return nil
+    }
     /// The voices of the Qwen TTS service.
     var podcastVoices: [QwenTTSClient.Voice] = QwenTTSClient.fallbackVoices
     @ObservationIgnored var podcastVoicesLoaded = false
@@ -705,6 +728,8 @@ final class AppModel {
         notes.loadIfNeeded()
         // Podcasts are entries of the sidebar.
         podcasts.loadIfNeeded()
+        git.app = self
+        git.start()
     }
 
     // MARK: Closing
@@ -712,6 +737,7 @@ final class AppModel {
     /// Before another library opens: writes what is still waiting to be saved and stops everything that runs
     /// (answers, outlines, memory work, voice, polling), so nothing of this library goes on in the next one.
     func close() async {
+        if !discardOnClose.isEmpty { discardPendingSaves(discardOnClose) }
         if conversation != nil { endConversation() }
         if isDictating { await stopDictation() }
         stopReadingDocument()
@@ -727,6 +753,9 @@ final class AppModel {
         podcastPlayer.stop()
         stopAllPodcasts()
         writerFlush?()
+        // The person chose the version git wrote; what the editor still held must not overwrite it.
+        if !discardOnClose.isEmpty { discardPendingSaves(discardOnClose) }
+        git.stop()
         if skillSaveTask != nil { saveSkillLibrary() }
         savePendingPersonas()
         savePendingDocuments()
