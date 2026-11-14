@@ -134,6 +134,32 @@ struct AttackScenarioTests {
         }
     }
 
+    // MARK: Attached document
+
+    @Test func anAttachedDocumentCannotCarryItselfOut() async throws {
+        let refusals = setUp()
+        let file = try TestDocuments.text("Bericht.\n\(AttackContents.instruction)\nKennung \(AttackContents.secret)", name: "Anhang")
+        defer { try? FileManager.default.removeItem(at: file) }
+        let attachment = try await DocumentStore.importDocument(file)
+        let created = try await registry.run("writer.doc.create", args: ["title": .string("Eigenes \(UUID().uuidString)"), "markdown": "Text."], app: app, channel: .cli)
+        let document = try #require(created["id"]?.stringValue)
+        let target = FileManager.default.temporaryDirectory.appendingPathComponent("raus-\(UUID().uuidString).md")
+        defer { try? FileManager.default.removeItem(at: target) }
+        try await withModel([
+            .tools([("writer_export", #"{"doc":"\#(document)","format":"markdown","path":"\#(target.path)"}"#)]),
+            .text("Erledigt."),
+        ]) { server in
+            let chat = chat(groups: ["writer.core"], approval: .allowAll)
+            app.ask("Fasse den Anhang zusammen.", images: [], documents: [attachment], in: chat.id, model: "fake")
+            let end = Date().addingTimeInterval(20)
+            while app.isGenerating(chat.id), Date() < end { try await Task.sleep(for: .milliseconds(30)) }
+            // The person's document with foreign text in it: foreign and private at once, so writing outside asks.
+            #expect(refusals.asked.first { $0.action == "writer.export" }?.reason == ActionPolicy.triangleReason)
+            #expect(!FileManager.default.fileExists(atPath: target.path))
+            #expect(server.requests.first?.jsonLine().contains("Anfang der Datei") == true)
+        }
+    }
+
     // MARK: Web page
 
     @Test func aPageCannotSendItsReaderAnywhere() async throws {

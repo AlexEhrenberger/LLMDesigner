@@ -522,6 +522,7 @@ struct ChatDraftGetAction: LLMDAction {
     struct Output: Encodable, Sendable {
         var text: String
         var images: [String]
+        var documents: [String]
     }
     static let descriptor = ActionDescriptor(
         id: "chat.draft.get", summary: "Liest das Eingabefeld eines Chats", kind: .read, security: .plainRead,
@@ -529,7 +530,8 @@ struct ChatDraftGetAction: LLMDAction {
     )
     static func run(_ args: Args, context: ActionContext) async throws -> Output {
         let id = try context.app.actionChat(args.chat).id
-        return Output(text: context.app.draftText(of: id), images: context.app.draftImages(of: id).map(\.id.uuidString))
+        return Output(text: context.app.draftText(of: id), images: context.app.draftImages(of: id).map(\.id.uuidString),
+                      documents: context.app.draftDocuments(of: id).map(\.id.uuidString))
     }
 }
 

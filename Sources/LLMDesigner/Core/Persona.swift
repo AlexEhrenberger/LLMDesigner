@@ -350,7 +350,7 @@ enum DocumentText {
     }
 
     /// Unifies line breaks and drops runs of empty lines.
-    private static func tidy(_ text: String) -> String {
+    static func tidy(_ text: String) -> String {
         let lines = text
             .replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "\r", with: "\n")

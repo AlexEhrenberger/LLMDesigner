@@ -41,12 +41,15 @@ struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
     var toolSteps: [ToolStep]?
     /// Pictures the user attached to a question.
     var images: [ImageAttachment]?
+    /// Documents (PDF, Word, text …) the user attached to a question; their text goes to the model with it.
+    var documents: [DocumentAttachment]?
     /// How the strong memory sorted the question before this answer, and what the persona remembered.
     var thalamus: ThalamusTrace?
 
     var hasImages: Bool { !(images ?? []).isEmpty }
+    var hasDocuments: Bool { !(documents ?? []).isEmpty }
     /// Whether the message has anything to show or send.
-    var hasContent: Bool { !content.isEmpty || hasImages }
+    var hasContent: Bool { !content.isEmpty || hasImages || hasDocuments }
 }
 
 /// A picture attached to a message. The file lives in the attachments folder (`AttachmentStore`),
@@ -56,6 +59,42 @@ struct ImageAttachment: Identifiable, Codable, Hashable, Sendable {
     var fileName: String
     var width: Int
     var height: Int
+}
+
+/// A document attached to a message. The original, its text and the cut-out figures live in the attachments folder
+/// (`DocumentStore`); the text is read once on import, so the chat never needs the original again.
+struct DocumentAttachment: Identifiable, Codable, Hashable, Sendable {
+    var id = UUID()
+    /// The file name the user attached.
+    var name: String
+    /// The copy of the original in the attachments folder.
+    var fileName: String
+    /// The text with page marks (`[Seite 3]`), as the model reads it.
+    var textFileName: String
+    var pageCount: Int?
+    var characterCount: Int
+    /// Pages without a text layer whose text was recognised on the picture of the page.
+    var recognizedPages: [Int]?
+    var figures: [DocumentFigure]?
+
+    var isPDF: Bool { (name as NSString).pathExtension.lowercased() == "pdf" }
+}
+
+/// A figure found on a page of a PDF: a picture or a drawing, cut out as JPEG.
+struct DocumentFigure: Identifiable, Codable, Hashable, Sendable {
+    var id = UUID()
+    /// Counted through the document, from 1.
+    var number: Int
+    var page: Int
+    /// The caption line under or over it ("Abb. 3: …"), if there is one.
+    var caption: String?
+    var imageFileName: String
+    var width: Int
+    var height: Int
+    /// What a model saw in the picture; written once, then sent as text.
+    var description: String?
+    /// The model that wrote `description`.
+    var describedBy: String?
 }
 
 /// A web lookup the model made while answering: a search or a page it read.

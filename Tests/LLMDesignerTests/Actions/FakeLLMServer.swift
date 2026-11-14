@@ -31,6 +31,8 @@ final class FakeLLMServer: @unchecked Sendable {
     private(set) var rawCompletions: [String] = []
     /// What streamed answers report after their last chunk, as Kapitsa does (`usage` with `prompt_tokens_details`).
     var usage: JSONValue?
+    /// "vlm" makes the model one that reads pictures (describing a document's figures).
+    var modelType = "llm"
     /// The texts sent to `/v1/audio/speech`, as Qwen TTS gets them; each is answered with a short tone as WAV.
     private(set) var spoken: [JSONValue] = []
 
@@ -114,7 +116,8 @@ final class FakeLLMServer: @unchecked Sendable {
         } else if path.contains("models/load") {
             reply = ("application/json", "{}")
         } else if path.contains("models") {
-            reply = ("application/json", #"{"data":[{"id":"fake","object":"model","type":"llm","state":"loaded","loaded_context_length":16384,"max_context_length":32768,"capabilities":["tool_use"]}]}"#)
+            let type = lock.withLock { modelType }
+            reply = ("application/json", #"{"data":[{"id":"fake","object":"model","type":"\#(type)","state":"loaded","loaded_context_length":16384,"max_context_length":32768,"capabilities":["tool_use"]}]}"#)
         } else {
             let request = (try? JSONDecoder().decode(JSONValue.self, from: body)) ?? .null
             if request["stream"] == true {

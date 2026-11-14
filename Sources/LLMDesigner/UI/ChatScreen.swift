@@ -72,15 +72,21 @@ struct ChatScreen: View {
         }
     }
 
-    /// Pictures dropped anywhere on the chat go into the composer.
+    /// Pictures and documents dropped anywhere on the chat go into the composer.
     private func dropImages(_ providers: [NSItemProvider]) -> Bool {
         guard !providers.isEmpty else { return false }
         Task {
             var sources: [AttachmentStore.Source] = []
+            var files: [URL] = []
             for provider in providers {
-                if let source = await Self.source(from: provider) { sources.append(source) }
+                switch await Self.source(from: provider) {
+                case .file(let url): files.append(url)
+                case .data(let data): sources.append(.data(data))
+                case nil: break
+                }
             }
             if !sources.isEmpty { app.attachImages(sources) }
+            if !files.isEmpty { app.attach(files: files) }
         }
         return true
     }

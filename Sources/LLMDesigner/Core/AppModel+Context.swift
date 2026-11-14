@@ -113,7 +113,7 @@ extension AppModel {
         var tools = 0
         if model?.acceptsTools ?? false {
             let sources = lookupSources(of: chat)
-            let fileTools = persona.flatMap(PersonaFileTools.init(persona:))
+            let fileTools = PersonaFileTools(persona: persona, documents: shortenedDocuments(of: chat))
             let actionTools = actionRegistry.flatMap { ChatActionTools(registry: $0, chat: chat) }
             let definitions = WebTools.definitions(for: sources) + (fileTools?.definitions ?? []) + (actionTools?.definitions ?? [])
             // JSON splits into more tokens than prose.
@@ -125,7 +125,7 @@ extension AppModel {
 
         // Each message also costs a few tokens of chat-template markup.
         func cost(of message: ChatMessage) -> (text: Int, images: Int) {
-            (tokens(WebTools.historyContent(of: message)) + 4, (message.images?.count ?? 0) * Self.tokensPerImage)
+            (tokens(modelContent(of: message, in: chat, toolsAvailable: model?.acceptsTools ?? false)) + 4, (message.images?.count ?? 0) * Self.tokensPerImage)
         }
         let messages = chat.messages.filter { $0.error == nil && $0.hasContent }
         var questions = 0, answers = 0, images = 0, imageCount = 0

@@ -24,7 +24,7 @@ flowchart LR
     D --> BI["Bilder/<br/>Bilder, Plots, Zeichnungen, Diagramme"]
     D --> IA["Inhaltsanalysen/"]
     L --> PE["Personas/‹id›/<br/>persona.json, Bild, files/, thalamus.json"]
-    L --> AT["Attachments/<br/>Bilder aus Chats"]
+    L --> AT["Attachments/<br/>Bilder und Dokumente aus Chats"]
     L --> Z["Zitate/"]
     Z --> ZQ["Quellen/‹id›.json<br/>Quelle mit Zitaten"]
     Z --> ZA["Anhänge/‹id›/"]
@@ -45,6 +45,28 @@ flowchart LR
 `ChatFolders.json` ist eine Liste von Ordnern (`id`, `name`, `color`, `isCollapsed`). Ein Unterordner hat `parentID`, die ID eines Ordners der obersten Ebene; tiefer geht es nicht. Fehlt der Eltern-Ordner, steht der Unterordner oben.
 
 `SidebarStacks.json` gehört zum automatischen Stapeln (Einstellung `sidebarArrangement` = `date` oder `stacks`, `sidebarStackMode` = `topics`, `types` oder `relevance`): `topics` sind die Themenstapel des Modells (`id`, `name`, `itemIDs`), `tidiedAt` das letzte Aufräumen, `expanded` die offenen Stapel, `activity` je Chat oder Dokument die Tage (`yyyy-MM-dd`), an denen es geöffnet wurde, höchstens 60 Tage zurück. Inhalte stehen darin nicht.
+
+### Anhänge in Chats
+
+`Attachments/` enthält die Bilder der Chats (`‹uuid›.jpg`, höchstens 1600 px) und die angehängten Dokumente. Eine Nachricht nennt sie in `images` und `documents` (beide optional; alte Chats bleiben lesbar). Zu einem Dokument gehören drei Arten von Dateien:
+
+| Datei | Inhalt |
+|---|---|
+| `‹uuid›.pdf` (bzw. `.docx`, `.txt` …) | die Kopie des Originals |
+| `‹uuid›.txt` | der Text, den das Modell liest: je Seite eine Marke `[Seite n]`, Scans per Texterkennung (Vision, Deutsch und Englisch) |
+| `‹uuid›-abb‹n›.jpg` | die Abbildungen eines PDFs, ausgeschnitten mit ca. 180 dpi, höchstens 1600 px |
+
+```json
+"documents": [{
+  "id": "…", "name": "Bericht.pdf", "fileName": "‹uuid›.pdf", "textFileName": "‹uuid›.txt",
+  "pageCount": 12, "characterCount": 31450, "recognizedPages": [11, 12],
+  "figures": [{ "id": "…", "number": 1, "page": 3, "caption": "Abb. 1: Umsatz 2020–2024",
+                "imageFileName": "‹uuid›-abb1.jpg", "width": 1240, "height": 820,
+                "description": "Balkendiagramm …", "describedBy": "qwen3.5-9b" }]
+}]
+```
+
+Platzhalter (`[Abbildung 1, Seite 3: „…“]`) und Beschreibungen stehen nicht in der Textdatei, sondern werden beim Senden an die Bildunterschrift gesetzt; so lassen sich Abbildungen später beschreiben, ohne den Text neu zu lesen. Dateien, die kein Chat und kein Entwurf mehr nennt, räumt die App nach 15 Minuten weg.
 
 Außerhalb der Bibliotheken merkt sich die App nur die Liste der zuletzt geöffneten Bibliotheken (Pfad + Bookmark) in ihren Voreinstellungen.
 

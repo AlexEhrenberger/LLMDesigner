@@ -125,3 +125,19 @@ enum ImagePasteboard {
         return [.data(data)]
     }
 }
+
+/// Finds documents (PDF, Word, text files) on a pasteboard; pictures stay with `ImagePasteboard`.
+@MainActor
+enum DocumentPasteboard {
+    private static let options: [NSPasteboard.ReadingOptionKey: Any] = [.urlReadingFileURLsOnly: true]
+
+    static func containsDocuments(_ pasteboard: NSPasteboard) -> Bool {
+        documents(on: pasteboard) != nil
+    }
+
+    static func documents(on pasteboard: NSPasteboard) -> [URL]? {
+        guard let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: options) as? [URL] else { return nil }
+        let documents = urls.filter(DocumentStore.accepts)
+        return documents.isEmpty ? nil : documents
+    }
+}
