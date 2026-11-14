@@ -15,7 +15,7 @@ struct PodcastStudioScreen: View {
                 PodcastOverview()
             }
         }
-        .background(Theme.background)
+        .background(Theme.canvas)
         .onAppear {
             app.podcasts.loadIfNeeded()
             app.loadPodcastVoices()

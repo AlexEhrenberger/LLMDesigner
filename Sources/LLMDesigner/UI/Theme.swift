@@ -3,7 +3,12 @@ import SwiftUI
 /// The app's colours. Each has a dark and a light value and follows the appearance chosen in the settings
 /// (`AppAppearance`); SwiftUI views and AppKit views (through `NSColor(Theme.…)`) both resolve the right one.
 enum Theme {
+    /// Opaque: text on accent buttons, cut-outs, editors. Screens use `canvas` instead.
     static let background = dynamic(dark: 0x0C0C0E, light: 0xFFFFFF)
+    /// A screen over the window's glass (`WindowGlass`): tinted so text stays readable, the desktop shows through.
+    static let canvas = dynamic(dark: NSColor(hex: 0x0C0C0E).withAlphaComponent(0.3), light: NSColor.white.withAlphaComponent(0.1))
+    /// A side panel's tint over its glass (`glassPanel()`): lighter than a screen, like the sidebar in Finder.
+    static let panel = dynamic(dark: NSColor(hex: 0x08080A).withAlphaComponent(0.08), light: NSColor(hex: 0xF5F5F7).withAlphaComponent(0))
     static let sidebar = dynamic(dark: 0x08080A, light: 0xF5F5F7)
     static let surface = dynamic(dark: 0x161619, light: 0xF3F3F5)
     static let elevated = dynamic(dark: 0x1E1E22, light: 0xFFFFFF)
@@ -12,8 +17,6 @@ enum Theme {
     static let codeHeader = dynamic(dark: 0x18181B, light: 0xEEEEF1)
     /// A sunken field for previews and canvases.
     static let well = dynamic(dark: 0x141417, light: 0xF0F0F3)
-    /// Around Writer Studio's sheet: the app's background in the dark theme, a soft grey desk in the light one.
-    static let desk = dynamic(dark: 0x0C0C0E, light: 0xEDEDF0)
 
     /// White in the dark theme, black in the light one: the subtle fills and lines are mixed from it.
     static let ink = dynamic(dark: .white, light: .black)

@@ -33,7 +33,7 @@ struct PersonaLibraryScreen: View {
                 PersonaLibraryIntro()
             }
         }
-        .background(Theme.background)
+        .background(Theme.canvas)
     }
 }
 

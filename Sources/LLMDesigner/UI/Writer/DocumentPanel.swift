@@ -88,7 +88,7 @@ struct DocumentPanel: View {
                 footer(outline, isGenerating: isGenerating)
             }
         }
-        .background(Theme.sidebar)
+        .glassPanel()
         .overlay(alignment: .leading) {
             Rectangle().fill(Theme.border).frame(width: 1)
         }

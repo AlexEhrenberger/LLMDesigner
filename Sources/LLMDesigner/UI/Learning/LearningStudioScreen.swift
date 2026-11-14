@@ -73,7 +73,7 @@ struct LearningStudioScreen: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .background(Theme.background)
+        .background(Theme.canvas)
         .onAppear {
             library.loadIfNeeded()
             take(app.learningStudioCommand)

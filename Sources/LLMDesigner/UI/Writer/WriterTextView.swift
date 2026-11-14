@@ -9,6 +9,9 @@ extension NSPasteboard.PasteboardType {
 /// The editor of Writer Studio: a sheet in the middle of the window, text with Markdown meaning underneath.
 /// Formatting commands change only the meaning attributes; `WriterStyler` derives the look after every edit.
 final class WriterTextView: NSTextView {
+    /// The desk around the sheet is clear (glass shows through); an opaque layer would turn it black.
+    override var isOpaque: Bool { false }
+
     var family: WriterFont = .serif
     var palette: WriterPalette = .dark {
         didSet { applyPalette() }

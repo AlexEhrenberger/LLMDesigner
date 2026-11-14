@@ -32,7 +32,7 @@ struct SkillLibraryScreen: View {
                 SkillLibraryIntro()
             }
         }
-        .background(Theme.background)
+        .background(Theme.canvas)
     }
 }
 

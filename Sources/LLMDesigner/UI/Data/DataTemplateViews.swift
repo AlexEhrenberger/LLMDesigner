@@ -12,7 +12,6 @@ struct DataTemplatesTab: View {
         HStack(spacing: 0) {
             TemplateList(model: model)
                 .frame(width: 270)
-            Rectangle().fill(Theme.border).frame(width: 1)
             Group {
                 if let id = model.templateID, let template = studio.template(id) {
                     if template.kind == .writer {
@@ -76,7 +75,7 @@ private struct TemplateList: View {
                 .padding(.bottom, 12)
             }
         }
-        .background(Theme.sidebar.opacity(0.5))
+        .glassColumn()
     }
 }
 

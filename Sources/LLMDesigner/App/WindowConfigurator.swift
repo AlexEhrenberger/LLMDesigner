@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// Lets content run under the transparent title bar and paints the window background black.
+/// Lets content run under the transparent title bar and makes the window clear for its glass background.
 /// No NSToolbar on purpose: with one, AppKit swallows clicks on SwiftUI controls in the
 /// title bar area that appear after launch (e.g. the top bar buttons once the sidebar is hidden).
 struct WindowConfigurator: NSViewRepresentable {
@@ -26,7 +26,9 @@ struct WindowConfigurator: NSViewRepresentable {
             window.titlebarAppearsTransparent = true
             window.titleVisibility = .hidden
             window.titlebarSeparatorStyle = .none
-            window.backgroundColor = NSColor(Theme.background)
+            // Clear, so the glass (`WindowGlass`) shows the desktop behind the window.
+            window.isOpaque = false
+            window.backgroundColor = .clear
             MainWindow.window = window
         }
     }

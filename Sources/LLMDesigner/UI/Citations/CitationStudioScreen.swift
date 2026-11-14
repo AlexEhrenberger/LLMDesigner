@@ -190,7 +190,6 @@ struct CitationStudioScreen: View {
             HStack(spacing: 0) {
                 CitationSourceList(model: model, library: library)
                     .frame(width: 320)
-                Rectangle().fill(Theme.border).frame(width: 1)
                 Group {
                     switch model.mode {
                     case .sources:
@@ -207,7 +206,7 @@ struct CitationStudioScreen: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .background(Theme.background)
+        .background(Theme.canvas)
         .animation(.easeInOut(duration: 0.2), value: model.pendingImport != nil)
         .sheet(isPresented: $model.showsQuickAdd) {
             QuickQuoteSheet(library: library, preselected: model.selectedSourceID) { sourceID in

@@ -66,7 +66,7 @@ struct PresenterScreen: View {
                     }
                 }
             }
-            .background(Theme.background)
+            .background(Theme.canvas)
             .onAppear {
                 app.presentationPlayer.app = app
                 controller.find.isPresentation = true

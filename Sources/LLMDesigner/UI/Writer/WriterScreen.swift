@@ -42,7 +42,7 @@ struct WriterScreen: View {
                     }
                 }
             }
-            .background(Theme.background)
+            .background(Theme.canvas)
             .background {
                 // ⌃F opens the find bar as well as ⌘F (the menu).
                 Button("") { app.findInDocument(.show) }

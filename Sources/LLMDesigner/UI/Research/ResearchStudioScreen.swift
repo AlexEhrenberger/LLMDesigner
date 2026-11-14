@@ -37,7 +37,6 @@ struct ResearchStudioScreen: View {
                 HStack(spacing: 0) {
                     ResearchList(model: model)
                         .frame(width: 270)
-                    Rectangle().fill(Theme.border).frame(width: 1)
                     Group {
                         if let id = model.selectedID, library.research(id) != nil {
                             ResearchPage(researchID: id, model: model).id(id)
@@ -50,7 +49,7 @@ struct ResearchStudioScreen: View {
                 }
             }
         }
-        .background(Theme.background)
+        .background(Theme.canvas)
         .onAppear {
             library.loadIfNeeded()
             if model.selectedID == nil { model.selectedID = library.records.records.first?.id }
@@ -104,7 +103,7 @@ private struct ResearchList: View {
                 .padding(.bottom, 12)
             }
         }
-        .background(Theme.sidebar.opacity(0.5))
+        .glassColumn()
     }
 
     private func symbol(_ item: Research) -> String {

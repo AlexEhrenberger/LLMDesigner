@@ -57,7 +57,8 @@ struct MiniChatView: View {
             MiniChatComposer()
         }
         .frame(minWidth: MiniChatWindow.minSize.width, minHeight: MiniChatWindow.minSize.height)
-        .background(Theme.background)
+        .background(Theme.canvas)
+        .background(WindowGlass())
         .ignoresSafeArea()
         .background(MiniChatWindowConfigurator(floats: mini.floats) { mini.isKey = $0 })
         .tint(Theme.accent)
@@ -248,12 +249,6 @@ private struct MiniChatComposer: View {
         .padding(.horizontal, 10)
         .padding(.bottom, 10)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
-        .background(alignment: .top) {
-            LinearGradient(colors: [Theme.background.opacity(0), Theme.background], startPoint: .top, endPoint: .bottom)
-                .frame(height: 20)
-                .offset(y: -20)
-                .allowsHitTesting(false)
-        }
         .animation(.easeOut(duration: 0.15), value: mini.notice)
     }
 
@@ -390,7 +385,8 @@ private struct MiniChatWindowConfigurator: NSViewRepresentable {
             window.titlebarAppearsTransparent = true
             window.titleVisibility = .hidden
             window.titlebarSeparatorStyle = .none
-            window.backgroundColor = NSColor(Theme.background)
+            window.isOpaque = false
+            window.backgroundColor = .clear
             // Can stand beside a main window in full screen.
             window.collectionBehavior.insert(.fullScreenAuxiliary)
             MiniChatWindow.window = window

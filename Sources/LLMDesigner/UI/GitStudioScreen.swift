@@ -71,7 +71,6 @@ struct GitStudioScreen: View {
                         GitStudioSidebar(model: model, onSwitch: { ref in switchTo(ref) }, onMerge: { ref in merge(ref.name) },
                                          onDelete: { pendingDelete = $0 }, onStash: { stash in applyStash(stash) })
                             .frame(width: 230)
-                        Divider()
                     }
                     GitCommitList(model: model) { await load(more: true) }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -84,7 +83,7 @@ struct GitStudioScreen: View {
                 }
             }
         }
-        .background(Theme.background)
+        .background(Theme.canvas)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .task(id: git.status?.head ?? "") { await load(more: false) }
         // A new selection cancels the loading of the previous one, so an older answer can't overwrite the list.
@@ -361,7 +360,7 @@ private struct GitStudioSidebar: View {
             }
             .padding(12)
         }
-        .background(Theme.sidebar)
+        .glassColumn()
     }
 
     private func section(_ title: String, refs: [GitRef]) -> some View {

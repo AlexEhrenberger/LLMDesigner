@@ -293,9 +293,10 @@ struct WriterEditor: NSViewRepresentable {
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
         scrollView.borderType = .noBorder
-        scrollView.drawsBackground = slide == nil
+        // Nothing drawn around the sheet: the desk is the window's glass.
+        scrollView.drawsBackground = false
         scrollView.backgroundColor = palette.windowBackground
-        scrollView.contentView.drawsBackground = slide == nil
+        scrollView.contentView.drawsBackground = false
         scrollView.contentView.postsFrameChangedNotifications = true
 
         let textView = WriterTextView.make()

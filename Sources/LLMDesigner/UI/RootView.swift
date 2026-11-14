@@ -16,7 +16,7 @@ struct RootView: View {
                     .frame(minWidth: 760, minHeight: 520)
             }
         }
-        .background(Theme.background)
+        .background(WindowGlass())
         .overlay(alignment: .top) { ActionFlashBadge() }
         .overlay(alignment: .top) { GitNoticeBar().animation(.smooth(duration: 0.25), value: app.git.notice) }
         .ignoresSafeArea()

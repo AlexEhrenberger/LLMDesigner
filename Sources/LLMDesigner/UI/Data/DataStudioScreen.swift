@@ -35,7 +35,7 @@ struct DataStudioScreen: View {
             case .templates: DataTemplatesTab(model: model)
             }
         }
-        .background(Theme.background)
+        .background(Theme.canvas)
         .onAppear {
             studio.loadIfNeeded()
             if model.blockID == nil { model.blockID = studio.blocks.records.first?.id }
@@ -124,7 +124,6 @@ private struct DataBlocksTab: View {
             HStack(spacing: 0) {
                 DataBlockList(model: model)
                     .frame(width: 270)
-                Rectangle().fill(Theme.border).frame(width: 1)
                 Group {
                     if model.showsTable {
                         DataTableView(model: model)
@@ -204,7 +203,7 @@ private struct DataBlockList: View {
                 .padding(.bottom, 12)
             }
         }
-        .background(Theme.sidebar.opacity(0.5))
+        .glassColumn()
     }
 
     private func modeButton(_ title: String, symbol: String, table: Bool) -> some View {

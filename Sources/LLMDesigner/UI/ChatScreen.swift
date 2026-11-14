@@ -22,7 +22,7 @@ struct ChatScreen: View {
                 EmptyChatView()
             }
         }
-        .background(Theme.background)
+        .background(Theme.canvas)
         .onDrop(of: [.fileURL, .image, .utf8PlainText, .plainText], delegate: ChatDropDelegate(isImageTarget: $isDropTarget, onImages: dropImages) { text in
             // Text (from the power access, another app) goes to the end of the message being written.
             let draft = app.draft.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -290,6 +290,7 @@ struct MessageList: View {
         }
         .scrollPosition($position)
         .defaultScrollAnchor(.bottom)
+        .bottomFade(isCompact ? 20 : 24)
         .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
             if !isCompact { app.setMessageViewport(frame) }
         }
@@ -435,12 +436,6 @@ private struct ComposerArea: View {
         .padding(.horizontal, 20)
         .padding(.bottom, 12)
         .frame(maxWidth: .infinity)
-        .background(alignment: .top) {
-            LinearGradient(colors: [Theme.background.opacity(0), Theme.background], startPoint: .top, endPoint: .bottom)
-                .frame(height: 24)
-                .offset(y: -24)
-                .allowsHitTesting(false)
-        }
     }
 
     private var placeholder: String {

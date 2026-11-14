@@ -65,7 +65,7 @@ struct SidebarView: View {
 
             SidebarFooter()
         }
-        .background(Theme.sidebar)
+        .glassPanel()
         .overlay(alignment: .trailing) {
             Rectangle().fill(Theme.border).frame(width: 1)
         }

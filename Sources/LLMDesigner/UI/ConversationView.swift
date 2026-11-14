@@ -38,7 +38,7 @@ struct ConversationView: View {
         .background(WindowDragArea())
         .background {
             RadialGradient(colors: [Theme.accent.opacity(0.09), .clear], center: .center, startRadius: 0, endRadius: 280)
-                .background(Theme.background)
+                .background(Theme.canvas)
         }
         .opacity(session.isEnding ? 0 : 1)
         .animation(.easeOut(duration: 0.15), value: session.isEnding)

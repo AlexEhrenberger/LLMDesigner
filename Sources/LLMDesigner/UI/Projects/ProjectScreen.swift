@@ -18,7 +18,7 @@ struct ProjectScreen: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .background(Theme.background)
+        .background(Theme.canvas)
         .onAppear { take(app.projectCommand) }
         .onChange(of: app.projectCommand) { _, command in take(command) }
         .onDisappear {

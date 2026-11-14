@@ -92,7 +92,6 @@ struct StoriesStudioScreen: View {
                 HStack(spacing: 0) {
                     StoryNavigator(world: world, model: model, library: library)
                         .frame(width: 236)
-                    Rectangle().fill(Theme.border).frame(width: 1)
                     StoryPageHost(world: world, model: model, library: library)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
@@ -100,7 +99,7 @@ struct StoriesStudioScreen: View {
                 emptyState(library)
             }
         }
-        .background(Theme.background)
+        .background(Theme.canvas)
         .onAppear {
             library.loadIfNeeded()
             let last = app.settings.string(forKey: Self.lastWorldKey).flatMap(UUID.init(uuidString:))

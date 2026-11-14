@@ -43,14 +43,14 @@ struct ProjectBoard: View {
                 if panelFloats, let id = selectedTask, project.task(id) != nil {
                     ProjectTaskPanel(projectID: projectID, taskID: id) { selectedTask = nil }
                         .frame(width: min(400, width - 40))
-                        .background(Theme.sidebar)
+                        .glassPanel()
                         .overlay(alignment: .leading) { Rectangle().fill(Theme.border).frame(width: 1) }
                         .shadow(color: Theme.shade.opacity(0.3), radius: 20)
                         .transition(.move(edge: .trailing))
                 }
             }
             .animation(.smooth(duration: 0.25), value: selectedTask)
-            .background(LinearGradient(colors: [project.accent.color.opacity(0.06), Theme.background], startPoint: .top, endPoint: .bottom))
+            .background(LinearGradient(colors: [project.accent.color.opacity(0.06), .clear], startPoint: .top, endPoint: .bottom))
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
             .tint(project.accent.color)
         }
@@ -504,7 +504,7 @@ struct ProjectTaskPanel: View {
                     .padding(16)
                 }
             }
-            .background(Theme.sidebar)
+            .glassPanel()
             .onAppear { tagText = task.tags.joined(separator: ", ") }
             .onChange(of: taskID) { _, _ in tagText = project.task(taskID)?.tags.joined(separator: ", ") ?? "" }
         }

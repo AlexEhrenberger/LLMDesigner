@@ -30,7 +30,7 @@ struct CitationSourceList: View {
             footer
         }
         .padding(.top, 2)
-        .background(Theme.sidebar.opacity(0.5))
+        .glassColumn()
     }
 
     private var searchField: some View {

@@ -58,7 +58,7 @@ struct StoryNavigator: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 10)
         }
-        .background(Theme.sidebar.opacity(0.5))
+        .glassColumn()
         .confirmationDialog("„\(deleting.map { world.displayTitle(of: $0) } ?? "")“ löschen?", isPresented: Binding(
             get: { deleting != nil }, set: { if !$0 { deleting = nil } }
         )) {

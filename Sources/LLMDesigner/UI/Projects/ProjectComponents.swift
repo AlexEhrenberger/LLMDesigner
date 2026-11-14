@@ -56,7 +56,7 @@ extension NSFont.Weight: @retroactive Comparable {
     public static func < (lhs: NSFont.Weight, rhs: NSFont.Weight) -> Bool { lhs.rawValue < rhs.rawValue }
 }
 
-/// The page's background behind the blocks.
+/// The page's background behind the blocks. It lies on the screen's glass tint (`Theme.canvas`), so only the paper is opaque.
 struct ProjectPageBackground: View {
     let design: ProjectDesign
     let accent: Color
@@ -64,12 +64,11 @@ struct ProjectPageBackground: View {
     var body: some View {
         switch design.background {
         case .plain:
-            Theme.background
+            Color.clear
         case .paper:
             Theme.dynamic(dark: 0x15130F, light: 0xFBF7EE)
         case .gradient:
-            LinearGradient(colors: [accent.opacity(0.16), Theme.background, accent.opacity(0.06)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                .background(Theme.background)
+            LinearGradient(colors: [accent.opacity(0.16), .clear, accent.opacity(0.06)], startPoint: .topLeading, endPoint: .bottomTrailing)
         case .dots:
             Canvas { context, size in
                 let step: CGFloat = 18
@@ -79,7 +78,6 @@ struct ProjectPageBackground: View {
                     }
                 }
             }
-            .background(Theme.background)
         case .blueprint:
             Canvas { context, size in
                 let step: CGFloat = 24
@@ -88,8 +86,7 @@ struct ProjectPageBackground: View {
                 for y in stride(from: 0, through: size.height, by: step) { grid.move(to: CGPoint(x: 0, y: y)); grid.addLine(to: CGPoint(x: size.width, y: y)) }
                 context.stroke(grid, with: .color(accent.opacity(0.13)), lineWidth: 0.6)
             }
-            .background(LinearGradient(colors: [accent.opacity(0.10), Theme.background], startPoint: .top, endPoint: .bottom))
-            .background(Theme.background)
+            .background(LinearGradient(colors: [accent.opacity(0.10), .clear], startPoint: .top, endPoint: .bottom))
         }
     }
 }

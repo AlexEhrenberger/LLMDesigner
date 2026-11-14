@@ -52,7 +52,6 @@ struct NotesStudioScreen: View {
                 HStack(spacing: 0) {
                     NotesList(model: model)
                         .frame(width: 270)
-                    Rectangle().fill(Theme.border).frame(width: 1)
                     Group {
                         if let id = model.selectedID, library.note(id) != nil {
                             NotesPage(noteID: id, model: model)
@@ -68,7 +67,7 @@ struct NotesStudioScreen: View {
                 }
             }
         }
-        .background(Theme.background)
+        .background(Theme.canvas)
         .onAppear {
             library.loadIfNeeded()
             let last = app.settings.string(forKey: AppModel.notesLastNoteKey).flatMap(UUID.init(uuidString:))
@@ -221,7 +220,7 @@ private struct NotesList: View {
                 .padding(.bottom, 14)
             }
         }
-        .background(Theme.sidebar.opacity(0.5))
+        .glassColumn()
     }
 }
 
