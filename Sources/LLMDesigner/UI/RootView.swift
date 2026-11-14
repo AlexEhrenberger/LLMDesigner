@@ -18,6 +18,7 @@ struct RootView: View {
         }
         .background(Theme.background)
         .overlay(alignment: .top) { ActionFlashBadge() }
+        .overlay(alignment: .top) { GitNoticeBar().animation(.smooth(duration: 0.25), value: app.git.notice) }
         .ignoresSafeArea()
         .background(WindowConfigurator())
         .tint(Theme.accent)
@@ -41,6 +42,13 @@ struct RootView: View {
         }
         .sheet(item: Binding(get: { app.templateUseRequest.map(TemplateUseRequest.init) }, set: { app.templateUseRequest = $0?.id })) { request in
             TemplateUseSheet(templateID: request.id)
+                .environment(app)
+        }
+        .sheet(isPresented: Binding(get: { app.mergeViewOpen }, set: { app.mergeViewOpen = $0 })) {
+            MergeView().environment(app)
+        }
+        .sheet(item: Binding(get: { app.compareRequest }, set: { app.compareRequest = $0 })) { request in
+            CompareView(request: request, app: app)
                 .environment(app)
         }
         .sheet(item: Binding(get: { app.deckSourceRequest }, set: { app.deckSourceRequest = $0 })) { request in
@@ -89,6 +97,9 @@ struct RootView: View {
                     } else if app.learningStudioOpen {
                         LearningStudioScreen()
                             .transition(.opacity)
+                    } else if app.gitStudioOpen {
+                        GitStudioScreen()
+                            .transition(.opacity)
                     } else if app.selectedPresentation != nil {
                         // Opens at once, like a document: no fade so the slide can be worked on right away.
                         PresenterScreen()
@@ -118,6 +129,7 @@ struct RootView: View {
             .animation(.easeInOut(duration: 0.25), value: app.dataStudioOpen)
             .animation(.easeInOut(duration: 0.25), value: app.researchStudioOpen)
             .animation(.easeInOut(duration: 0.25), value: app.learningStudioOpen)
+            .animation(.easeInOut(duration: 0.25), value: app.gitStudioOpen)
             if showsChatPower, app.isPanelDocked {
                 PowerPanel()
                     .frame(width: Theme.powerWidth)
@@ -172,7 +184,7 @@ struct RootView: View {
     }
 
     private var openedKey: String {
-        "\(app.selectedChatID?.uuidString ?? "")|\(app.selectedDocumentID?.uuidString ?? "")|\(app.sidebarMode)|\(app.citationStudioOpen)|\(app.storiesStudioOpen)|\(app.notesStudioOpen)|\(app.openProjectID?.uuidString ?? "")|\(app.podcastStudioOpen)|\(app.selectedPodcastID?.uuidString ?? "")|\(app.dataStudioOpen)|\(app.researchStudioOpen)|\(app.learningStudioOpen)"
+        "\(app.selectedChatID?.uuidString ?? "")|\(app.selectedDocumentID?.uuidString ?? "")|\(app.sidebarMode)|\(app.citationStudioOpen)|\(app.storiesStudioOpen)|\(app.notesStudioOpen)|\(app.openProjectID?.uuidString ?? "")|\(app.podcastStudioOpen)|\(app.selectedPodcastID?.uuidString ?? "")|\(app.dataStudioOpen)|\(app.researchStudioOpen)|\(app.learningStudioOpen)|\(app.gitStudioOpen)"
     }
 
     /// The room the content needs before a sidebar may stand beside it: the studios have a sheet and a toolbar to show.

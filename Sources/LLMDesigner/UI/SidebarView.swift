@@ -383,7 +383,17 @@ private struct ChatList: View {
                     .frame(width: 18)
                     .help(document.isPresentation ? "Präsentation (Presenter Studio)" : "Dokument (Writer Studio)")
             },
-            trailing: { EmptyView() },
+            trailing: {
+                if document.variantOf != nil {
+                    Text("Fassung")
+                        .font(.system(size: 9.5, weight: .semibold))
+                        .foregroundStyle(Theme.textTertiary)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(Capsule().strokeBorder(Theme.border))
+                        .help(app.mainVersion(of: document).map { "Fassung von „\($0.displayTitle)“" } ?? "Fassung")
+                }
+            },
             menu: {
                 Button("Umbenennen", systemImage: "pencil") { app.renamingID = document.id }
                 if document.hasCustomTitle {
@@ -395,6 +405,7 @@ private struct ChatList: View {
                     onMove: { app.moveDocument(document.id, to: $0) },
                     onNewFolder: { app.moveDocumentToNewFolder(document.id) }
                 )
+                DocumentVersionMenu(document: document)
                 Divider()
                 Button("Löschen", systemImage: "trash", role: .destructive) { pendingDocumentDelete = document }
             }
@@ -1196,6 +1207,8 @@ private struct SidebarFooter: View {
             LibraryMenu()
                 .padding(.horizontal, 8)
                 .padding(.top, 6)
+            GitStatusLine()
+                .padding(.horizontal, 8)
             connection
         }
         .overlay(alignment: .top) {

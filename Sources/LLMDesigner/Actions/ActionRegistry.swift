@@ -40,6 +40,7 @@ final class ActionRegistry {
         registry.registerLearningActions()
         registry.registerPodcastActions()
         registry.registerChatActions()
+        registry.registerGitActions()
         return registry
     }
 

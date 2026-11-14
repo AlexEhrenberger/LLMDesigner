@@ -16,21 +16,26 @@ let package = Package(
             path: "Sources/LLMDProtocol",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
+        .target(
+            name: "LibraryMerge",
+            path: "Sources/LibraryMerge",
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
         .executableTarget(
             name: "LLMDesigner",
-            dependencies: [.product(name: "SwiftMath", package: "SwiftMath"), "LLMDProtocol"],
+            dependencies: [.product(name: "SwiftMath", package: "SwiftMath"), "LLMDProtocol", "LibraryMerge"],
             path: "Sources/LLMDesigner",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .executableTarget(
             name: "llmd",
-            dependencies: ["LLMDProtocol"],
+            dependencies: ["LLMDProtocol", "LibraryMerge"],
             path: "Sources/llmd",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .testTarget(
             name: "LLMDesignerTests",
-            dependencies: ["LLMDesigner", "LLMDProtocol"],
+            dependencies: ["LLMDesigner", "LLMDProtocol", "LibraryMerge"],
             path: "Tests/LLMDesignerTests",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),

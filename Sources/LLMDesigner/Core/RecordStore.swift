@@ -136,6 +136,14 @@ final class RecordLibrary<Record: StoredRecord> {
     @ObservationIgnored let store: RecordStore<Record>
     @ObservationIgnored private(set) var isLoaded = false
     @ObservationIgnored private var saveTasks: [UUID: Task<Void, Never>] = [:]
+    /// Records with a change that isn't on disk yet; Git asks before files of these change from outside.
+    var pendingSaveIDs: Set<UUID> { Set(saveTasks.keys) }
+
+    /// Drops a pending save: the version on disk wins (a reload after a change from outside).
+    func discardPendingSave(_ id: UUID) {
+        saveTasks[id]?.cancel()
+        saveTasks[id] = nil
+    }
     @ObservationIgnored private let writer: DispatchQueue
     /// Called after every change (the studio's resolver takes it over).
     @ObservationIgnored var onChange: (() -> Void)?

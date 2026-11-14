@@ -33,6 +33,28 @@ final class LibrarySession {
         app = AppModel()
         recent = LibraryRegistry.entries
         Self.shared = self
+        bind(app)
+    }
+
+    /// Lets the model ask for a reload of its library (Git changed the files under it).
+    private func bind(_ model: AppModel) {
+        model.onLibraryReload = { [weak self] in
+            guard let self else { return }
+            Task { await self.reload() }
+        }
+    }
+
+    /// Reads the open library anew, the way a switch does, and shows again what was open. Git uses it after a
+    /// checkout, a merge or a change in the Terminal.
+    func reload() async {
+        guard !isSwitching else { return }
+        isSwitching = true
+        defer { isSwitching = false }
+        let state = LibraryViewState(app)
+        await app.close()
+        app = AppModel()
+        bind(app)
+        state.restore(in: app)
     }
 
     /// The library that was open last; on the very first start the data of earlier versions moves into a new one.
@@ -86,6 +108,7 @@ final class LibrarySession {
         library = next
         LibraryRegistry.remember(next.url)
         app = AppModel()
+        bind(app)
         refreshRecent()
     }
 
@@ -198,5 +221,40 @@ final class LibrarySession {
             app = AppModel()
             refreshRecent()
         }
+    }
+}
+
+/// What was open before a reload, put back where it still exists.
+@MainActor
+struct LibraryViewState {
+    var chat: UUID?
+    var document: UUID?
+    var project: UUID?
+    var citation, stories, notes, podcast, data, research, learning: Bool
+
+    init(_ app: AppModel) {
+        chat = app.selectedChatID
+        document = app.selectedDocumentID
+        project = app.openProjectID
+        citation = app.citationStudioOpen
+        stories = app.storiesStudioOpen
+        notes = app.notesStudioOpen
+        podcast = app.podcastStudioOpen
+        data = app.dataStudioOpen
+        research = app.researchStudioOpen
+        learning = app.learningStudioOpen
+    }
+
+    func restore(in app: AppModel) {
+        if let chat, app.chats.contains(where: { $0.id == chat }) { app.selectedChatID = chat }
+        if let document, app.document(document) != nil { app.selectedDocumentID = document }
+        if let project, app.projects.project(project) != nil { app.openProjectID = project }
+        app.citationStudioOpen = citation
+        app.storiesStudioOpen = stories
+        app.notesStudioOpen = notes
+        app.podcastStudioOpen = podcast
+        app.dataStudioOpen = data
+        app.researchStudioOpen = research
+        app.learningStudioOpen = learning
     }
 }

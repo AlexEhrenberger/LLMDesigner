@@ -169,6 +169,14 @@ final class CitationLibrary {
     @ObservationIgnored private let store: CitationStore
     @ObservationIgnored private var index = CitationSearchIndex(sources: [], quotes: [])
     @ObservationIgnored private var saveTasks: [UUID: Task<Void, Never>] = [:]
+    /// Records with a change that isn't on disk yet; Git asks before files of these change from outside.
+    var pendingSaveIDs: Set<UUID> { Set(saveTasks.keys) }
+
+    /// Drops a pending save: the version on disk wins (a reload after a change from outside).
+    func discardPendingSave(_ id: UUID) {
+        saveTasks[id]?.cancel()
+        saveTasks[id] = nil
+    }
     @ObservationIgnored private var isLoaded = false
 
     init(store: CitationStore) {
