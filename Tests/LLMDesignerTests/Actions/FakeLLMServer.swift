@@ -25,6 +25,8 @@ final class FakeLLMServer: @unchecked Sendable {
     var delay: Double = 0
     /// What requests without streaming get, one after the other; after the last one `{}`.
     var completions: [String] = []
+    /// Answers requests without streaming by what they ask; nil falls back to `completions`.
+    var respond: (@Sendable (JSONValue) -> String?)?
     /// The requests without streaming.
     private(set) var seenCompletions: [JSONValue] = []
     /// The same as sent, for checking the order of keys.
@@ -128,6 +130,7 @@ final class FakeLLMServer: @unchecked Sendable {
                 let content: String = lock.withLock {
                     seenCompletions.append(request)
                     rawCompletions.append(String(decoding: body, as: UTF8.self))
+                    if let answer = respond?(request) { return answer }
                     return completions.isEmpty ? "{}" : completions.removeFirst()
                 }
                 let answer: JSONValue = ["choices": [["message": ["role": "assistant", "content": .string(content)]]]]

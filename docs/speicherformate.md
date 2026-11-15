@@ -451,8 +451,16 @@ Ein **Kurs** liegt in `Lernen/<id>/kurs.json` (`{"format": 1, "kurs": {…}}`), 
 | `karten` | `{id, vorne, hinten, schlagwoerter, material, zustand (neu/lernen/wiederholen/neulernen), faellig, stabilitaet, schwierigkeit, faktor, intervall, schritt, wiederholungen, vergessen, zuletzt, zurueckgestellt, verlauf, erstellt}`; `verlauf` ist `[{datum, bewertung 1–4, zustand, intervall}]` |
 | `material` | `{id, art (pdf/probeklausur/link/youtube/quelle/text), titel, datei, url, zitat (Citekey), text, zusammenfassung, hinzugefuegt}` |
 | `verknuepft`, `projekte` | Verweise wie bei Projekten (`chat`, `dokument`, `note`, `romanwelt`) und Projekt-IDs |
-| `abfragen` | `{id, datum, material, fragen: [{frage, antwort, bewertung (richtig/teilweise/falsch), rueckmeldung, loesung}]}` |
+| `cp`, `pruefungsform` | Credit Points und Prüfungsform („Klausur“), hinter dem Namen gezeigt |
+| `lektionen` | `{id, titel, abstract, lernziele, abschnitte: [{id, titel, von, bis}], material, von, bis, zusammenfassung, praesentation, verknuepft, erstellt, angelegt}` in ihrer Reihenfolge; `material` ist die PDF, `von`/`bis` sind ihre Seiten (ab 1), `zusammenfassung` und `praesentation` Dokument-IDs, `erstellt` die fertigen Schritte der Erstellung (`lesen`, `zusammenfassung`, `karten`, `analyse`, `praesentation`) |
+| `abfragen` | `{id, art (abfrage/test), datum, material, lektion, geplant, fragen: [{id, art (offen/auswahl), frage, stufe, abschnitt, optionen, richtig, gewaehlt, erwartung, antwort, beantwortet, bewertung (richtig/teilweise/falsch), rueckmeldung, loesung}], note (A–F), einschaetzung, beendet}`; ein Test (`art: test`) gehört zu einer Lektion, `richtig` und `gewaehlt` sind Stellen in `optionen` |
+| `ordner` | Ordner der Seitenleiste, in den die Erstellung die Dokumente des Kurses legt |
+| `erstellung` | Was die Erstellung je Lektion macht: `{zusammenfassung, karten, kartenJeAbschnitt, analyse, praesentation, moderatorenkarten}` |
 | `abgeschlossen` | Kurs abgeschlossen (trägt Früchte am Baum) |
+
+Karten und Material haben zusätzlich `lektion` (die ID ihrer Lektion; fehlt: der ganze Kurs).
+
+Die **Lesenotizen** einer Lektion liegen in `Lernen/<kurs-id>/Lesenotizen/<lektion-id>.json` (`{"format": 1, "lektion": "…", "abschnitte": [{abschnitt, titel, stuecke, notizen}]}`): je Abschnitt in wie viele Stücke sein Text geteilt wurde und was das Modell zu jedem Stück notiert hat (Markdown). Sie stehen nicht in `kurs.json`, weil der bei jeder beantworteten Karte geschrieben wird; die Zusammenfassung, die Karten und die Testfragen entstehen aus ihnen.
 
 ## Git
 

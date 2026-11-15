@@ -5,10 +5,32 @@ import SwiftUI
 @Observable
 final class LearningStudioModel {
     var disciplineID: UUID?
-    var courseID: UUID?
+    var courseID: UUID? {
+        didSet { if courseID != oldValue { lessonID = nil; expandedLesson = nil; reviewLesson = nil } }
+    }
     var tab: CourseTab = .overview
+    /// The lesson whose page is open (in the overview tab), and what of it.
+    var lessonID: UUID?
+    var lessonTab: LessonTab = .analysis
+    /// The lesson opened in the overview's list.
+    var expandedLesson: UUID?
+    /// Learning only this lesson's cards.
+    var reviewLesson: UUID?
     var showsSettings = false
     var showsPause = false
+    var showsCourseSettings = false
+    var showsBuild = false
+
+    func openLesson(_ id: UUID, _ tab: LessonTab) {
+        lessonID = id
+        lessonTab = tab
+        self.tab = .overview
+    }
+
+    func learn(lesson id: UUID?) {
+        reviewLesson = id
+        tab = .review
+    }
 }
 
 /// Learning Studio: a garden with one tree per discipline that grows with what is learned; each discipline holds
@@ -60,6 +82,12 @@ struct LearningStudioScreen: View {
                         model.courseID = course.id
                         model.tab = .overview
                     }
+                    Button("Neuer Kurs aus PDF …", systemImage: "doc.richtext") {
+                        let course = app.newCourse(name: "", in: model.disciplineID ?? library.state.disciplines.first?.id)
+                        model.courseID = course.id
+                        model.tab = .overview
+                        model.showsBuild = true
+                    }
                 }
                 PowerButton()
             }
@@ -101,7 +129,15 @@ struct LearningStudioScreen: View {
                 Text(discipline.displayName).font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
                 Image(systemName: "chevron.right").font(.system(size: 9)).foregroundStyle(Theme.textTertiary)
             }
-            Text(course.displayName).font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.textPrimary).lineLimit(1)
+            if let lesson = course.lesson(model.lessonID), model.tab == .overview {
+                Button(course.displayName) { withAnimation(.snappy(duration: 0.2)) { model.lessonID = nil } }
+                    .buttonStyle(.borderless)
+                    .font(.system(size: 12))
+                Image(systemName: "chevron.right").font(.system(size: 9)).foregroundStyle(Theme.textTertiary)
+                Text(lesson.displayTitle).font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.textPrimary).lineLimit(1)
+            } else {
+                Text(course.displayName).font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.textPrimary).lineLimit(1)
+            }
         }
         .fixedSize()
     }
@@ -114,7 +150,8 @@ struct LearningStudioScreen: View {
             model.disciplineID = app.learning.course(course)?.discipline
         }
         if let tab = command.tab { model.tab = tab }
-        if command.review { model.tab = .review }
+        if let lesson = command.lesson { model.openLesson(lesson, command.lessonTab ?? .analysis) }
+        if command.review { model.learn(lesson: command.lesson) }
         app.learningStudioCommand = nil
     }
 }

@@ -11,13 +11,21 @@ Learning Studio: Disziplinen, Kurse, Karten, Lernen, Pausen, Material, Modell-Hi
 | `learning.course.list` | Listet Kurse mit Karten, Fälligen, Fortschritt und Prüfungstermin | read | `learningRead` |
 | `learning.course.create` | Legt einen Kurs an, auf Wunsch in einer Disziplin (die es noch nicht gibt, entsteht) und mit Prüfungstermin | write | `.localWrite` |
 | `learning.course.read` | Liest einen Kurs: Statistik, Material, Verknüpfungen und (mit cards) die Karten | read | `learningRead` |
-| `learning.course.update` | Ändert Name, Beschreibung, Disziplin, Prüfungstermin oder Abschluss eines Kurses | write | `.localWrite` |
+| `learning.course.update` | Ändert Name, Beschreibung, Disziplin, Credit Points, Prüfungsform, Prüfungstermin oder Abschluss eines Kurses | write | `.localWrite` |
 | `learning.course.delete` | Legt einen Kurs mit Karten und Material in den Papierkorb | destructive | `.destructive` |
-| `learning.card.add` | Legt eine Karteikarte an (Vorderseite: Frage, Rückseite: Antwort) | write | `.localWrite` |
+| `learning.lesson.list` | Listet die Lektionen eines Kurses: Abschnitte, Seiten, fällige und alle Karten, was erstellt ist und die letzte Testnote | read | `learningRead` |
+| `learning.lesson.create` | Legt eine Lektion in einem Kurs an (am Ende oder an einer Stelle ab 1) | write | `.localWrite` |
+| `learning.lesson.update` | Ändert Titel oder Abstract einer Lektion oder verschiebt sie an eine andere Stelle | write | `.localWrite` |
+| `learning.lesson.delete` | Entfernt eine Lektion; ihre Karten und ihr Material bleiben im Kurs, ihre Dokumente in der Seitenleiste | destructive | `.destructive` |
+| `learning.build.start` | Erstellt Lektionen aus dem Skript (PDF-Material des Kurses): Gliederung aus der PDF, dann je Lektion Lernnotizen, Zusammenfassung, Karten, Inhaltsanalyse und Präsentation mit Moderatorenkarten; läuft im Hintergrund | write | `ActionSecurity(readsUntrusted: true` |
+| `learning.build.status` | Zeigt, woran die Kurserstellung gerade arbeitet: Lektion, Schritt, Fortschritt, wartende Lektionen und Fehler | read | `.plainRead` |
+| `learning.build.cancel` | Hält die Kurserstellung an (eines Kurses oder ganz); Fertiges bleibt | write | `.localWrite` |
+| `learning.test.list` | Ergebnisse der KI-Tests eines Kurses oder einer Lektion: Note A–F, Prozent, Einschätzung und (mit details) die Fragen | read | `learningRead` |
+| `learning.card.add` | Legt eine Karteikarte an (Vorderseite: Frage, Rückseite: Antwort), auf Wunsch in einer Lektion | write | `.localWrite` |
 | `learning.card.addMany` | Legt viele Karten an: als Liste {front, back} oder als Text mit einer Karte je Zeile (Frage ; Antwort) | write | `.localWrite` |
 | `learning.card.update` | Ändert eine Karte, stellt sie zurück (suspended) oder setzt ihren Lernstand zurück (reset) | write | `.localWrite` |
 | `learning.card.delete` | Löscht eine Karte mit ihrem Lernverlauf | destructive | `.destructive` |
-| `learning.due` | Was jetzt zu lernen ist (in Reihenfolge); ohne answers nur die Vorderseiten, so kann der Chat abfragen und dann mit learning.review bewerten | read | `learningRead` |
+| `learning.due` | Was jetzt zu lernen ist (in Reihenfolge, auch nur einer Lektion); ohne answers nur die Vorderseiten, so kann der Chat abfragen und dann mit learning.review bewerten | read | `learningRead` |
 | `learning.review` | Bewertet die Antwort auf eine Karte (nochmal, schwer, gut, leicht oder 1–4) und plant sie neu | write | `.localWrite` |
 | `learning.stats` | Statistik eines Kurses: Karten je Stand, Behaltensrate, Antworten der letzten 30 Tage, Fälligkeiten der nächsten 14 | read | `learningRead` |
 | `learning.pause` | Plant eine Lernpause (Urlaub) für alles, eine Disziplin oder einen Kurs; danach rücken die Karten um die Pausenlänge weiter | write | `.localWrite` |
@@ -27,5 +35,5 @@ Learning Studio: Disziplinen, Kurse, Karten, Lernen, Pausen, Material, Modell-Hi
 | `learning.link.add` | Verknüpft ein Dokument, eine Präsentation, ein Note, einen Chat, ein Projekt oder einen Teil einer Romanwelt mit einem Kurs | write | `.localWrite` |
 | `learning.ai.cards` | Lässt das lokale Modell Karteikarten aus Material des Kurses (oder dem ganzen Kurs) erstellen | write | `ActionSecurity(readsUntrusted: true` |
 | `learning.ai.sheet` | Lässt das lokale Modell einen Lernzettel (Writer-Dokument) aus Material des Kurses schreiben; er wird mit dem Kurs verknüpft | write | `ActionSecurity(readsUntrusted: true` |
-| `learning.studio.open` | Öffnet Learning Studio: den Garten oder einen Kurs, auf Wunsch gleich zum Lernen | read | `.plainRead` |
+| `learning.studio.open` | Öffnet Learning Studio: den Garten, einen Kurs oder eine Lektion (Inhaltsanalyse, Dokumente, Ressourcen, Test), auf Wunsch gleich zum Lernen | read | `.plainRead` |
 | `learning.studio.close` | Schließt Learning Studio | read | `.plainRead` |

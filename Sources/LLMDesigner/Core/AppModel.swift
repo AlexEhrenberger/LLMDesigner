@@ -610,6 +610,10 @@ final class AppModel {
     @ObservationIgnored let research = ResearchLibrary()
     /// Learning Studio: disciplines, courses, flash cards and their schedule.
     @ObservationIgnored let learning = LearningLibrary()
+    /// Learning Studio's automatic course creation from a PDF, lesson by lesson (see AppModel+CourseBuild.swift).
+    @ObservationIgnored let courseBuild = CourseBuildCenter()
+    /// Lesson tests: questions being written, answers being graded (see AppModel+LessonTest.swift).
+    @ObservationIgnored let lessonTests = LessonTestCenter()
     /// PodcastStudio: conversations about a question, researched, written and spoken by the model and Qwen TTS.
     @ObservationIgnored let podcasts = PodcastLibrary(store: .library())
     /// The instruction being written in Writer Studio's assistant bar.

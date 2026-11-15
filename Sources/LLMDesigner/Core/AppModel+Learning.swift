@@ -6,6 +6,9 @@ struct LearningStudioCommand: Equatable {
     var discipline: UUID?
     var course: UUID?
     var tab: CourseTab?
+    /// A lesson of the course to open, and what of it to show.
+    var lesson: UUID?
+    var lessonTab: LessonTab?
     /// Go straight to learning the due cards.
     var review = false
 }
@@ -35,6 +38,41 @@ enum CourseTab: String, CaseIterable, Identifiable {
         case .material: "folder"
         case .quiz: "questionmark.bubble"
         case .links: "link"
+        }
+    }
+}
+
+/// What a lesson's page shows: the four buttons of an opened lesson lead here.
+enum LessonTab: String, CaseIterable, Identifiable {
+    case analysis, documents, resources, test
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .analysis: "Inhaltsanalyse"
+        case .documents: "Dokumente und Präsentationen"
+        case .resources: "URLs und Ressourcen"
+        case .test: "Test"
+        }
+    }
+
+    /// The button text on the opened lesson.
+    var buttonTitle: String {
+        switch self {
+        case .analysis: "Inhaltsanalyse der Lektion ansehen"
+        case .documents: "Verknüpfte Dokumente und Präsentationen"
+        case .resources: "Verknüpfte URLs, weitere Ressourcen"
+        case .test: "Test und Einschätzung durch KI"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .analysis: "chart.bar.doc.horizontal"
+        case .documents: "doc.on.doc"
+        case .resources: "link"
+        case .test: "checkmark.seal"
         }
     }
 }
@@ -85,11 +123,45 @@ extension AppModel {
         return learning.courses.add(course)
     }
 
+    // MARK: Lessons
+
+    @discardableResult
+    func addLesson(title: String = "", abstract: String = "", to courseID: UUID, at index: Int? = nil) -> LearningLesson? {
+        guard learning.course(courseID) != nil else { return nil }
+        let lesson = LearningLesson(title: title, abstract: abstract)
+        learning.courses.update(courseID) { course in
+            course.lessons.insert(lesson, at: min(index ?? course.lessons.count, course.lessons.count))
+        }
+        return lesson
+    }
+
+    /// Removes a lesson: its cards and material stay in the course without a lesson, its documents stay where they
+    /// are; its study notes go.
+    func deleteLesson(_ lessonID: UUID, from courseID: UUID) {
+        learning.courses.update(courseID) { course in
+            course.lessons.removeAll { $0.id == lessonID }
+            for index in course.cards.indices where course.cards[index].lesson == lessonID { course.cards[index].lesson = nil }
+            for index in course.materials.indices where course.materials[index].lesson == lessonID { course.materials[index].lesson = nil }
+        }
+        courseBuild.queue.removeAll { $0.lesson == lessonID }
+        if courseBuild.current?.lesson == lessonID { courseBuild.task?.cancel() }
+        learning.deleteLessonNotes(courseID, lesson: lessonID)
+    }
+
+    func moveLesson(_ lessonID: UUID, in courseID: UUID, by offset: Int) {
+        learning.courses.update(courseID) { course in
+            guard let from = course.lessons.firstIndex(where: { $0.id == lessonID }) else { return }
+            let to = min(max(0, from + offset), course.lessons.count - 1)
+            guard to != from else { return }
+            course.lessons.insert(course.lessons.remove(at: from), at: to)
+        }
+    }
+
     // MARK: Material
 
     /// Copies a PDF into the course's folder (a practice exam too).
     @discardableResult
-    func addCourseMaterial(file: URL, to courseID: UUID, kind: LearningMaterial.Kind = .pdf) throws -> LearningMaterial {
+    func addCourseMaterial(file: URL, to courseID: UUID, kind: LearningMaterial.Kind = .pdf, lesson: UUID? = nil) throws -> LearningMaterial {
         let folder = learning.materialFolder(courseID)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         var name = file.lastPathComponent
@@ -101,27 +173,30 @@ extension AppModel {
             number += 1
         }
         try FileManager.default.copyItem(at: file, to: target)
-        let material = LearningMaterial(kind: kind, title: file.deletingPathExtension().lastPathComponent, file: name)
+        var material = LearningMaterial(kind: kind, title: file.deletingPathExtension().lastPathComponent, file: name)
+        material.lesson = lesson
         learning.courses.update(courseID) { $0.materials.append(material) }
         return material
     }
 
     /// A web page or a video; YouTube addresses become videos by themselves.
     @discardableResult
-    func addCourseLink(_ address: String, title: String = "", to courseID: UUID) -> LearningMaterial? {
+    func addCourseLink(_ address: String, title: String = "", to courseID: UUID, lesson: UUID? = nil) -> LearningMaterial? {
         var address = address.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !address.isEmpty else { return nil }
         if !address.contains("://") { address = "https://" + address }
         guard URL(string: address) != nil else { return nil }
-        let material = LearningMaterial(kind: LearningMaterial.isYouTube(address) ? .youtube : .link, title: title, url: address)
+        var material = LearningMaterial(kind: LearningMaterial.isYouTube(address) ? .youtube : .link, title: title, url: address)
+        material.lesson = lesson
         learning.courses.update(courseID) { $0.materials.append(material) }
         return material
     }
 
     @discardableResult
-    func addCourseSource(_ sourceID: UUID, to courseID: UUID) -> LearningMaterial? {
+    func addCourseSource(_ sourceID: UUID, to courseID: UUID, lesson: UUID? = nil) -> LearningMaterial? {
         guard let source = citations.source(sourceID) else { return nil }
-        let material = LearningMaterial(kind: .quelle, title: source.title, url: source.url.isEmpty ? nil : source.url, citekey: source.citekey)
+        var material = LearningMaterial(kind: .quelle, title: source.title, url: source.url.isEmpty ? nil : source.url, citekey: source.citekey)
+        material.lesson = lesson
         learning.courses.update(courseID) { $0.materials.append(material) }
         return material
     }

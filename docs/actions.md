@@ -134,7 +134,7 @@ llmd podcast export --podcast "Was ist Predictive Coding?"
 
 ## Data Studio, Rechercherista, Learning Studio
 
-Datenblöcke nimmt jede Action als ID, Kürzel oder Name; ihre Werte zu lesen (`data.block.read`, `data.resolve`) gilt als **privat** und ist über MCP gesperrt. Recherchen und Kurse lesen gilt als fremd (Webseiten, PDFs). `research.start` und `research.answer` wirken nach außen (Suchwörter verlassen den Mac) und fragen deshalb nach. Kataloge: [Data-Actions](plan/Data-Actions.md), [Rechercherista-Actions](plan/Rechercherista-Actions.md), [Learning-Actions](plan/Learning-Actions.md).
+Datenblöcke nimmt jede Action als ID, Kürzel oder Name; ihre Werte zu lesen (`data.block.read`, `data.resolve`) gilt als **privat** und ist über MCP gesperrt. Recherchen und Kurse lesen gilt als fremd (Webseiten, PDFs). `research.start` und `research.answer` wirken nach außen (Suchwörter verlassen den Mac) und fragen deshalb nach. `learning.build.start` liest das Skript eines Kurses (fremd) und arbeitet danach im Hintergrund; `learning.build.status` zeigt den Stand, `learning.test.list` die Noten der KI-Tests. Kataloge: [Data-Actions](plan/Data-Actions.md), [Rechercherista-Actions](plan/Rechercherista-Actions.md), [Learning-Actions](plan/Learning-Actions.md).
 
 ```bash
 llmd data block create --name Absender --structure person --values '{"vorname":"Mara","ort":"Neustadt"}'
@@ -142,6 +142,8 @@ llmd data template use --template brief-din5008 --blocks '{"absender":"absender"
 llmd research start --question "Predictive Coding" --focus Kognitionswissenschaft --depth gruendlich
 llmd learning course create --name "Statistik 2" --discipline Psychologie --exam 2027-02-10
 llmd learning card addMany --course "Statistik 2" --text "Was ist Varianz? ; Mittlere quadratische Abweichung"
+llmd learning build start --course "Statistik 2" --material Skript --cardsPerSection 4
+llmd learning lesson list --course "Statistik 2"
 llmd learning pause --until 2026-12-28 --reason Urlaub
 ```
 

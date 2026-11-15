@@ -127,6 +127,33 @@ final class LearningLibrary {
         return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
 
+    // MARK: Study notes of lessons
+
+    /// `Lernen/<kurs>/Lesenotizen/<lektion>.json`: what the model wrote down while reading a lesson's pages. They are
+    /// kept apart from `kurs.json`, which is written at every answered card, because they are long.
+    func notesURL(_ courseID: UUID, lesson lessonID: UUID) -> URL {
+        courses.store.folder(of: courseID).appendingPathComponent("Lesenotizen", isDirectory: true).appendingPathComponent("\(lessonID.uuidString).json")
+    }
+
+    func lessonNotes(_ courseID: UUID, lesson lessonID: UUID) -> LessonNotes? {
+        guard let data = try? Data(contentsOf: notesURL(courseID, lesson: lessonID)) else { return nil }
+        return try? JSONDecoder().decode(LessonNotes.self, from: data)
+    }
+
+    func saveLessonNotes(_ notes: LessonNotes, course courseID: UUID) throws {
+        // A course deleted meanwhile gets no folder back.
+        guard course(courseID) != nil else { throw CancellationError() }
+        let url = notesURL(courseID, lesson: notes.lesson)
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        try encoder.encode(notes).write(to: url, options: .atomic)
+    }
+
+    func deleteLessonNotes(_ courseID: UUID, lesson lessonID: UUID) {
+        try? FileManager.default.removeItem(at: notesURL(courseID, lesson: lessonID))
+    }
+
     // MARK: Pauses
 
     /// The pause a course is in right now, if any.
@@ -178,20 +205,33 @@ final class LearningLibrary {
 
     // MARK: The queue
 
-    /// The cards that come up now in this course, in order: steps first, then reviews by how overdue they are, then new
-    /// cards up to the day's limit. A paused course has none.
-    func queue(_ courseID: UUID, at now: Date = Date()) -> [LearningCard] {
+    /// The cards that come up now in this course (or one of its lessons), in order: steps first, then reviews by how
+    /// overdue they are, then new cards up to the day's limit, lesson by lesson. The day's limits count for the whole
+    /// course, so learning lesson by lesson brings no more new cards than learning the course. A paused course has none.
+    func queue(_ courseID: UUID, lesson lessonID: UUID? = nil, at now: Date = Date()) -> [LearningCard] {
         guard let course = course(courseID), activePause(for: course, at: now) == nil else { return [] }
         let calendar = Calendar.current
         let endOfDay = calendar.startOfDay(for: now).addingTimeInterval(LearningScheduler.day)
-        let active = course.cards.filter { !$0.suspended }
+        let all = course.cards.filter { !$0.suspended }
+        let reviewedToday = all.filter { card in card.history.contains { calendar.isDate($0.date, inSameDayAs: now) && $0.state == .review } }.count
+        let introducedToday = all.filter { card in card.history.first.map { calendar.isDate($0.date, inSameDayAs: now) } ?? false }.count
+        let active = lessonID.map { id in all.filter { $0.lesson == id } } ?? all
         let steps = active.filter { ($0.state == .learning || $0.state == .relearning) && $0.due <= now.addingTimeInterval(60) }.sorted { $0.due < $1.due }
-        let reviewedToday = active.filter { card in card.history.contains { calendar.isDate($0.date, inSameDayAs: now) && $0.state == .review } }.count
         let reviews = active.filter { $0.state == .review && $0.due < endOfDay }.sorted { $0.due < $1.due }
             .prefix(max(0, settings.reviewsPerDay - reviewedToday))
-        let introducedToday = active.filter { card in card.history.first.map { calendar.isDate($0.date, inSameDayAs: now) } ?? false }.count
-        let fresh = active.filter { $0.state == .new }.sorted { $0.createdAt < $1.createdAt }.prefix(max(0, settings.newPerDay - introducedToday))
+        // New cards in the order of the lessons; cards without a lesson after them.
+        let rank = Dictionary(uniqueKeysWithValues: course.lessons.enumerated().map { ($1.id, $0) })
+        func order(_ card: LearningCard) -> Int { card.lesson.flatMap { rank[$0] } ?? course.lessons.count }
+        let fresh = active.filter { $0.state == .new }
+            .sorted { order($0) != order($1) ? order($0) < order($1) : $0.createdAt < $1.createdAt }
+            .prefix(max(0, settings.newPerDay - introducedToday))
         return steps + reviews + fresh
+    }
+
+    /// What a lesson's row shows: the cards that come up now when learning it, and all its cards.
+    func lessonCounts(_ courseID: UUID, lesson lessonID: UUID, at now: Date = Date()) -> (due: Int, total: Int) {
+        let total = course(courseID)?.cards.filter { $0.lesson == lessonID }.count ?? 0
+        return (total == 0 ? 0 : queue(courseID, lesson: lessonID, at: now).count, total)
     }
 
     /// Steps still waiting a few minutes (shown as "gleich wieder").
@@ -211,6 +251,14 @@ final class LearningLibrary {
     }
 
     // MARK: Statistics
+
+    /// Where the person stands in the course: the newest grade of every tested lesson, averaged over the scores.
+    func standing(_ courseID: UUID) -> (grade: LessonGrade, tested: Int, lessons: Int)? {
+        guard let course = course(courseID) else { return nil }
+        let scores = course.lessons.compactMap { course.latestGrade(of: $0.id)?.score }
+        guard !scores.isEmpty else { return nil }
+        return (LessonGrade(score: scores.reduce(0, +) / Double(scores.count)), scores.count, course.lessons.count)
+    }
 
     func stats(_ courseID: UUID, at now: Date = Date()) -> CourseStats {
         guard let course = course(courseID) else { return CourseStats() }

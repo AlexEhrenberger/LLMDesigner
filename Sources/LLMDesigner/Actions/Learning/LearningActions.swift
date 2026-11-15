@@ -28,6 +28,7 @@ extension ActionRegistry {
         register(LearningAISheetAction.self)
         register(LearningStudioOpenAction.self)
         register(LearningStudioCloseAction.self)
+        registerLearningLessonActions()
     }
 }
 
@@ -369,11 +370,15 @@ struct LearningCourseUpdateAction: LLMDAction {
         var discipline: String?
         var exam: String?
         var finished: Bool?
+        var creditPoints: Int?
+        var examForm: String?
     }
     static let descriptor = ActionDescriptor(
-        id: "learning.course.update", summary: "Ändert Name, Beschreibung, Disziplin, Prüfungstermin oder Abschluss eines Kurses", kind: .write, security: .localWrite,
+        id: "learning.course.update", summary: "Ändert Name, Beschreibung, Disziplin, Credit Points, Prüfungsform, Prüfungstermin oder Abschluss eines Kurses",
+        kind: .write, security: .localWrite,
         input: .object(["course": courseProperty, "name": .string("Name"), "summary": .string("Beschreibung"), "discipline": disciplineProperty,
-                        "exam": .string("Prüfungstermin wie 2026-12-15, leer entfernt ihn"), "finished": .boolean("Abgeschlossen")], required: ["course"]),
+                        "exam": .string("Prüfungstermin wie 2026-12-15, leer entfernt ihn"), "finished": .boolean("Abgeschlossen"),
+                        "creditPoints": .integer("Credit Points (0 entfernt sie)", minimum: 0, maximum: 60), "examForm": .string("Prüfungsform, z. B. Klausur")], required: ["course"]),
         output: .freeObject(), groups: ["learning.core"]
     )
     static func run(_ args: Args, context: ActionContext) async throws -> OKOutput {
@@ -387,6 +392,8 @@ struct LearningCourseUpdateAction: LLMDAction {
             if let discipline { course.discipline = discipline }
             if let exam { course.examDate = exam }
             if let finished = args.finished { course.finished = finished }
+            if let points = args.creditPoints { course.creditPoints = points > 0 ? points : nil }
+            if let form = args.examForm { course.examForm = form.trimmingCharacters(in: .whitespacesAndNewlines) }
         }
         return OKOutput(id: course.id.uuidString)
     }
@@ -407,6 +414,8 @@ struct LearningCourseDeleteAction: LLMDAction {
     static func run(_ args: Args, context: ActionContext) async throws -> OKOutput {
         let course = try context.app.actionCourse(args.course)
         let library = context.app.learning.courses
+        // Its creation would otherwise go on writing notes into a course that is gone.
+        context.app.cancelCourseBuild(course: course.id)
         library.remove(course.id)
         context.undoGroup.add(UndoStep(label: "Kurs löschen", undo: { [weak library] in library?.restore(course) }, redo: { [weak library] in library?.remove(course.id) }))
         return OKOutput(id: course.id.uuidString)
@@ -421,16 +430,18 @@ struct LearningCardAddAction: LLMDAction {
         var front: String
         var back: String
         var tags: [String]?
+        var lesson: String?
     }
     static let descriptor = ActionDescriptor(
-        id: "learning.card.add", summary: "Legt eine Karteikarte an (Vorderseite: Frage, Rückseite: Antwort)", kind: .write, security: .localWrite,
-        input: .object(["course": courseProperty, "front": .string("Frage"), "back": .string("Antwort"), "tags": .array(of: .string(), "Schlagwörter")],
+        id: "learning.card.add", summary: "Legt eine Karteikarte an (Vorderseite: Frage, Rückseite: Antwort), auf Wunsch in einer Lektion", kind: .write, security: .localWrite,
+        input: .object(["course": courseProperty, "front": .string("Frage"), "back": .string("Antwort"), "tags": .array(of: .string(), "Schlagwörter"), "lesson": lessonProperty],
                        required: ["course", "front", "back"]), output: .freeObject(), groups: ["learning.core"]
     )
     static func run(_ args: Args, context: ActionContext) async throws -> OKOutput {
         let course = try context.app.actionCourse(args.course)
         guard !args.front.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw RPCError.invalidParams("front ist leer.") }
-        let card = LearningCard(front: args.front, back: args.back, tags: args.tags ?? [])
+        let lesson = try args.lesson.map { try course.actionLesson($0).id }
+        let card = LearningCard(front: args.front, back: args.back, tags: args.tags ?? [], lesson: lesson)
         try context.changeCourse(course.id, label: "Karte anlegen") { $0.cards.append(card) }
         return OKOutput(id: card.id.uuidString)
     }
@@ -515,6 +526,7 @@ struct LearningCardDeleteAction: LLMDAction {
 struct LearningDueAction: LLMDAction {
     struct Args: Decodable, Sendable {
         var course: String?
+        var lesson: String?
         var limit: Int?
         var answers: Bool?
     }
@@ -530,17 +542,20 @@ struct LearningDueAction: LLMDAction {
     static let descriptor = ActionDescriptor(
         id: "learning.due", summary: "Was jetzt zu lernen ist (in Reihenfolge); ohne answers nur die Vorderseiten, so kann der Chat abfragen und dann mit learning.review bewerten",
         kind: .read, security: learningRead,
-        input: .object(["course": courseProperty, "limit": .integer("Höchstens so viele (Vorgabe 10)", minimum: 1, maximum: 200), "answers": .boolean("Rückseiten mitliefern")]),
+        input: .object(["course": courseProperty, "lesson": .string("Nur diese Lektion des Kurses (ID, Nummer oder Titel)"),
+                        "limit": .integer("Höchstens so viele (Vorgabe 10)", minimum: 1, maximum: 200), "answers": .boolean("Rückseiten mitliefern")]),
         output: .freeObject(), groups: ["learning.core"]
     )
     static func run(_ args: Args, context: ActionContext) async throws -> Output {
         let app = context.app
         app.learning.loadIfNeeded()
         let courses = try args.course.map { [try app.actionCourse($0)] } ?? app.learning.courses.records
+        if args.lesson != nil, args.course == nil { throw RPCError.invalidParams("lesson braucht course.") }
+        let lesson = try args.lesson.flatMap { reference in try courses.first.map { try $0.actionLesson(reference).id } }
         var items: [Item] = []
         var total = 0
         for course in courses {
-            let queue = app.learning.queue(course.id)
+            let queue = app.learning.queue(course.id, lesson: lesson)
             total += queue.count
             let numbers = Dictionary(uniqueKeysWithValues: course.cards.enumerated().map { ($1.id, $0 + 1) })
             for card in queue {
@@ -806,17 +821,24 @@ struct LearningAISheetAction: LLMDAction {
 struct LearningStudioOpenAction: LLMDAction {
     struct Args: Decodable, Sendable {
         var course: String?
+        var lesson: String?
+        var show: String?
         var review: Bool?
     }
     static let descriptor = ActionDescriptor(
-        id: "learning.studio.open", summary: "Öffnet Learning Studio: den Garten oder einen Kurs, auf Wunsch gleich zum Lernen", kind: .read, security: .plainRead,
-        input: .object(["course": courseProperty, "review": .boolean("Gleich die fälligen Karten lernen")]), output: .freeObject(), groups: ["learning.core"]
+        id: "learning.studio.open", summary: "Öffnet Learning Studio: den Garten, einen Kurs oder eine Lektion (Inhaltsanalyse, Dokumente, Ressourcen, Test), auf Wunsch gleich zum Lernen",
+        kind: .read, security: .plainRead,
+        input: .object(["course": courseProperty, "lesson": lessonProperty, "show": .choice(LessonTab.allCases.map(\.rawValue), "Was von der Lektion"),
+                        "review": .boolean("Gleich die fälligen Karten lernen")]), output: .freeObject(), groups: ["learning.core"]
     )
     static func run(_ args: Args, context: ActionContext) async throws -> OKOutput {
         let app = context.app
-        let course = try args.course.map { try app.actionCourse($0).id }
-        app.openLearningStudio(LearningStudioCommand(course: course, review: args.review == true))
-        return OKOutput(id: course?.uuidString)
+        let course = try args.course.map { try app.actionCourse($0) }
+        if args.lesson != nil, course == nil { throw RPCError.invalidParams("lesson braucht course.") }
+        let lesson = try args.lesson.flatMap { reference in try course?.actionLesson(reference).id }
+        let tab = try ProjectArgs.choice(args.show, LessonTab.allCases, raw: \.rawValue, "show")
+        app.openLearningStudio(LearningStudioCommand(course: course?.id, lesson: lesson, lessonTab: tab, review: args.review == true))
+        return OKOutput(id: (lesson ?? course?.id)?.uuidString)
     }
 }
 
