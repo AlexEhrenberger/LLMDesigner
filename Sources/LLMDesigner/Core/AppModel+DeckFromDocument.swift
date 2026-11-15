@@ -71,96 +71,15 @@ extension AppModel {
 
         deckGenerationTask = Task { [weak self] in
             do {
-                // The plan: from the headings, else the model divides the text.
-                var plan: DeckPlan
-                if let fromHeadings = DocumentDeckPlanner.plan(for: material) {
-                    plan = fromHeadings
-                    if plan.subtitle.isEmpty {
-                        let excerpt = DeckObjects.textForModel(material.markdown, limit: 1_200)
-                        if let answer = try? await client.complete(model: model, messages: PresenterPrompts.subtitleMessages(title: plan.title, text: excerpt), temperature: 0.4, maxTokens: 60) {
-                            plan.subtitle = Self.slideLine(PresenterPrompts.cleanNotes(answer))
-                        }
-                    }
-                } else {
-                    plan = try await Self.planWithModel(material, client: client, model: model, contextLength: contextLength)
-                }
-                try Task.checkCancellation()
                 guard let self else { return }
-
-                // The skeleton: title, chapters and slides with their titles.
-                var slides: [PresentationSlide] = []
-                var work: [(slide: PresentationSlide, chapter: String?, plan: DeckPlan.Slide)] = []
-                var chapterSources: [(id: PresentationSlide.ID, text: String)] = []
-                let title = plan.title.isEmpty ? material.title : plan.title
-                let titleSlide = PresentationSlide(
-                    id: titleSlideID, role: .title,
-                    markdown: "# \(Self.slideLine(title)) {.chapter}" + (plan.subtitle.isEmpty ? "" : "\n\n" + Self.slideLine(plan.subtitle))
+                let created = try await self.fillDeck(
+                    id, from: material, options: options, client: client, model: model, contextLength: contextLength, titleSlideID: titleSlideID,
+                    skeleton: { [weak self] created in
+                        self?.deckGeneration?.created = created
+                        if self?.selectedDocumentID == id { self?.selectedSlideID = created.first }
+                    },
+                    progress: { [weak self] done, total in self?.deckGeneration?.phase = .filling(done: done, total: total) }
                 )
-                for chapter in plan.chapters {
-                    if let chapterTitle = chapter.title {
-                        let slide = PresentationSlide(role: .chapter, markdown: "# \(Self.slideLine(chapterTitle)) {.chapter}")
-                        slides.append(slide)
-                        if !chapter.introduction.isEmpty { chapterSources.append((slide.id, DeckObjects.textForModel(chapter.introduction, limit: 1_500))) }
-                    }
-                    for item in chapter.slides {
-                        let slide = PresentationSlide(role: .content, markdown: "# " + Self.slideLine(item.title))
-                        slides.append(slide)
-                        work.append((slide, chapter.title, item))
-                    }
-                }
-                self.modifyDeck(id) { deck in
-                    deck.slides = [titleSlide] + slides
-                    return true
-                }
-                let created = [titleSlide.id] + slides.map(\.id)
-                self.deckGeneration?.created = created
-                if self.selectedDocumentID == id { self.selectedSlideID = created.first }
-                self.deckSources[titleSlide.id] = DeckObjects.textForModel(material.markdown, limit: 1_500)
-                for source in chapterSources { self.deckSources[source.id] = source.text }
-
-                // The points, slide by slide.
-                let titles = work.map { Self.slideLine($0.plan.title) }
-                let passageLimit = min(3_000, max(1_200, (contextLength - 3_000) * 2))
-                for (number, item) in work.enumerated() {
-                    try Task.checkCancellation()
-                    self.deckGeneration?.phase = .filling(done: number, total: work.count)
-                    let objects = options.carriesObjects ? DeckObjects.extract(from: item.plan.passage) : DeckObjects()
-                    let text = DeckObjects.textForModel(item.plan.passage, limit: passageLimit)
-                    self.deckSources[item.slide.id] = text
-                    var points: [String] = []
-                    if !text.isEmpty {
-                        let answer = try await client.complete(
-                            model: model,
-                            messages: PresenterPrompts.slideFromTextMessages(
-                                presentationTitle: title, chapter: item.chapter, slideTitles: titles, slideTitle: Self.slideLine(item.plan.title),
-                                passage: text, hint: item.plan.hint, carriesObjects: !objects.isEmpty
-                            ),
-                            temperature: 0.3,
-                            maxTokens: 900,
-                            orderedSchema: ("folie", PresenterPrompts.slideSchema.json)
-                        )
-                        try Task.checkCancellation()
-                        let content = try? JSONDecoder().decode(PresenterPrompts.SlideContent.self, from: Data(ContentAnalysisBuilder.jsonObject(in: answer).utf8))
-                        points = (content?.punkte ?? []).map(Self.slidePoint).compactMap(DeckObjects.removingNotes(from:))
-                    }
-                    // A slide with a formula, code or a table has room for fewer points.
-                    var parts = ["# " + Self.slideLine(item.plan.title)]
-                    let hasBlock = !objects.math.isEmpty || !objects.code.isEmpty || !objects.tables.isEmpty
-                    let limited = Array(points.prefix(hasBlock ? 3 : 5))
-                    if !limited.isEmpty { parts.append(limited.map { "- " + $0 }.joined(separator: "\n")) }
-                    parts += objects.math + objects.code + objects.tables
-                    let markdown = parts.joined(separator: "\n\n")
-                    self.modifyDeck(id) { deck in
-                        guard let index = deck.index(of: item.slide.id) else { return false }
-                        deck.slides[index].markdown = markdown
-                        if let image = objects.images.first, WriterImageStore.url(for: image.source) != nil {
-                            let size = WriterImageStore.url(for: image.source).flatMap(WriterImageStore.naturalSize(of:))
-                            let aspect = size.map { Double($0.width / max(1, $0.height)) } ?? 1.5
-                            deck.slides[index].images = [SlideImage(source: image.source, caption: image.caption, frame: SlideImage.defaultFrame(aspect: aspect))]
-                        }
-                        return true
-                    }
-                }
                 self.deckGeneration?.phase = .finished
                 if options.notes { self.writeSpeakerNotes(id, slides: created) }
                 if options.presents { self.presentWithAI(id) }
@@ -174,6 +93,106 @@ extension AppModel {
             }
             self?.deckGenerationTask = nil
         }
+    }
+
+    /// Makes the slides of presentation `id` from a document: the plan from its headings (else the model divides the
+    /// text), the skeleton at once, then the points slide by slide. Returns the slides made, title slide first. The
+    /// sheet "Präsentation aus Dokument" and Learning Studio's course creation both use it.
+    @discardableResult
+    func fillDeck(_ id: WriterDocument.ID, from material: DeckMaterial, options: DeckSourceOptions, client: LLMClient, model: String, contextLength: Int,
+                  titleSlideID: PresentationSlide.ID? = nil, skeleton: ([PresentationSlide.ID]) -> Void = { _ in },
+                  progress: (Int, Int) -> Void = { _, _ in }) async throws -> [PresentationSlide.ID] {
+        let titleSlideID = titleSlideID ?? document(id)?.deck?.slides.first?.id ?? UUID()
+        // The plan: from the headings, else the model divides the text.
+        var plan: DeckPlan
+        if let fromHeadings = DocumentDeckPlanner.plan(for: material) {
+            plan = fromHeadings
+            if plan.subtitle.isEmpty {
+                let excerpt = DeckObjects.textForModel(material.markdown, limit: 1_200)
+                if let answer = try? await client.complete(model: model, messages: PresenterPrompts.subtitleMessages(title: plan.title, text: excerpt), temperature: 0.4, maxTokens: 60) {
+                    plan.subtitle = Self.slideLine(PresenterPrompts.cleanNotes(answer))
+                }
+            }
+        } else {
+            plan = try await Self.planWithModel(material, client: client, model: model, contextLength: contextLength)
+        }
+        try Task.checkCancellation()
+
+        // The skeleton: title, chapters and slides with their titles.
+        var slides: [PresentationSlide] = []
+        var work: [(slide: PresentationSlide, chapter: String?, plan: DeckPlan.Slide)] = []
+        var chapterSources: [(id: PresentationSlide.ID, text: String)] = []
+        let title = plan.title.isEmpty ? material.title : plan.title
+        let titleSlide = PresentationSlide(
+            id: titleSlideID, role: .title,
+            markdown: "# \(Self.slideLine(title)) {.chapter}" + (plan.subtitle.isEmpty ? "" : "\n\n" + Self.slideLine(plan.subtitle))
+        )
+        for chapter in plan.chapters {
+            if let chapterTitle = chapter.title {
+                let slide = PresentationSlide(role: .chapter, markdown: "# \(Self.slideLine(chapterTitle)) {.chapter}")
+                slides.append(slide)
+                if !chapter.introduction.isEmpty { chapterSources.append((slide.id, DeckObjects.textForModel(chapter.introduction, limit: 1_500))) }
+            }
+            for item in chapter.slides {
+                let slide = PresentationSlide(role: .content, markdown: "# " + Self.slideLine(item.title))
+                slides.append(slide)
+                work.append((slide, chapter.title, item))
+            }
+        }
+        modifyDeck(id) { deck in
+            deck.slides = [titleSlide] + slides
+            return true
+        }
+        let created = [titleSlide.id] + slides.map(\.id)
+        skeleton(created)
+        deckSources[titleSlide.id] = DeckObjects.textForModel(material.markdown, limit: 1_500)
+        for source in chapterSources { deckSources[source.id] = source.text }
+
+        // The points, slide by slide.
+        let titles = work.map { Self.slideLine($0.plan.title) }
+        let passageLimit = min(3_000, max(1_200, (contextLength - 3_000) * 2))
+        for (number, item) in work.enumerated() {
+            try Task.checkCancellation()
+            progress(number, work.count)
+            let objects = options.carriesObjects ? DeckObjects.extract(from: item.plan.passage) : DeckObjects()
+            let text = DeckObjects.textForModel(item.plan.passage, limit: passageLimit)
+            deckSources[item.slide.id] = text
+            var points: [String] = []
+            if !text.isEmpty {
+                let answer = try await client.complete(
+                    model: model,
+                    messages: PresenterPrompts.slideFromTextMessages(
+                        presentationTitle: title, chapter: item.chapter, slideTitles: titles, slideTitle: Self.slideLine(item.plan.title),
+                        passage: text, hint: item.plan.hint, carriesObjects: !objects.isEmpty
+                    ),
+                    temperature: 0.3,
+                    maxTokens: 900,
+                    orderedSchema: ("folie", PresenterPrompts.slideSchema.json)
+                )
+                try Task.checkCancellation()
+                let content = try? JSONDecoder().decode(PresenterPrompts.SlideContent.self, from: Data(ContentAnalysisBuilder.jsonObject(in: answer).utf8))
+                points = (content?.punkte ?? []).map(Self.slidePoint).compactMap(DeckObjects.removingNotes(from:))
+            }
+            // A slide with a formula, code or a table has room for fewer points.
+            var parts = ["# " + Self.slideLine(item.plan.title)]
+            let hasBlock = !objects.math.isEmpty || !objects.code.isEmpty || !objects.tables.isEmpty
+            let limited = Array(points.prefix(hasBlock ? 3 : 5))
+            if !limited.isEmpty { parts.append(limited.map { "- " + $0 }.joined(separator: "\n")) }
+            parts += objects.math + objects.code + objects.tables
+            let markdown = parts.joined(separator: "\n\n")
+            modifyDeck(id) { deck in
+                guard let index = deck.index(of: item.slide.id) else { return false }
+                deck.slides[index].markdown = markdown
+                if let image = objects.images.first, WriterImageStore.url(for: image.source) != nil {
+                    let size = WriterImageStore.url(for: image.source).flatMap(WriterImageStore.naturalSize(of:))
+                    let aspect = size.map { Double($0.width / max(1, $0.height)) } ?? 1.5
+                    deck.slides[index].images = [SlideImage(source: image.source, caption: image.caption, frame: SlideImage.defaultFrame(aspect: aspect))]
+                }
+                return true
+            }
+        }
+        progress(work.count, work.count)
+        return created
     }
 
     /// A text without usable headings: the model divides it into chapters and slides over numbered paragraphs.

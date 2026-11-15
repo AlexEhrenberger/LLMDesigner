@@ -193,7 +193,8 @@ extension AppModel {
     /// A title in one line, without Markdown marks and numbering.
     static func slideLine(_ text: String) -> String {
         var line = text.replacingOccurrences(of: "\n", with: " ").trimmingCharacters(in: .whitespaces)
-        line = line.replacingOccurrences(of: #"^(#+|\d+[.)]|[-–•*])\s*"#, with: "", options: .regularExpression)
+        // "1.3 Bedingte …" loses its whole number, not just "1." (headings of course summaries are numbered so).
+        line = line.replacingOccurrences(of: #"^(#+|\d+(\.\d+)+\.?(?=\s)|\d+[.)]|[-–•*])\s*"#, with: "", options: .regularExpression)
         // "Kapitel 2: …", "Folie 1.3 – …": the slides number themselves.
         line = line.replacingOccurrences(of: #"^(?i:Kapitel|Folie|Teil|Abschnitt|Chapter|Slide)\s+(\d+(\.\d+)*|[IVX]+)\b\s*[:.–-]?\s*"#, with: "", options: .regularExpression)
         while line.hasSuffix(":") || line.hasSuffix(".") { line.removeLast() }

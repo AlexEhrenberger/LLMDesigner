@@ -29,9 +29,15 @@ struct LearningCoursePage: View {
                 Divider()
                 Group {
                     switch model.tab {
-                    case .overview: CourseOverview(courseID: courseID, model: model)
-                    case .cards: CourseCardsTab(courseID: courseID)
-                    case .review: ReviewSessionView(courseID: courseID)
+                    case .overview:
+                        if let lessonID = model.lessonID, course.lesson(lessonID) != nil {
+                            LessonPage(courseID: courseID, lessonID: lessonID, model: model)
+                                .id(lessonID)
+                        } else {
+                            CourseOverview(courseID: courseID, model: model)
+                        }
+                    case .cards: CourseCardsTab(courseID: courseID, model: model)
+                    case .review: CourseReviewTab(courseID: courseID, model: model)
                     case .material: CourseMaterialTab(courseID: courseID, model: model)
                     case .quiz: CourseQuizTab(courseID: courseID)
                     case .links: CourseLinksTab(courseID: courseID)
@@ -39,6 +45,8 @@ struct LearningCoursePage: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+            .sheet(isPresented: $model.showsCourseSettings) { CourseSettingsSheet(courseID: courseID, model: model) }
+            .sheet(isPresented: $model.showsBuild) { CourseBuildSheet(courseID: courseID) }
         }
     }
 
@@ -94,10 +102,14 @@ struct LearningCoursePage: View {
             }
             Spacer()
             Menu {
+                Button("Kurseinstellungen …", systemImage: "gearshape") { model.showsCourseSettings = true }
+                Button("Aus PDF erstellen …", systemImage: "doc.richtext") { model.showsBuild = true }
+                Divider()
                 Button("Kurs pausieren", systemImage: "pause.circle") { app.learning.startPause(scope: .course(courseID), reason: "Kurs pausiert") }
                 Button("Mit Projekt verknüpfen …", systemImage: Project.sidebarSymbol) { model.tab = .links }
                 Divider()
                 Button("Kurs löschen", systemImage: "trash", role: .destructive) {
+                    app.cancelCourseBuild(course: courseID)
                     app.learning.courses.delete(courseID, label: "Kurs löschen", undo: nil)
                     model.courseID = nil
                 }
@@ -128,6 +140,11 @@ private struct CourseOverview: View {
             let paused = library.activePause(for: course)
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
+                    CourseStructureSection(courseID: courseID, model: model)
+                        .padding(.bottom, 10)
+                    if !course.lessons.isEmpty {
+                        StudioSectionHeader(title: "Lernstand", symbol: "chart.bar.xaxis")
+                    }
                     if let paused {
                         HStack {
                             Image(systemName: "beach.umbrella.fill").foregroundStyle(Theme.warning)
@@ -213,6 +230,9 @@ private struct CourseCardsTab: View {
     @Environment(AppModel.self) private var app
     @Environment(\.undoManager) private var undoManager
     let courseID: UUID
+    @Bindable var model: LearningStudioModel
+    /// Shows the cards of one lesson; new cards go into it.
+    @State private var lessonFilter: UUID??
     @State private var query = ""
     @State private var front = ""
     @State private var back = ""
@@ -223,7 +243,7 @@ private struct CourseCardsTab: View {
     var body: some View {
         let library = app.learning
         if let course = library.course(courseID) {
-            let cards = course.cards.filter { $0.matches(query) }
+            let cards = course.cards.filter { card in card.matches(query) && (lessonFilter.map { filter in card.lesson == filter } ?? true) }
             VStack(spacing: 0) {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(alignment: .top, spacing: 10) {
@@ -253,6 +273,18 @@ private struct CourseCardsTab: View {
                     HStack {
                         SearchField(text: $query, prompt: "Karten durchsuchen")
                             .frame(width: 280)
+                        if !course.lessons.isEmpty {
+                            Picker("", selection: $lessonFilter) {
+                                Text("Alle Lektionen").tag(UUID??.none)
+                                ForEach(Array(course.lessons.enumerated()), id: \.element.id) { index, lesson in
+                                    Text("\(index + 1). \(lesson.displayTitle)").tag(UUID??.some(lesson.id))
+                                }
+                                Text("Ohne Lektion").tag(UUID??.some(nil))
+                            }
+                            .labelsHidden()
+                            .frame(width: 260)
+                            .help("Zeigt die Karten einer Lektion; neue Karten kommen in diese Lektion")
+                        }
                         Text("\(cards.count) von \(course.cards.count)").font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary)
                         Spacer()
                     }
@@ -263,7 +295,7 @@ private struct CourseCardsTab: View {
                 ScrollView {
                     LazyVStack(spacing: 6) {
                         ForEach(cards) { card in
-                            CardRow(courseID: courseID, card: card, isEditing: editing == card.id) {
+                            CardRow(courseID: courseID, card: card, lessons: course.lessons, isEditing: editing == card.id) {
                                 editing = editing == card.id ? nil : card.id
                             }
                         }
@@ -287,7 +319,7 @@ private struct CourseCardsTab: View {
                         Spacer()
                         Button("Abbrechen") { importing = false }
                         Button("Anlegen") {
-                            let cards = parsed.map { LearningCard(front: $0.front, back: $0.back) }
+                            let cards = parsed.map { LearningCard(front: $0.front, back: $0.back, lesson: lessonFilter ?? nil) }
                             app.learning.courses.change(courseID, "Karten anlegen", undo: undoManager) { $0.cards += cards }
                             importText = ""
                             importing = false
@@ -303,7 +335,7 @@ private struct CourseCardsTab: View {
     }
 
     private func add() {
-        let card = LearningCard(front: front.trimmingCharacters(in: .whitespacesAndNewlines), back: back.trimmingCharacters(in: .whitespacesAndNewlines))
+        let card = LearningCard(front: front.trimmingCharacters(in: .whitespacesAndNewlines), back: back.trimmingCharacters(in: .whitespacesAndNewlines), lesson: lessonFilter ?? nil)
         guard !card.front.isEmpty else { return }
         app.learning.courses.change(courseID, "Karte anlegen", undo: undoManager) { $0.cards.append(card) }
         front = ""
@@ -315,6 +347,7 @@ private struct CardRow: View {
     @Environment(AppModel.self) private var app
     let courseID: UUID
     let card: LearningCard
+    var lessons: [LearningLesson] = []
     let isEditing: Bool
     let toggle: () -> Void
 
@@ -333,6 +366,9 @@ private struct CardRow: View {
                     VStack(alignment: .leading, spacing: 3) {
                         Text(card.front).font(.system(size: 13, weight: .medium)).foregroundStyle(Theme.textPrimary)
                         Text(card.back).font(.system(size: 12)).foregroundStyle(Theme.textSecondary).lineLimit(3)
+                        if let index = lessons.firstIndex(where: { $0.id == card.lesson }) {
+                            Text("Lektion \(index + 1): \(lessons[index].displayTitle)").font(.system(size: 10.5)).foregroundStyle(Theme.textTertiary)
+                        }
                     }
                 }
                 Spacer(minLength: 8)
@@ -343,13 +379,24 @@ private struct CardRow: View {
                 }
                 Menu {
                     Button(isEditing ? "Fertig" : "Bearbeiten", systemImage: "pencil", action: toggle)
+                    if !lessons.isEmpty {
+                        Menu("Lektion") {
+                            ForEach(Array(lessons.enumerated()), id: \.element.id) { index, lesson in
+                                Button("\(index + 1). \(lesson.displayTitle)") {
+                                    app.learning.courses.update(courseID) { $0.updateCard(card.id) { $0.lesson = lesson.id } }
+                                }
+                            }
+                            Divider()
+                            Button("Ohne Lektion") { app.learning.courses.update(courseID) { $0.updateCard(card.id) { $0.lesson = nil } } }
+                        }
+                    }
                     Button(card.suspended ? "Wieder lernen" : "Zurückstellen", systemImage: card.suspended ? "play" : "pause") {
                         app.learning.courses.update(courseID) { $0.updateCard(card.id) { $0.suspended.toggle() } }
                     }
                     Button("Neu lernen (zurücksetzen)", systemImage: "arrow.counterclockwise") {
                         app.learning.courses.update(courseID) { course in
                             course.updateCard(card.id) { card in
-                                card = LearningCard(front: card.front, back: card.back, tags: card.tags, material: card.material).with(id: card.id)
+                                card = LearningCard(front: card.front, back: card.back, tags: card.tags, material: card.material, lesson: card.lesson).with(id: card.id)
                             }
                         }
                     }
@@ -388,6 +435,37 @@ private struct CardRow: View {
     private func binding(_ keyPath: WritableKeyPath<LearningCard, String>) -> Binding<String> {
         Binding(get: { app.learning.course(courseID)?.card(card.id)?[keyPath: keyPath] ?? "" },
                 set: { value in app.learning.courses.update(courseID) { $0.updateCard(card.id) { $0[keyPath: keyPath] = value } } })
+    }
+}
+
+/// Learning the due cards: of the whole course or of one lesson.
+private struct CourseReviewTab: View {
+    @Environment(AppModel.self) private var app
+    let courseID: UUID
+    @Bindable var model: LearningStudioModel
+
+    var body: some View {
+        if let course = app.learning.course(courseID) {
+            VStack(spacing: 0) {
+                if !course.lessons.isEmpty {
+                    HStack {
+                        Picker("Lernen", selection: $model.reviewLesson) {
+                            Text("Ganzer Kurs (\(app.learning.queue(courseID).count))").tag(UUID?.none)
+                            ForEach(Array(course.lessons.enumerated()), id: \.element.id) { index, lesson in
+                                let counts = app.learning.lessonCounts(courseID, lesson: lesson.id)
+                                Text("\(index + 1). \(lesson.displayTitle) (\(counts.due)/\(counts.total))").tag(Optional(lesson.id))
+                            }
+                        }
+                        .frame(maxWidth: 420)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 24)
+                    .padding(.top, 12)
+                }
+                ReviewSessionView(courseID: courseID, lessonID: model.reviewLesson)
+                    .id(model.reviewLesson)
+            }
+        }
     }
 }
 

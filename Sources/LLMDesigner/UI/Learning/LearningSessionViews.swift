@@ -8,6 +8,8 @@ import UniformTypeIdentifiers
 struct ReviewSessionView: View {
     @Environment(AppModel.self) private var app
     let courseID: UUID
+    /// Only this lesson's cards.
+    var lessonID: UUID?
     var compact = false
     @State private var showsAnswer = false
     @State private var answered = 0
@@ -16,7 +18,7 @@ struct ReviewSessionView: View {
 
     var body: some View {
         let library = app.learning
-        let queue = library.queue(courseID)
+        let queue = library.queue(courseID, lesson: lessonID)
         let card = currentID.flatMap { id in queue.first { $0.id == id } } ?? queue.first
         VStack(spacing: compact ? 10 : 18) {
             if let course = library.course(courseID), let pause = library.activePause(for: course) {
@@ -127,12 +129,12 @@ struct ReviewSessionView: View {
         answered += 1
         lastRating = rating
         showsAnswer = false
-        currentID = app.learning.queue(courseID).first?.id
+        currentID = app.learning.queue(courseID, lesson: lessonID).first?.id
     }
 
     private var finished: some View {
-        let waiting = app.learning.waitingSteps(courseID)
-        let next = app.learning.course(courseID)?.cards.filter { !$0.suspended && $0.state != .new }.map(\.due).min()
+        let waiting = app.learning.waitingSteps(courseID).filter { lessonID == nil || $0.lesson == lessonID }
+        let next = app.learning.course(courseID)?.cards.filter { !$0.suspended && $0.state != .new && (lessonID == nil || $0.lesson == lessonID) }.map(\.due).min()
         return VStack(spacing: 12) {
             Image(systemName: answered > 0 ? "checkmark.seal.fill" : "leaf.fill")
                 .font(.system(size: compact ? 30 : 46))
@@ -325,7 +327,8 @@ struct CourseQuizTab: View {
 
     var body: some View {
         if let course = app.learning.course(courseID) {
-            let session = sessionID.flatMap { id in course.quizzes.first { $0.id == id } } ?? course.quizzes.last
+            let quizzes = course.quizzes.filter { !$0.isTest }
+            let session = sessionID.flatMap { id in quizzes.first { $0.id == id } } ?? quizzes.last
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     HStack {
@@ -340,9 +343,9 @@ struct CourseQuizTab: View {
                             Text("Diese Abfrage: \(Int(score * 100)) %").font(.system(size: 12.5, weight: .medium)).foregroundStyle(Theme.textSecondary)
                         }
                         Spacer()
-                        if course.quizzes.count > 1 {
+                        if quizzes.count > 1 {
                             Picker("Frühere", selection: Binding(get: { session?.id }, set: { sessionID = $0 })) {
-                                ForEach(course.quizzes.reversed()) { quiz in
+                                ForEach(quizzes.reversed()) { quiz in
                                     Text(quiz.date.formatted(date: .abbreviated, time: .shortened) + (quiz.score.map { " · \(Int($0 * 100)) %" } ?? "")).tag(Optional(quiz.id))
                                 }
                             }
