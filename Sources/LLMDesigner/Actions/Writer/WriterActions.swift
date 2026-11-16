@@ -75,6 +75,7 @@ extension AppModel {
 
     /// Removes a document again when its creation is taken back.
     func removeDocumentForActionUndo(_ id: WriterDocument.ID) {
+        presentationPlayer.documentGone(id)
         if selectedDocumentID == id { selectedDocumentID = nil }
         documents.removeAll { $0.id == id }
         documentStore.delete(id)

@@ -189,8 +189,20 @@ final class SlideDesignRenderer: NSObject, WKNavigationDelegate {
     private(set) var images: [String: NSImage] = [:]
     @ObservationIgnored private var requested: Set<String> = []
     @ObservationIgnored private var webView: WKWebView?
-    @ObservationIgnored private var loaded: CheckedContinuation<Void, Never>?
+    @ObservationIgnored private var loaded: CheckedContinuation<Bool, Never>?
     @ObservationIgnored private var lastRender: Task<Void, Never>?
+    /// Numbers the loads, so a late time-out only ends the load it was meant for.
+    @ObservationIgnored private var loadNumber = 0
+    /// Designs that couldn't be drawn, counted (the PDF export says so).
+    @ObservationIgnored private(set) var failures = 0
+
+    /// How long a page may take to load. Renders wait for each other, so one that never ends (a hanging web process)
+    /// would hold up every design after it and every PDF export.
+    static var loadTimeout: Duration = .seconds(5)
+    /// How the page goes into the web view; `blocked` says it won't load. Tests put a loader here that never finishes.
+    static var load: (WKWebView, String, @escaping () -> Void) -> Void = { view, html, blocked in
+        view.loadOfflineHTML(html, blocked: blocked)
+    }
 
     private func key(_ design: SlideDesign, _ role: SlideRole, _ width: CGFloat) -> String {
         "\(design.id)|\(role.rawValue)|\(Int(width))|\(design.css.hashValue)"
@@ -215,7 +227,12 @@ final class SlideDesignRenderer: NSObject, WKNavigationDelegate {
             await previous?.value
             if let image = self.images[key] { return image }
             let image = await self.draw(design.html(role: role, live: false), width: width)
-            if let image { self.images[key] = image }
+            if let image {
+                self.images[key] = image
+            } else {
+                // Asked for again later, it is tried again.
+                self.requested.remove(key)
+            }
             return image
         }
         lastRender = Task { _ = await task.value }
@@ -231,9 +248,23 @@ final class SlideDesignRenderer: NSObject, WKNavigationDelegate {
             self.webView = view
             return view
         }()
-        await withCheckedContinuation { continuation in
+        loadNumber += 1
+        let number = loadNumber
+        let didLoad = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
             loaded = continuation
-            webView.loadOfflineHTML(html)
+            Self.load(webView, html) { [weak self] in self?.finishLoading(false) }
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: Self.loadTimeout)
+                guard let self, self.loadNumber == number else { return }
+                self.finishLoading(false)
+            }
+        }
+        guard didLoad else {
+            // A web view that didn't load is given up: the next design gets a fresh one.
+            webView.stopLoading()
+            if self.webView === webView { self.webView = nil }
+            failures += 1
+            return nil
         }
         // A moment for the layers with filters to be drawn.
         try? await Task.sleep(for: .milliseconds(60))
@@ -246,27 +277,31 @@ final class SlideDesignRenderer: NSObject, WKNavigationDelegate {
         }
     }
 
-    private func finishLoading() {
+    private func finishLoading(_ didLoad: Bool) {
         let continuation = loaded
         loaded = nil
-        continuation?.resume()
+        continuation?.resume(returning: didLoad)
     }
 
+    // A web view given up after a time-out may still report; only the current one counts.
+
     nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        MainActor.assumeIsolated { finishLoading() }
+        MainActor.assumeIsolated { if webView === self.webView { finishLoading(true) } }
     }
 
     nonisolated func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        MainActor.assumeIsolated { finishLoading() }
+        // As before: a page that failed is still drawn as far as it got.
+        MainActor.assumeIsolated { if webView === self.webView { finishLoading(true) } }
     }
 
     nonisolated func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        MainActor.assumeIsolated { finishLoading() }
+        MainActor.assumeIsolated { if webView === self.webView { finishLoading(true) } }
     }
 
     nonisolated func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         MainActor.assumeIsolated {
-            finishLoading()
+            guard webView === self.webView else { return }
+            finishLoading(false)
             self.webView = nil
         }
     }

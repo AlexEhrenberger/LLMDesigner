@@ -234,7 +234,7 @@ final class WriterEditorController {
         app.readDocumentAloud(
             script.text,
             progress: { [weak textView] range in textView?.highlightSpoken(script.documentRange(for: range)) },
-            ended: { [weak textView] in textView?.highlightSpoken(nil) }
+            ended: { [weak textView] _ in textView?.highlightSpoken(nil) }
         )
     }
 

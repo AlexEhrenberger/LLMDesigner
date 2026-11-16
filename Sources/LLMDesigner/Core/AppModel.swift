@@ -582,8 +582,9 @@ final class AppModel {
     @ObservationIgnored var writerDictation: ((WriterDictationEvent, WriterDocument.ID) -> Void)?
     /// The document being read aloud.
     var speakingDocumentID: WriterDocument.ID?
-    /// Called once reading the document ends (finished or stopped), so the editor can remove its highlight.
-    @ObservationIgnored var writerSpeechEnded: (() -> Void)?
+    /// Called once reading the document ends, so the editor can remove its highlight: true when it was read to its
+    /// end, false when it was stopped (by the person, another reading, or because there was nothing to read it in).
+    @ObservationIgnored var writerSpeechEnded: ((Bool) -> Void)?
     /// The tab of a document's side panel (contents or bookmarks); the panel itself follows `outlinePanelVisible`.
     var documentPanelTab: SidePanelTab = .contents
     /// Documents whose dynamic table of contents is being made, and why it failed.

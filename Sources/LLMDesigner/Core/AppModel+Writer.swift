@@ -289,6 +289,8 @@ extension AppModel {
         deleteAnalysis(id)
         documentSaveTasks[id]?.cancel()
         documentSaveTasks[id] = nil
+        // A presentation being played (also on a second screen) stops with it.
+        presentationPlayer.documentGone(id)
         let pictures = document(id)?.pictureSources ?? []
         documents.removeAll { $0.id == id }
         documentStore.delete(id)

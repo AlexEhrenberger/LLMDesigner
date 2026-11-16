@@ -29,11 +29,15 @@ extension AppModel {
         exportingIDs.insert(id)
         Task {
             citations.loadIfNeeded()
+            let failures = SlideDesignRenderer.shared.failures
             let data = await SlidePrinter.pdf(deck: deck, title: document.displayTitle, family: document.font, citations: citations)
             exportingIDs.remove(id)
             guard let data else {
                 exportError = "Die Folien ließen sich nicht als PDF zeichnen."
                 return
+            }
+            if SlideDesignRenderer.shared.failures > failures {
+                showNotice("Ein Design ließ sich nicht zeichnen; diese Folien haben im PDF einen dunklen Hintergrund.")
             }
             guard let url = await askForDestination(fileName: document.displayTitle, type: .pdf) else { return }
             do {

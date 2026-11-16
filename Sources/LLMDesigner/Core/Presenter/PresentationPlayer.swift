@@ -35,7 +35,6 @@ final class PresentationPlayer {
     /// Each reading gets a number; when it ends, only the current one counts.
     @ObservationIgnored private var reading = 0
     @ObservationIgnored private var readingEnded: CheckedContinuation<Bool, Never>?
-    @ObservationIgnored private var stoppedByUser = false
     @ObservationIgnored private var window: PresentationWindowController?
 
     var deck: PresentationDeck? {
@@ -128,7 +127,7 @@ final class PresentationPlayer {
 
     private func loop() async {
         while isPresenting, !Task.isCancelled {
-            guard let app, let documentID, let deck, deck.slides.indices.contains(index) else { break }
+            guard let app, let documentID, let deck, deck.slides.indices.contains(index) else { return halt() }
             let slide = deck.slides[index]
             var notes = slide.notes.trimmingCharacters(in: .whitespacesAndNewlines)
             if notes.isEmpty {
@@ -148,7 +147,10 @@ final class PresentationPlayer {
             prepareNotes(after: index, in: documentID)
             let started = Date()
             let finished = await speak(notes)
-            guard finished, isPresenting, !Task.isCancelled else { return }
+            guard isPresenting, !Task.isCancelled else { return }
+            // Someone else ended the reading (the stop button, esc in the editor, another voice): the presentation
+            // pauses on this slide instead of going on as if it had been said.
+            guard finished else { return halt() }
             // A voice that ends at once is not there (Qwen TTS not running, for example).
             if Date().timeIntervalSince(started) < 0.6, notes.count > 40 {
                 error = app.notice ?? "Die Stimme hat nichts vorgelesen. Ist die Sprachausgabe erreichbar?"
@@ -158,7 +160,8 @@ final class PresentationPlayer {
             }
             phase = .turning
             try? await Task.sleep(for: .milliseconds(900))
-            guard isPresenting, !Task.isCancelled, let count = self.deck?.slides.count else { return }
+            guard isPresenting, !Task.isCancelled else { return }
+            guard let count = self.deck?.slides.count else { return halt() }
             if index + 1 < count {
                 withAnimation(.easeInOut(duration: 0.6)) { index += 1 }
                 if let slide = currentSlide { app.selectedSlideID = slide.id }
@@ -171,6 +174,25 @@ final class PresentationPlayer {
                 return
             }
         }
+    }
+
+    /// The presentation can't go on here (its slides are gone, the reading was stopped from outside): it stops
+    /// presenting and stays on the slide. A loop that was replaced or paused leaves the state to whoever did that.
+    private func halt() {
+        guard !Task.isCancelled else { return }
+        isPresenting = false
+        if phase != .finished { phase = .idle }
+    }
+
+    /// The presentation's document was deleted: nothing of it plays on, and the full screen closes.
+    func documentGone(_ id: WriterDocument.ID) {
+        guard documentID == id else { return }
+        stop()
+        exitFullScreen()
+        documentID = nil
+        index = 0
+        phase = .idle
+        error = nil
     }
 
     /// The model writes the next slide's notes while this one is read, so there is no pause between them.
@@ -192,30 +214,32 @@ final class PresentationPlayer {
 
     // MARK: Reading aloud
 
-    /// Reads the text and returns when it is done: true if it was read to the end.
+    /// Reads the text and returns when it is done: true if it was read to the end, false if it was stopped (by the
+    /// player itself, or from outside).
     private func speak(_ notes: String) async -> Bool {
-        guard let app else { return false }
+        guard let app, let documentID else { return false }
         interruptReading()
         reading += 1
         let number = reading
-        stoppedByUser = false
         let text = SpeakableText.from(markdown: notes)
         spokenText = text
         spokenRange = nil
         phase = .speaking
         let finished = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
             readingEnded = continuation
+            // The presentation's own document, whatever the main window shows meanwhile.
             app.readDocumentAloud(
                 text,
+                of: documentID,
                 progress: { [weak self] range in
                     guard let self, self.reading == number else { return }
                     self.spokenRange = range
                 },
-                ended: { [weak self] in
+                ended: { [weak self] finished in
                     guard let self, self.reading == number else { return }
                     let continuation = self.readingEnded
                     self.readingEnded = nil
-                    continuation?.resume(returning: !self.stoppedByUser)
+                    continuation?.resume(returning: finished)
                 }
             )
         }
@@ -229,7 +253,7 @@ final class PresentationPlayer {
     private func interruptReading() {
         guard let continuation = readingEnded else { return }
         readingEnded = nil
-        stoppedByUser = true
+        // The reading's own end, which stopping it now brings, no longer counts.
         reading += 1
         app?.stopReadingDocument()
         continuation.resume(returning: false)
