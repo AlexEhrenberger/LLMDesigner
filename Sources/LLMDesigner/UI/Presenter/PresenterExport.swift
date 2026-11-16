@@ -23,6 +23,8 @@ struct PresenterExportMenu: View {
             }
             .padding(.horizontal, 7)
             .frame(height: Theme.titleBarControlSize)
+            // The title bar is full: without this the count is squeezed to "P…".
+            .fixedSize()
         } else {
             menu
         }
