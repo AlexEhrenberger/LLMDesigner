@@ -39,8 +39,9 @@ enum SlidePrinter {
         return rep.representation(using: .png, properties: [:])
     }
 
-    /// The slide as views that draw themselves: background with the pictures behind the text, the text, the
-    /// pictures in front.
+    /// The slide as views that draw themselves, stacked as on the screen: the background, the master, what lies
+    /// behind the text, the text, then what flows around it or lies in front. Pictures and text fields keep their
+    /// order among each other, the later one on top ("Nach vorn", "Nach hinten").
     static func view(for slide: PresentationSlide, in deck: PresentationDeck, family: WriterFont, citations: CitationLibrary?, title: String = "") async -> NSView {
         let background = deck.background(of: slide)
         var designImage: NSImage?
@@ -52,15 +53,14 @@ enum SlidePrinter {
         stage.background = background
         stage.tone = SlideLook.tone(of: background, role: slide.role)
         stage.designImage = designImage.flatMap { PrintImages.compact($0, key: "design|\(background.design ?? "")|\(slide.role.rawValue)", size: canvas) }
-        stage.images = slide.images.filter { $0.placement == .behind && !$0.isText }
         if let content = SlideMasterContent.make(deck: deck, slide: slide, title: title) {
             let master = SlideMasterView(frame: frame)
             master.content = content
             stage.addSubview(master)
         }
         let fieldPalette = SlideLook.fieldPalette(background, role: slide.role)
-        for field in slide.images where field.isText && field.placement == .behind {
-            stage.addSubview(fieldView(field, family: family, palette: fieldPalette, citations: citations))
+        for element in slide.images where element.placement == .behind {
+            stage.addSubview(elementView(element, family: family, palette: fieldPalette, citations: citations))
         }
 
         let text = WriterTextView.make()
@@ -79,13 +79,18 @@ enum SlidePrinter {
         text.updateSlideCentering()
         stage.addSubview(text)
 
-        let front = SlidePrintLayer(frame: frame)
-        front.images = slide.images.filter { $0.placement != .behind && !$0.isText }
-        stage.addSubview(front)
-        for field in slide.images where field.isText && field.placement != .behind {
-            stage.addSubview(fieldView(field, family: family, palette: fieldPalette, citations: citations))
+        for element in slide.images where element.placement != .behind {
+            stage.addSubview(elementView(element, family: family, palette: fieldPalette, citations: citations))
         }
         return stage
+    }
+
+    /// One picture or text field as a layer of its own, so it stacks where it stands in the slide's list.
+    private static func elementView(_ element: SlideImage, family: WriterFont, palette: WriterPalette, citations: CitationLibrary?) -> NSView {
+        if element.isText { return fieldView(element, family: family, palette: palette, citations: citations) }
+        let layer = SlidePrintLayer(frame: NSRect(origin: .zero, size: canvas))
+        layer.images = [element]
+        return layer
     }
 
     /// A text field: its box drawn behind Writer Studio's text view, both at the field's frame.

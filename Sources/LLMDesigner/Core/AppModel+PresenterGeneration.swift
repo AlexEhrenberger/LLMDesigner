@@ -36,7 +36,12 @@ extension AppModel {
         case .createDeck:
             generatePresentation(id, instruction: instruction, withNotes: intent.withNotes, presents: intent.presents)
         case .speakerNotes:
-            writeAllSpeakerNotes(id, anew: intent.rewritesNotes)
+            if intent.thisSlide, let document = document(id), let slideID = currentSlideID(in: document) {
+                // Asked for by name: written (anew, if there is one; "Vorherige Karte" brings the old one back).
+                writeSpeakerNotes(id, slides: [slideID])
+            } else {
+                writeAllSpeakerNotes(id, anew: intent.rewritesNotes)
+            }
             if intent.presents { presentWithAI(id) }
         case .present:
             presentWithAI(id)
