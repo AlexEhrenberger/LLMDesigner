@@ -86,10 +86,10 @@ flowchart TB
 - **Herkunft:** Dokumente tragen `herkunft: fremd` im Kopf, wenn sie von außen kommen. Was ein markierter Lauf schreibt, wird ebenfalls fremd. „Als geprüft bestätigen“ fragt immer, einzeln.
 - **Socket:** nur für den eigenen Benutzer (Ordner 0700, Socket 0600), Peer-UID-Prüfung, neues Token je Start. Kein Netzwerkport.
 - **Export:** ohne Rückfrage nur in den Exportordner, und nur wenn der Lauf nichts Fremdes gelesen hat.
-- **Web-Ansichten:** laden nichts aus dem Netz (`WKContentRuleList`).
+- **Web-Ansichten:** laden nichts aus dem Netz (`WKContentRuleList`). Folien-Designs sind reines CSS: ihre Seiten führen kein JavaScript aus, und „</“ im CSS kann den `<style>`-Block nicht schließen.
 - **LaTeX:** Formeln, die Dateien lesen oder Befehle zusammenbauen könnten, werden als Code gesetzt (`LaTeXSafety`).
 - **Anhänge:** Ein Chat mit angehängtem Dokument gilt als fremd und sensibel zugleich (A und B): Inhalt von Dritten, Datei der Person. Websuche und Seitenaufrufe fragen dann wie bei Persona-Dateien, Actions mit Wirkung nach außen ebenso. `chat.document.read` ist über MCP gesperrt.
-- **Immer mit Rückfrage außerhalb der Oberfläche:** Mikrofon, Bildschirmfoto, Vollbild und Vortrag mit Stimme, Modellserver umstellen, Bibliothek wechseln, Anhang in einem anderen Programm öffnen. Über Chat und MCP auch jede Datei, deren Pfad der Aufrufer nennt.
+- **Immer mit Rückfrage außerhalb der Oberfläche:** Mikrofon, Bildschirmfoto, Vollbild und Vortrag mit Stimme, Modellserver umstellen, Bibliothek wechseln, Anhang in einem anderen Programm öffnen. Über Chat, MCP und Agenten auch jede Datei, deren Pfad der Aufrufer nennt (`ActionChannel.asksBeforeReadingFiles`): Bilder, Dokumente, PDFs, Videos, Skills und Persona-Dateien kommen erst nach dem Ja in die Bibliothek oder vor das Modell, auch wenn die Aufgabe eines Agenten sonst „Änderungen erlauben“ hat.
 - **Agenten (AgentSteps):** Kanal „Agent“, Standard lesen erlaubt, schreiben und destruktiv fragen; jede Aufgabe stellt ein, wie viel sie ohne Rückfrage darf („Änderungen erlauben“ als Vorgabe). Fragen halten nur ihren Lauf an.
 - **Protokoll:** Fenster → „Aktivität von Terminal und Agenten“ zeigt Zeit, Kanal, Lauf, Action, A/B, Entscheidung und Ergebnis, aber keine Inhalte.
 - **Katalog:** Fenster → „Action-Katalog für Agenten“ zeigt alle Actions mit Parametern, Art, A/B, Wirkung und Aufruf.

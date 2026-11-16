@@ -29,6 +29,7 @@ private func preparedPlayer(_ app: AppModel) throws -> PresentationPlayer {
 
 private let fullScreenConsent = "Ein Vortrag im Vollbild nimmt den ganzen Bildschirm ein."
 let speakingConsent = "Der Vortrag nimmt den ganzen Bildschirm ein und spricht laut."
+private let readingConsent = "Die Moderatorenkarte wird laut vorgelesen."
 
 struct PresenterPlayStartAction: LLMDAction {
     struct Args: Decodable, Sendable {
@@ -166,8 +167,14 @@ struct PresenterPlayStopAction: LLMDAction {
 struct PresenterPlayReadNotesAction: LLMDAction {
     typealias Output = PresenterPlayStatusAction.Output
     static let descriptor = ActionDescriptor(
-        id: "presenter.play.readNotes", summary: "Liest die Moderatorenkarte der aktuellen Folie einmal vor", kind: .write, security: .localWrite, output: .freeObject()
+        id: "presenter.play.readNotes", summary: "Liest die Moderatorenkarte der aktuellen Folie einmal vor; fragt nach", kind: .write, security: .localWrite, output: .freeObject()
     )
+    static func preflight(_ args: NoArgs, context: ActionContext) throws -> ActionPreflight {
+        // Like presenter.play.resume: the app speaks aloud.
+        var check = ActionPreflight()
+        if context.channel != .ui { check.needsConsent = readingConsent }
+        return check
+    }
     static func run(_ args: NoArgs, context: ActionContext) async throws -> Output {
         let player = try preparedPlayer(context.app)
         guard player.currentSlide?.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {

@@ -70,7 +70,7 @@ struct CitationAttachmentAddAction: LLMDAction {
     static func preflight(_ args: Args, context: ActionContext) throws -> ActionPreflight {
         var check = ActionPreflight(target: args.file)
         // A model or a client names a path: read afterwards, that would show it any file on this Mac.
-        if context.channel == .chat || context.channel == .mcp {
+        if context.channel.asksBeforeReadingFiles {
             check.needsConsent = "Eine Datei von dieser Stelle der Festplatte käme in die Bibliothek und wäre danach für den Aufrufer lesbar."
         }
         return check

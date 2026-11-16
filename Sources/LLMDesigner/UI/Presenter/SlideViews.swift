@@ -140,7 +140,7 @@ private struct LiveDesignView: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeNSView(context: Context) -> WKWebView {
-        let view = PassthroughWebView(frame: .zero)
+        let view = PassthroughWebView(frame: .zero, configuration: SlideDesign.webConfiguration())
         view.setValue(false, forKey: "drawsBackground")
         view.navigationDelegate = context.coordinator
         context.coordinator.onLoad = onLoad

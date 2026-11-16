@@ -181,6 +181,10 @@ struct PresenterStateGetAction: LLMDAction {
     static let descriptor = ActionDescriptor(
         id: "presenter.state.get", summary: "Zeigt offene Präsentation, aktuelle Folie, laufende KI-Aufgaben und den Vortrag", kind: .read, security: .plainRead, output: .freeObject()
     )
+    static func preflight(_ args: NoArgs, context: ActionContext) throws -> ActionPreflight {
+        // The title of a foreign presentation is foreign text.
+        ActionPreflight(readsUntrusted: context.app.selectedPresentation?.isForeign == true)
+    }
     static func run(_ args: NoArgs, context: ActionContext) async throws -> Output {
         let app = context.app
         let open = app.selectedDocument?.isPresentation == true ? app.selectedDocument : nil

@@ -85,4 +85,4 @@ Ergebnisse mit fremden Inhalten kommen eingerahmt mit zufälliger Kennung zum Mo
 
 ## 7. Ausgangskontrolle
 
-Export schreibt ohne Rückfrage nur in den Exportordner. Andere Pfade brauchen eine Freigabe. Web-Ansichten (Folien-Designs, Mermaid) laden keine externen Ressourcen (`WKContentRuleList`). Formeln, die Dateien lesen oder Befehle zusammenbauen könnten, gehen nicht an die LaTeX-Engine, sondern werden als Code gesetzt (`LaTeXSafety`).
+Export schreibt ohne Rückfrage nur in den Exportordner. Andere Pfade brauchen eine Freigabe. Web-Ansichten (Folien-Designs, Mermaid) laden keine externen Ressourcen (`WKContentRuleList`); Folien-Designs laufen zudem ohne JavaScript, ihr CSS kann den `<style>`-Block nicht verlassen. Dateien, deren Pfad ein Modell oder Programm nennt (Chat, MCP, Agent), kommen erst nach einer Freigabe in die Bibliothek. Formeln, die Dateien lesen oder Befehle zusammenbauen könnten, gehen nicht an die LaTeX-Engine, sondern werden als Code gesetzt (`LaTeXSafety`).

@@ -622,7 +622,7 @@ struct PresenterFieldAddImageAction: LLMDAction {
     static func preflight(_ args: Args, context: ActionContext) throws -> ActionPreflight {
         var check = ActionPreflight(target: args.file)
         // A model or a client names a path: rendered afterwards, that would show it any picture on this Mac.
-        if context.channel == .chat || context.channel == .mcp {
+        if context.channel.asksBeforeReadingFiles {
             check.needsConsent = "Ein Bild von dieser Stelle der Festplatte käme in die Bibliothek und wäre danach für den Aufrufer sichtbar."
         }
         return check
@@ -759,7 +759,9 @@ struct PresenterAICreateDeckAction: LLMDAction {
         output: .freeObject(), example: "llmd presenter ai create-deck Vortrag 'Predictive Coding, 8 Folien' --with-notes --present --background hell", groups: ["presenter.core"]
     )
     static func preflight(_ args: Args, context: ActionContext) throws -> ActionPreflight {
-        var check = ActionPreflight(target: try context.app.actionDocument(args.deck, presentation: true).displayTitle)
+        let document = try context.app.actionDocument(args.deck, presentation: true)
+        // The slides already there go to the model with the instruction: from a foreign presentation they are foreign text.
+        var check = ActionPreflight(readsUntrusted: document.isForeign, target: document.displayTitle)
         // Presenting speaks aloud in full screen, like presenter.play.withAI.
         if args.present == true, context.channel != .ui { check.needsConsent = speakingConsent }
         return check

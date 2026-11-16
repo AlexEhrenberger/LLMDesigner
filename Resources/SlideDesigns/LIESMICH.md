@@ -41,3 +41,6 @@ Das Design zeichnet auf eine Seite im Format 16:9:
   am besten mit `transform`, das bleibt auch im Vollbild flüssig.
 - Der Text der Folie beginnt etwa 6,4 % vom linken und rechten und 8,4 % vom
   oberen Rand.
+- Ein Design ist reines CSS: Die Seite lädt nichts aus dem Netz (`url(https://…)`
+  und `@import` fallen weg) und führt kein JavaScript aus. Bilder gehen als
+  `data:`-Adresse oder mit Verläufen und Formen aus CSS.

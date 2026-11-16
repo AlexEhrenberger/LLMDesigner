@@ -47,7 +47,7 @@ struct SlideDesign: Identifiable, Hashable, Sendable {
         html.still *, html.still *::before, html.still *::after { animation-play-state: paused !important; transition: none !important; }
         </style>
         <style>
-        \(css)
+        \(Self.sealed(css))
         </style>
         </head>
         <body class="\(role.rawValue)">
@@ -55,6 +55,20 @@ struct SlideDesign: Identifiable, Hashable, Sendable {
         </body>
         </html>
         """
+    }
+
+    /// The CSS as it can stand inside `<style>`: "</" can't end the block there. CSS itself never needs "</" (in a
+    /// string, "<\/" reads the same), but a design file that closes its style would bring a page of its own.
+    static func sealed(_ css: String) -> String {
+        css.replacingOccurrences(of: "</", with: "<\\/")
+    }
+
+    /// The web views that draw designs. Designs are CSS only, so their pages run no script at all.
+    @MainActor
+    static func webConfiguration() -> WKWebViewConfiguration {
+        let configuration = WKWebViewConfiguration()
+        configuration.defaultWebpagePreferences.allowsContentJavaScript = false
+        return configuration
     }
 
     /// Reads the comment at the top of a design file.
@@ -242,7 +256,7 @@ final class SlideDesignRenderer: NSObject, WKNavigationDelegate {
     private func draw(_ html: String, width: CGFloat) async -> NSImage? {
         let size = Self.pageSize
         let webView = self.webView ?? {
-            let view = WKWebView(frame: NSRect(origin: .zero, size: size))
+            let view = WKWebView(frame: NSRect(origin: .zero, size: size), configuration: SlideDesign.webConfiguration())
             view.navigationDelegate = self
             view.setValue(false, forKey: "drawsBackground")
             self.webView = view
