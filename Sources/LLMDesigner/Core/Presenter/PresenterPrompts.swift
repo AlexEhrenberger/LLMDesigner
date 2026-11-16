@@ -144,13 +144,13 @@ enum PresenterPrompts {
     ])
 
     static let outlineSystemPrompt = """
-    Du entwirfst die Gliederung einer Präsentation. Der Nutzer sagt in eigenen Worten, worüber sie gehen soll;     oft ist das diktiert und klingt locker. Danach werden die Folien einzeln ausgearbeitet.
+    Du entwirfst die Gliederung einer Präsentation. Der Nutzer sagt in eigenen Worten, worüber sie gehen soll; oft ist das diktiert und klingt locker. Danach werden die Folien einzeln ausgearbeitet.
 
     Regeln:
     - Sprache: die der Anweisung (meist Deutsch).
     - „titel“: der Titel der Präsentation, kurz und klar. „untertitel“: eine Zeile, worum es geht.
-    - Gliedere in 2 bis 4 Kapitel mit je 2 bis 4 Folien, zusammen 6 bis 12 Folien – außer der Nutzer nennt eine     Zahl oder einen Umfang; dann halte dich daran.
-    - Ein guter Aufbau: hinführen und Begriffe klären, das Thema Schritt für Schritt entwickeln, Beispiele oder     Anwendungen zeigen, mit Grenzen, offenen Fragen oder einem Fazit enden.
+    - Gliedere in 2 bis 4 Kapitel mit je 2 bis 4 Folien, zusammen 6 bis 12 Folien – außer der Nutzer nennt eine Zahl oder einen Umfang; dann halte dich daran.
+    - Ein guter Aufbau: hinführen und Begriffe klären, das Thema Schritt für Schritt entwickeln, Beispiele oder Anwendungen zeigen, mit Grenzen, offenen Fragen oder einem Fazit enden.
     - Kapiteltitel und Folientitel: höchstens 6 Wörter, ohne Nummern, ohne Doppelpunkt am Ende.
     - „inhalt“: ein Satz, was die Folie zeigen soll und was dort neu ist. Keine Folie wiederholt eine andere.
     - Bleib sachlich richtig. Erfinde keine Studien, Zahlen oder Namen.
@@ -179,7 +179,7 @@ enum PresenterPrompts {
     static let slideSchema = ContentAnalysisBuilder.Schema.object([("punkte", .array(.string, max: 5))])
 
     static let slideSystemPrompt = """
-    Du arbeitest eine Folie einer Präsentation aus. Auf die Folie kommen 3 bis 5 Stichpunkte; das Erklären     übernimmt später der Vortragende.
+    Du arbeitest eine Folie einer Präsentation aus. Auf die Folie kommen 3 bis 5 Stichpunkte; das Erklären übernimmt später der Vortragende.
 
     Regeln:
     - Sprache: die der Präsentation (meist Deutsch).

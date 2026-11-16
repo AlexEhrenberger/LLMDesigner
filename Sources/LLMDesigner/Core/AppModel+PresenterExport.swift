@@ -18,24 +18,47 @@ struct HandoutGeneration: Equatable {
     }
 }
 
+/// How far the PDF of a presentation got.
+struct SlideExportProgress: Equatable {
+    var done: Int
+    var total: Int
+}
+
 /// Presenter Studio's way out: the slides as a PDF, and the presentation as a document in Writer Studio.
 extension AppModel {
     // MARK: PDF
 
-    /// Saves the slides as a PDF, one page per slide, laid out as they are shown.
+    /// Saves the slides as a PDF, one page per slide, laid out as they are shown. The place comes first, so the
+    /// person isn't left waiting for a dialog; then the slides are drawn one after the other, with the count in the
+    /// top bar and a way to stop.
     func exportPresentationPDF(_ id: WriterDocument.ID) {
-        writerFlush?()
-        guard let document = document(id), let deck = document.deck, !exportingIDs.contains(id) else { return }
+        flushEdits()
+        guard let document = document(id), document.deck != nil, !exportingIDs.contains(id) else { return }
         exportingIDs.insert(id)
-        Task {
+        presentationExportTasks[id] = Task {
+            defer {
+                exportingIDs.remove(id)
+                presentationExportProgress[id] = nil
+                presentationExportTasks[id] = nil
+            }
+            guard let url = await askForDestination(fileName: document.displayTitle, type: .pdf) else { return }
+            // What was typed while the dialog was open belongs in the PDF.
+            flushEdits()
+            guard let current = self.document(id), let deck = current.deck else { return }
             citations.loadIfNeeded()
-            let data = await SlidePrinter.pdf(deck: deck, title: document.displayTitle, family: document.font, citations: citations)
-            exportingIDs.remove(id)
+            let failures = SlideDesignRenderer.shared.failures
+            presentationExportProgress[id] = SlideExportProgress(done: 0, total: deck.slides.count)
+            let data = await SlidePrinter.pdf(deck: deck, title: current.displayTitle, family: current.font, citations: citations) { [weak self] done, total in
+                self?.presentationExportProgress[id] = SlideExportProgress(done: done, total: total)
+            }
+            guard !Task.isCancelled else { return }
             guard let data else {
                 exportError = "Die Folien ließen sich nicht als PDF zeichnen."
                 return
             }
-            guard let url = await askForDestination(fileName: document.displayTitle, type: .pdf) else { return }
+            if SlideDesignRenderer.shared.failures > failures {
+                showNotice("Ein Design ließ sich nicht zeichnen; diese Folien haben im PDF einen dunklen Hintergrund.")
+            }
             do {
                 try data.write(to: url, options: .atomic)
                 if pdfOpenAfterExport { NSWorkspace.shared.open(url) }
@@ -45,12 +68,17 @@ extension AppModel {
         }
     }
 
+    /// Stops drawing the PDF; nothing is written.
+    func cancelPresentationExport(_ id: WriterDocument.ID) {
+        presentationExportTasks[id]?.cancel()
+    }
+
     // MARK: Handout
 
     /// Makes a Writer Studio document from the presentation and opens it. With `expand`, the model then writes the
     /// slides' points out one after the other; the document can be read (and edited) meanwhile.
     func createHandout(from id: WriterDocument.ID, options: HandoutOptions) async {
-        writerFlush?()
+        flushEdits()
         guard let presentation = document(id), let deck = presentation.deck else { return }
         var pictures: [PresentationSlide.ID: String] = [:]
         if options.slidePictures {
@@ -60,6 +88,7 @@ extension AppModel {
                       let source = try? WriterImageStore.importImage(.data(data)) else { continue }
                 pictures[slide.id] = source
             }
+            SlidePrinter.releaseImages()
         }
         let built = HandoutBuilder.build(deck: deck, options: options, slidePictures: pictures)
 
@@ -107,7 +136,7 @@ extension AppModel {
                     let text = HandoutPrompts.clean(answer, title: section.title)
                     guard !text.isEmpty else { skipped += 1; continue }
                     // What the user typed meanwhile is handed over first, so it isn't lost.
-                    self.writerFlush?()
+                    self.flushEdits()
                     guard let document = self.document(id),
                           let markdown = HandoutBuilder.replacing(section, with: text, in: document.markdown) else { skipped += 1; continue }
                     self.updateDocument(id, markdown: markdown)

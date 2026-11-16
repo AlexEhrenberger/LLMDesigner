@@ -45,9 +45,11 @@ enum OfflineWebContent {
 extension WKWebView {
     /// Loads a page with network addresses blocked. Without the rules nothing is shown: a missing diagram is better
     /// than a page that can reach out.
-    func loadOfflineHTML(_ html: String) {
+    /// `blocked` hears when the page isn't loaded for want of the rules, so a caller waiting for it can go on.
+    func loadOfflineHTML(_ html: String, blocked: (() -> Void)? = nil) {
         OfflineWebContent.whenReady { [weak self] list in
-            guard let self, let list else { return }
+            guard let self else { return }
+            guard let list else { blocked?(); return }
             self.configuration.userContentController.remove(list)
             self.configuration.userContentController.add(list)
             self.loadHTMLString(html, baseURL: nil)

@@ -38,7 +38,7 @@ extension AppModel {
 
     /// Opens the sheet for the document in Writer Studio, or without a source (the sheet then asks).
     func showDeckFromDocument(_ document: WriterDocument? = nil) {
-        writerFlush?()
+        flushEdits()
         let source = document.flatMap { self.document($0.id) } ?? selectedDocument.flatMap { $0.isPresentation ? nil : $0 }
         deckSourceRequest = DeckSourceRequest(material: source.map(deckMaterial(from:)))
     }
@@ -74,6 +74,7 @@ extension AppModel {
                 guard let self else { return }
                 let created = try await self.fillDeck(
                     id, from: material, options: options, client: client, model: model, contextLength: contextLength, titleSlideID: titleSlideID,
+                    start: before,
                     skeleton: { [weak self] created in
                         self?.deckGeneration?.created = created
                         if self?.selectedDocumentID == id { self?.selectedSlideID = created.first }
@@ -100,9 +101,12 @@ extension AppModel {
     /// sheet "Präsentation aus Dokument" and Learning Studio's course creation both use it.
     @discardableResult
     func fillDeck(_ id: WriterDocument.ID, from material: DeckMaterial, options: DeckSourceOptions, client: LLMClient, model: String, contextLength: Int,
-                  titleSlideID: PresentationSlide.ID? = nil, skeleton: ([PresentationSlide.ID]) -> Void = { _ in },
+                  titleSlideID: PresentationSlide.ID? = nil, start: PresentationDeck? = nil, skeleton: ([PresentationSlide.ID]) -> Void = { _ in },
                   progress: (Int, Int) -> Void = { _, _ in }) async throws -> [PresentationSlide.ID] {
         let titleSlideID = titleSlideID ?? document(id)?.deck?.slides.first?.id ?? UUID()
+        // The slides when the work began (by default now): if the person works on them while the plan is made,
+        // theirs stay.
+        let start = start ?? document(id)?.deck
         // The plan: from the headings, else the model divides the text.
         var plan: DeckPlan
         if let fromHeadings = DocumentDeckPlanner.plan(for: material) {
@@ -139,13 +143,21 @@ extension AppModel {
                 work.append((slide, chapter.title, item))
             }
         }
+        // As it was when the plan began (or still empty), the skeleton takes the presentation's place; otherwise the
+        // person changed it meanwhile, and the new slides follow theirs.
+        var replaces = true
         modifyDeck(id) { deck in
-            deck.slides = [titleSlide] + slides
+            if deck == start || deck.slides.allSatisfy(\.isEmpty) {
+                deck.slides = [titleSlide] + slides
+            } else {
+                deck.slides += slides
+                replaces = false
+            }
             return true
         }
-        let created = [titleSlide.id] + slides.map(\.id)
+        let created = (replaces ? [titleSlide.id] : []) + slides.map(\.id)
         skeleton(created)
-        deckSources[titleSlide.id] = DeckObjects.textForModel(material.markdown, limit: 1_500)
+        if replaces { deckSources[titleSlide.id] = DeckObjects.textForModel(material.markdown, limit: 1_500) }
         for source in chapterSources { deckSources[source.id] = source.text }
 
         // The points, slide by slide.
@@ -181,9 +193,10 @@ extension AppModel {
             parts += objects.math + objects.code + objects.tables
             let markdown = parts.joined(separator: "\n\n")
             modifyDeck(id) { deck in
-                guard let index = deck.index(of: item.slide.id) else { return false }
+                // A slide the person wrote on meanwhile is theirs: the model leaves it.
+                guard let index = deck.index(of: item.slide.id), deck.slides[index].markdown == item.slide.markdown else { return false }
                 deck.slides[index].markdown = markdown
-                if let image = objects.images.first, WriterImageStore.url(for: image.source) != nil {
+                if deck.slides[index].images.isEmpty, let image = objects.images.first, WriterImageStore.url(for: image.source) != nil {
                     let size = WriterImageStore.url(for: image.source).flatMap(WriterImageStore.naturalSize(of:))
                     let aspect = size.map { Double($0.width / max(1, $0.height)) } ?? 1.5
                     deck.slides[index].images = [SlideImage(source: image.source, caption: image.caption, frame: SlideImage.defaultFrame(aspect: aspect))]

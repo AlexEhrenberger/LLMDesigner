@@ -17,6 +17,8 @@ final class SpeechReader: NSObject {
     var onProgress: ((NSRange) -> Void)?
 
     private(set) var state: State = .stopped
+    /// The last reading was broken off (`stop`, or a new reading) rather than read to its end.
+    private(set) var wasStopped = false
     private let synthesizer = AVSpeechSynthesizer()
     private var utterance: AVSpeechUtterance?
     private var qwenTask: Task<Void, Never>?
@@ -33,6 +35,7 @@ final class SpeechReader: NSObject {
     /// `rate` is the macOS speech rate (0.3…0.7, 0.5 normal); Qwen playback uses the same slider as tempo.
     func speak(_ text: String, voice: VoiceChoice, rate: Double) {
         stop()
+        wasStopped = false
         progressOffset = text.prefix(while: { $0.isWhitespace || $0.isNewline }).utf16.count
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
@@ -54,6 +57,7 @@ final class SpeechReader: NSObject {
             utterance = nil
             synthesizer.stopSpeaking(at: .immediate)
         }
+        if state != .stopped { wasStopped = true }
         setState(.stopped)
     }
 

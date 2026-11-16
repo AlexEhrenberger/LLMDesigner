@@ -932,7 +932,7 @@ struct PodcastSourceAddAction: LLMDAction {
     static func preflight(_ args: Args, context: ActionContext) throws -> ActionPreflight {
         var check = ActionPreflight(target: args.pdf ?? args.url)
         // A model or a client names a path: once copied, the podcast would show any file of this Mac to the caller.
-        if args.pdf != nil, context.channel == .chat || context.channel == .mcp {
+        if args.pdf != nil, context.channel.asksBeforeReadingFiles {
             check.needsConsent = "Ein PDF von dieser Stelle der Festplatte käme in die Bibliothek und wäre danach für den Aufrufer lesbar."
         }
         return check

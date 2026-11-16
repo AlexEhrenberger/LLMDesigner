@@ -75,6 +75,7 @@ struct PresenterBackgroundSetAction: LLMDAction {
         let background: SlideBackground
         switch args.kind {
         case "design":
+            SlideDesignLibrary.shared.reloadIfNeeded(force: true)
             guard let id = args.design, SlideDesignLibrary.shared.design(id) != nil else { throw RPCError.notFound("Das Design „\(args.design ?? "")“ gibt es nicht. presenter.designs.list zeigt sie.") }
             background = .design(id)
         case "color":
@@ -116,7 +117,7 @@ struct PresenterBackgroundImageAction: LLMDAction {
     )
     static func preflight(_ args: Args, context: ActionContext) throws -> ActionPreflight {
         var check = ActionPreflight(target: args.file)
-        if context.channel == .chat || context.channel == .mcp {
+        if context.channel.asksBeforeReadingFiles {
             check.needsConsent = "Ein Bild von dieser Stelle der Festplatte käme in die Bibliothek und wäre danach für den Aufrufer sichtbar."
         }
         return check
@@ -210,8 +211,14 @@ struct PresenterDesignCreateAction: LLMDAction {
         let hasHeader = args.css.contains("@name")
         let text = (hasHeader ? "" : "/*\n * @name \(args.name.replacingOccurrences(of: "*/", with: ""))\n */\n") + args.css
         try text.write(to: url, atomically: true, encoding: .utf8)
-        SlideDesignLibrary.shared.reloadIfNeeded()
-        context.undoGroup.add(UndoStep(label: "Design anlegen", undo: { try? FileManager.default.trashItem(at: url, resultingItemURL: nil) }, redo: { try? text.write(to: url, atomically: true, encoding: .utf8) }))
+        SlideDesignLibrary.shared.reloadIfNeeded(force: true)
+        context.undoGroup.add(UndoStep(label: "Design anlegen", undo: {
+            try? FileManager.default.trashItem(at: url, resultingItemURL: nil)
+            SlideDesignLibrary.shared.reloadIfNeeded(force: true)
+        }, redo: {
+            try? text.write(to: url, atomically: true, encoding: .utf8)
+            SlideDesignLibrary.shared.reloadIfNeeded(force: true)
+        }))
         return Output(id: id)
     }
 }
@@ -265,7 +272,7 @@ struct PresenterNotesCancelAction: LLMDAction {
 struct PresenterAIUndoGenerationAction: LLMDAction {
     typealias Output = OKOutput
     static let descriptor = ActionDescriptor(
-        id: "presenter.ai.undoGeneration", summary: "Bringt die Folien von vor der Folienerzeugung zurück", kind: .write, security: .localWrite, output: .freeObject()
+        id: "presenter.ai.undoGeneration", summary: "Nimmt die Folien der letzten Folienerzeugung wieder heraus; eigene Folien und Änderungen daneben bleiben", kind: .write, security: .localWrite, output: .freeObject()
     )
     static func run(_ args: NoArgs, context: ActionContext) async throws -> Output {
         let app = context.app

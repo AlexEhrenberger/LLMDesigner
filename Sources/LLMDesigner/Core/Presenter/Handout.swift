@@ -169,13 +169,39 @@ enum HandoutBuilder {
         return (headingLine, headingText, text, images)
     }
 
-    /// Puts the model's text in place of a section's points. The points are looked for after the section's
-    /// heading; if the user changed them in the meantime, nothing is replaced.
+    /// Puts the model's text in place of a section's points. The section is the first line with its heading whose
+    /// points still stand right after it (the slide's picture may come between), so sections with the same title
+    /// are written out in turn. Points the user changed meanwhile are found nowhere, and nothing is replaced, not
+    /// even in another section that happens to have the same points.
     static func replacing(_ section: HandoutSection, with text: String, in markdown: String) -> String? {
-        let start = markdown.range(of: "\n" + section.headingLine + "\n").map(\.upperBound)
-            ?? (markdown.hasPrefix(section.headingLine + "\n") ? markdown.index(markdown.startIndex, offsetBy: section.headingLine.count + 1) : nil)
-        guard let start, let range = markdown.range(of: section.points, range: start..<markdown.endIndex) else { return nil }
-        return markdown.replacingCharacters(in: range, with: text)
+        var from = markdown.startIndex
+        while let heading = line(section.headingLine, in: markdown, from: from) {
+            from = heading.upperBound
+            var cursor = skippingBlank(in: markdown, from: heading.upperBound)
+            if markdown[cursor...].hasPrefix("![") {
+                cursor = skippingBlank(in: markdown, from: markdown[cursor...].firstIndex(of: "\n") ?? markdown.endIndex)
+            }
+            guard let points = markdown.range(of: section.points, options: .anchored, range: cursor..<markdown.endIndex),
+                  points.upperBound == markdown.endIndex || markdown[points.upperBound] == "\n" else { continue }
+            return markdown.replacingCharacters(in: points, with: text)
+        }
+        return nil
+    }
+
+    /// A whole line that is exactly `text`, from `start` on.
+    private static func line(_ text: String, in markdown: String, from start: String.Index) -> Range<String.Index>? {
+        var from = start
+        while let found = markdown.range(of: text, range: from..<markdown.endIndex) {
+            let startsLine = found.lowerBound == markdown.startIndex || markdown[markdown.index(before: found.lowerBound)] == "\n"
+            let endsLine = found.upperBound == markdown.endIndex || markdown[found.upperBound] == "\n"
+            if startsLine, endsLine { return found }
+            from = found.upperBound
+        }
+        return nil
+    }
+
+    private static func skippingBlank(in markdown: String, from start: String.Index) -> String.Index {
+        markdown[start...].firstIndex { !$0.isWhitespace } ?? markdown.endIndex
     }
 }
 

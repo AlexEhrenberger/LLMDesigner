@@ -10,7 +10,7 @@ extension AppModel {
     func adoptFlowchart(_ graph: FlowGraph, of snippet: CodeSnippet, in id: WriterDocument.ID) {
         let key = Self.flowchartKey(id, graph, snippet)
         guard !adoptingFlowcharts.contains(key), let document = document(id) else { return }
-        writerFlush?()
+        flushEdits()
         adoptingFlowcharts.insert(key)
         let isPresentation = document.isPresentation
         Task {

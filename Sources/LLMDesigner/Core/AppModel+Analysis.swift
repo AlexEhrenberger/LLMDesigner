@@ -64,7 +64,7 @@ extension AppModel {
 
     func showWriterTab(_ tab: WriterTab) {
         guard writerTab != tab else { return }
-        writerFlush?()
+        flushEdits()
         writerTab = tab
         if tab == .analysis, let id = selectedDocumentID { loadAnalysisIfNeeded(id) }
     }
@@ -73,7 +73,7 @@ extension AppModel {
     /// text changed since, everything is made anew: the overview, then the parts it calls for and those the
     /// analysis had.
     func analyzeDocument(_ id: WriterDocument.ID, adding module: ContentAnalysisModule? = nil) {
-        writerFlush?()
+        flushEdits()
         guard analysisTasks[id] == nil, let document = document(id) else { return }
         guard let client, let model = currentModelId else {
             analysisErrors[id] = [.overview: "Kein Modell gewählt. Wähle eines unten links in der Seitenleiste."]

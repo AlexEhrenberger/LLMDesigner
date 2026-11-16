@@ -47,7 +47,7 @@ struct SlideDesign: Identifiable, Hashable, Sendable {
         html.still *, html.still *::before, html.still *::after { animation-play-state: paused !important; transition: none !important; }
         </style>
         <style>
-        \(css)
+        \(Self.sealed(css))
         </style>
         </head>
         <body class="\(role.rawValue)">
@@ -55,6 +55,20 @@ struct SlideDesign: Identifiable, Hashable, Sendable {
         </body>
         </html>
         """
+    }
+
+    /// The CSS as it can stand inside `<style>`: "</" can't end the block there. CSS itself never needs "</" (in a
+    /// string, "<\/" reads the same), but a design file that closes its style would bring a page of its own.
+    static func sealed(_ css: String) -> String {
+        css.replacingOccurrences(of: "</", with: "<\\/")
+    }
+
+    /// The web views that draw designs. Designs are CSS only, so their pages run no script at all.
+    @MainActor
+    static func webConfiguration() -> WKWebViewConfiguration {
+        let configuration = WKWebViewConfiguration()
+        configuration.defaultWebpagePreferences.allowsContentJavaScript = false
+        return configuration
     }
 
     /// Reads the comment at the top of a design file.
@@ -101,10 +115,19 @@ final class SlideDesignLibrary {
     @ObservationIgnored private var loadedFolder: URL?
     @ObservationIgnored private var loadedStamp: Date?
     @ObservationIgnored private var loadedBuiltIn: URL?
+    @ObservationIgnored private var lastLook: Date?
+    @ObservationIgnored private var loadedLibrary: URL?
+    @ObservationIgnored private var loadedOverride: String?
 
-    /// Where the app's own designs are: next to its other resources (see scripts/build-app.sh).
+    /// How often the folders are looked at again. Every slide view asks for its design several times, forty
+    /// thumbnails some two hundred times a drawing; a design saved in an editor still shows within a second.
+    static let lookInterval: TimeInterval = 1
+
+    /// Where the app's own designs are: next to its other resources (see scripts/build-app.sh). `getenv` rather than
+    /// `ProcessInfo.environment`, which copies the whole environment on every call.
     nonisolated static var builtInFolder: URL? {
-        if let path = ProcessInfo.processInfo.environment["LLMD_SLIDE_DESIGNS"] { return URL(fileURLWithPath: path) }
+        // `isDirectory` given: otherwise the URL asks the disk what the path is.
+        if let path = getenv("LLMD_SLIDE_DESIGNS") { return URL(fileURLWithPath: String(cString: path), isDirectory: true) }
         return Bundle.main.resourceURL?.appendingPathComponent("SlideDesigns", isDirectory: true)
     }
 
@@ -124,12 +147,22 @@ final class SlideDesignLibrary {
         return designs
     }
 
-    func reloadIfNeeded() {
-        let folder = Self.userFolder
-        let stamp = (try? FileManager.default.attributesOfItem(atPath: folder.path)[.modificationDate]) as? Date
+    /// `force`: at once (a design was just written), not only after `lookInterval`.
+    func reloadIfNeeded(force: Bool = false) {
+        let now = Date()
+        // The quick way out, taken by nearly every call: the same library, the same app folder, looked at just now.
         // The app's own folder only moves in tests, which point it at the repository.
+        let library = AppLibrary.current.url
+        let override = getenv("LLMD_SLIDE_DESIGNS").map { String(cString: $0) }
+        if !force, !designs.isEmpty, library == loadedLibrary, override == loadedOverride,
+           let lastLook, now.timeIntervalSince(lastLook) < Self.lookInterval { return }
+        lastLook = now
+        loadedLibrary = library
+        loadedOverride = override
+        let folder = Self.userFolder
         let builtIn = Self.builtInFolder
-        guard designs.isEmpty || loadedFolder != folder || loadedStamp != stamp || loadedBuiltIn != builtIn else { return }
+        let stamp = Self.stamp(of: folder)
+        guard force || designs.isEmpty || loadedFolder != folder || loadedStamp != stamp || loadedBuiltIn != builtIn else { return }
         loadedFolder = folder
         loadedStamp = stamp
         loadedBuiltIn = builtIn
@@ -139,6 +172,18 @@ final class SlideDesignLibrary {
         result.removeAll { design in own.contains { $0.id == design.id } }
         result += own
         if result != designs { designs = result }
+    }
+
+    /// The newest change in the library's folder: a design added, removed, or saved in place (which leaves the
+    /// folder's own date alone).
+    private static func stamp(of folder: URL) -> Date? {
+        let manager = FileManager.default
+        func modified(_ url: URL) -> Date? { (try? manager.attributesOfItem(atPath: url.path)[.modificationDate]) as? Date }
+        guard var newest = modified(folder), let names = try? manager.contentsOfDirectory(atPath: folder.path) else { return nil }
+        for name in names where name.hasSuffix(".css") {
+            if let date = modified(folder.appendingPathComponent(name)), date > newest { newest = date }
+        }
+        return newest
     }
 
     /// Makes the library's folder (with the instructions and an example to start from) and shows it in the Finder.
@@ -155,6 +200,7 @@ final class SlideDesignLibrary {
         }
         NSWorkspace.shared.activateFileViewerSelecting([folder])
         loadedStamp = nil
+        lastLook = nil
     }
 
     private static func load(from folder: URL?, isBuiltIn: Bool) -> [SlideDesign] {
@@ -189,8 +235,20 @@ final class SlideDesignRenderer: NSObject, WKNavigationDelegate {
     private(set) var images: [String: NSImage] = [:]
     @ObservationIgnored private var requested: Set<String> = []
     @ObservationIgnored private var webView: WKWebView?
-    @ObservationIgnored private var loaded: CheckedContinuation<Void, Never>?
+    @ObservationIgnored private var loaded: CheckedContinuation<Bool, Never>?
     @ObservationIgnored private var lastRender: Task<Void, Never>?
+    /// Numbers the loads, so a late time-out only ends the load it was meant for.
+    @ObservationIgnored private var loadNumber = 0
+    /// Designs that couldn't be drawn, counted (the PDF export says so).
+    @ObservationIgnored private(set) var failures = 0
+
+    /// How long a page may take to load. Renders wait for each other, so one that never ends (a hanging web process)
+    /// would hold up every design after it and every PDF export.
+    static var loadTimeout: Duration = .seconds(5)
+    /// How the page goes into the web view; `blocked` says it won't load. Tests put a loader here that never finishes.
+    static var load: (WKWebView, String, @escaping () -> Void) -> Void = { view, html, blocked in
+        view.loadOfflineHTML(html, blocked: blocked)
+    }
 
     private func key(_ design: SlideDesign, _ role: SlideRole, _ width: CGFloat) -> String {
         "\(design.id)|\(role.rawValue)|\(Int(width))|\(design.css.hashValue)"
@@ -215,7 +273,12 @@ final class SlideDesignRenderer: NSObject, WKNavigationDelegate {
             await previous?.value
             if let image = self.images[key] { return image }
             let image = await self.draw(design.html(role: role, live: false), width: width)
-            if let image { self.images[key] = image }
+            if let image {
+                self.images[key] = image
+            } else {
+                // Asked for again later, it is tried again.
+                self.requested.remove(key)
+            }
             return image
         }
         lastRender = Task { _ = await task.value }
@@ -225,15 +288,29 @@ final class SlideDesignRenderer: NSObject, WKNavigationDelegate {
     private func draw(_ html: String, width: CGFloat) async -> NSImage? {
         let size = Self.pageSize
         let webView = self.webView ?? {
-            let view = WKWebView(frame: NSRect(origin: .zero, size: size))
+            let view = WKWebView(frame: NSRect(origin: .zero, size: size), configuration: SlideDesign.webConfiguration())
             view.navigationDelegate = self
             view.setValue(false, forKey: "drawsBackground")
             self.webView = view
             return view
         }()
-        await withCheckedContinuation { continuation in
+        loadNumber += 1
+        let number = loadNumber
+        let didLoad = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
             loaded = continuation
-            webView.loadOfflineHTML(html)
+            Self.load(webView, html) { [weak self] in self?.finishLoading(false) }
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: Self.loadTimeout)
+                guard let self, self.loadNumber == number else { return }
+                self.finishLoading(false)
+            }
+        }
+        guard didLoad else {
+            // A web view that didn't load is given up: the next design gets a fresh one.
+            webView.stopLoading()
+            if self.webView === webView { self.webView = nil }
+            failures += 1
+            return nil
         }
         // A moment for the layers with filters to be drawn.
         try? await Task.sleep(for: .milliseconds(60))
@@ -246,27 +323,31 @@ final class SlideDesignRenderer: NSObject, WKNavigationDelegate {
         }
     }
 
-    private func finishLoading() {
+    private func finishLoading(_ didLoad: Bool) {
         let continuation = loaded
         loaded = nil
-        continuation?.resume()
+        continuation?.resume(returning: didLoad)
     }
 
+    // A web view given up after a time-out may still report; only the current one counts.
+
     nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        MainActor.assumeIsolated { finishLoading() }
+        MainActor.assumeIsolated { if webView === self.webView { finishLoading(true) } }
     }
 
     nonisolated func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        MainActor.assumeIsolated { finishLoading() }
+        // As before: a page that failed is still drawn as far as it got.
+        MainActor.assumeIsolated { if webView === self.webView { finishLoading(true) } }
     }
 
     nonisolated func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        MainActor.assumeIsolated { finishLoading() }
+        MainActor.assumeIsolated { if webView === self.webView { finishLoading(true) } }
     }
 
     nonisolated func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         MainActor.assumeIsolated {
-            finishLoading()
+            guard webView === self.webView else { return }
+            finishLoading(false)
             self.webView = nil
         }
     }

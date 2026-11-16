@@ -12,7 +12,7 @@ extension AppModel {
     }
 
     func printWriterDocument(_ id: WriterDocument.ID) {
-        writerFlush?()
+        flushEdits()
         guard let document = document(id), !exportingIDs.contains(id) else { return }
         guard let engine = LaTeXEngine.locate() else {
             exportError = PDFExportError.noEngine.localizedDescription
@@ -39,7 +39,7 @@ extension AppModel {
     }
 
     func printPresentation(_ id: WriterDocument.ID) {
-        writerFlush?()
+        flushEdits()
         guard let document = document(id), let deck = document.deck, !exportingIDs.contains(id) else { return }
         exportingIDs.insert(id)
         Task {

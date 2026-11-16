@@ -99,6 +99,27 @@ struct OfflineWebContentTests {
         #expect(!design.css.contains("evil.example"))
     }
 
+    /// A design is CSS inside `<style>`: a file (from the library, a merge, an agent) that closed it would bring a
+    /// page of its own with script after it.
+    @Test func aDesignCannotCloseItsStyleEarly() {
+        let design = SlideDesign.parse(id: "x", css: "body { color: red; }</STYLE><script>document.title = 'lief'</script><style>", isBuiltIn: false)
+        let html = design.html(role: .content, live: true).lowercased()
+        // Only the page's own two style blocks end.
+        #expect(html.components(separatedBy: "</style").count - 1 == 2)
+        #expect(html.contains("body { color: red; }"))
+    }
+
+    /// Designs are CSS only: a page in their web views runs no script, whatever it brings.
+    @Test func designPagesRunNoScript() async throws {
+        let view = WKWebView(frame: NSRect(x: 0, y: 0, width: 320, height: 180), configuration: SlideDesign.webConfiguration())
+        view.loadOfflineHTML("<!doctype html><html><head><title>still</title><script>document.title = 'lief'</script></head><body></body></html>")
+        for _ in 0..<60 where view.title != "still" && view.title != "lief" {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        try await Task.sleep(for: .milliseconds(150))
+        #expect(view.title == "still")
+    }
+
     /// A tiny server on an ephemeral port, only here in the test, that counts who knocks.
     private final class Counter: @unchecked Sendable {
         private let lock = NSLock()

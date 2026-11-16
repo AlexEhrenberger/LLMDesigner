@@ -44,6 +44,9 @@ struct SlideBackgroundPicker: View {
             }
             .frame(width: 452, height: 600)
             .background(Theme.surface)
+            // Opening the menu reads the designs' folder anew (see LIESMICH.md), also within the second the
+            // library keeps it.
+            .onAppear { SlideDesignLibrary.shared.reloadIfNeeded(force: true) }
         }
     }
 
@@ -284,7 +287,7 @@ struct SlideBackgroundPicker: View {
     private func footer(slide: PresentationSlide) -> some View {
         HStack(spacing: 10) {
             if slide.background != nil {
-                Button("Hintergrund der Präsentation verwenden") { app.setSlideBackground(documentID, slideID, nil) }
+                Button("Hintergrund der Präsentation verwenden") { app.setSlideBackground(documentID, slideID, nil, undoManager: MainWindow.window?.undoManager) }
                     .buttonStyle(.link)
                     .font(.system(size: 12))
             }
@@ -305,9 +308,9 @@ struct SlideBackgroundPicker: View {
     private func apply(_ background: SlideBackground, scope: Scope) {
         guard let slide = app.document(documentID)?.deck?.slide(slideID) else { return }
         switch scope {
-        case .slide: app.setSlideBackground(documentID, slideID, background)
-        case .role: app.setRoleBackground(documentID, slide.role, background)
-        case .presentation: app.setPresentationBackground(documentID, background)
+        case .slide: app.setSlideBackground(documentID, slideID, background, undoManager: MainWindow.window?.undoManager)
+        case .role: app.setRoleBackground(documentID, slide.role, background, undoManager: MainWindow.window?.undoManager)
+        case .presentation: app.setPresentationBackground(documentID, background, undoManager: MainWindow.window?.undoManager)
         }
     }
 

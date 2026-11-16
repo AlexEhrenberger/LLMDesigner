@@ -571,8 +571,30 @@ final class AppModel {
     @ObservationIgnored var documentSaveTasks: [WriterDocument.ID: Task<Void, Never>] = [:]
     /// Documents whose last save failed, with the reason; it stays until a save succeeds.
     var documentSaveErrors: [WriterDocument.ID: String] = [:]
-    /// Set by the open editor: hands over edits it hasn't reported yet.
+    /// Set by the open editor: hands over edits it hasn't reported yet (see `flushEdits`).
     @ObservationIgnored var writerFlush: (() -> Void)?
+    /// The same for the speaker card below a slide, which hands over what is typed on it after a pause.
+    @ObservationIgnored private var notesFlush: (() -> Void)?
+    @ObservationIgnored private weak var notesFlushOwner: AnyObject?
+
+    /// Hands over what the open editor and the speaker card haven't reported yet. Everything that reads or changes
+    /// a document or a presentation from elsewhere (an action, the model, an export) calls it first.
+    func flushEdits() {
+        writerFlush?()
+        notesFlush?()
+    }
+
+    func registerNotesFlush(_ owner: AnyObject, _ flush: @escaping () -> Void) {
+        notesFlushOwner = owner
+        notesFlush = flush
+    }
+
+    func unregisterNotesFlush(_ owner: AnyObject) {
+        guard notesFlushOwner === owner else { return }
+        notesFlushOwner = nil
+        notesFlush = nil
+    }
+
     /// The find bar of the open document or presentation (⌘F).
     @ObservationIgnored weak var documentFind: DocumentFind?
     /// The document the running dictation writes into instead of the composer.
@@ -582,8 +604,9 @@ final class AppModel {
     @ObservationIgnored var writerDictation: ((WriterDictationEvent, WriterDocument.ID) -> Void)?
     /// The document being read aloud.
     var speakingDocumentID: WriterDocument.ID?
-    /// Called once reading the document ends (finished or stopped), so the editor can remove its highlight.
-    @ObservationIgnored var writerSpeechEnded: (() -> Void)?
+    /// Called once reading the document ends, so the editor can remove its highlight: true when it was read to its
+    /// end, false when it was stopped (by the person, another reading, or because there was nothing to read it in).
+    @ObservationIgnored var writerSpeechEnded: ((Bool) -> Void)?
     /// The tab of a document's side panel (contents or bookmarks); the panel itself follows `outlinePanelVisible`.
     var documentPanelTab: SidePanelTab = .contents
     /// Documents whose dynamic table of contents is being made, and why it failed.
@@ -653,7 +676,15 @@ final class AppModel {
     /// Slides whose speaker notes the model is writing, and why it failed.
     var notesWriting: Set<PresentationSlide.ID> = []
     var notesErrors: [PresentationSlide.ID: String] = [:]
+    /// The one worker that writes the waiting cards one after the other (see `writeSpeakerNotes`).
     @ObservationIgnored var notesTask: Task<Void, Never>?
+    /// The cards still to write, in order, and the one being written.
+    @ObservationIgnored var notesQueue: [NotesJob] = []
+    @ObservationIgnored var notesRunning: NotesJob?
+    /// Counts the workers: one that was cancelled sees it is no longer the current one and changes nothing.
+    @ObservationIgnored var notesWorker = 0
+    /// The card a slide had before the model wrote it anew, for "Vorherige Karte".
+    var replacedNotes: [PresentationSlide.ID: String] = [:]
     /// The speaker notes show below the slide.
     var presenterNotesVisible: Bool {
         didSet { settings.set(presenterNotesVisible, forKey: Keys.presenterNotesVisible) }
@@ -662,11 +693,15 @@ final class AppModel {
     @ObservationIgnored let presentationPlayer = PresentationPlayer()
     /// The model making a whole presentation from the assistant bar (see AppModel+PresenterGeneration.swift).
     var deckGeneration: DeckGeneration?
-    /// For slides made from a document: the passage each was made from, which the speaker card draws on.
+    /// For slides made from a document: the passage each was made from, which the speaker card draws on. Only in
+    /// memory (the file format stays as it is): after a restart the cards are written from the slides alone.
     @ObservationIgnored var deckSources: [UUID: String] = [:]
     /// The sheet that makes a presentation from a document (see `DeckFromDocumentSheet`).
     var deckSourceRequest: DeckSourceRequest?
     @ObservationIgnored var deckGenerationTask: Task<Void, Never>?
+    /// A presentation's PDF being drawn, slide by slide (see `exportPresentationPDF`).
+    var presentationExportProgress: [WriterDocument.ID: SlideExportProgress] = [:]
+    @ObservationIgnored var presentationExportTasks: [WriterDocument.ID: Task<Void, Never>] = [:]
     /// The model writing out a handout made from a presentation (see AppModel+PresenterExport.swift).
     var handoutGeneration: HandoutGeneration?
     @ObservationIgnored var handoutTask: Task<Void, Never>?
@@ -766,7 +801,7 @@ final class AppModel {
         learning.saveAll()
         podcastPlayer.stop()
         stopAllPodcasts()
-        writerFlush?()
+        flushEdits()
         // The person chose the version git wrote; what the editor still held must not overwrite it.
         if !discardOnClose.isEmpty { discardPendingSaves(discardOnClose) }
         git.stop()

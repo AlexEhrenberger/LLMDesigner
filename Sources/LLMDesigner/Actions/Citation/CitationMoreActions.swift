@@ -707,7 +707,7 @@ struct CitationImportBibtexAction: LLMDAction {
     static func preflight(_ args: Args, context: ActionContext) throws -> ActionPreflight {
         // A file from elsewhere: what it says counts as foreign, and only the person names an arbitrary path.
         var check = ActionPreflight(readsUntrusted: true, target: args.file)
-        if context.channel == .chat || context.channel == .mcp {
+        if context.channel.asksBeforeReadingFiles {
             check.needsConsent = "Eine Datei von dieser Stelle der Festplatte würde gelesen und ihr Inhalt für den Aufrufer sichtbar."
         }
         return check

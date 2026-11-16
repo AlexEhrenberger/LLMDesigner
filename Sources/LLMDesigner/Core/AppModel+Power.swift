@@ -157,7 +157,7 @@ extension AppModel {
     /// new text; the change can be taken back from the panel.
     func powerChangeDocument(_ id: WriterDocument.ID, label: String, _ change: (String) -> String) {
         guard let document = document(id), !document.isPresentation else { return }
-        if selectedDocumentID == id { writerFlush?() }
+        if selectedDocumentID == id { flushEdits() }
         let old = self.document(id)?.markdown ?? document.markdown
         let new = change(old)
         guard new != old else { return }
@@ -165,7 +165,7 @@ extension AppModel {
         saveDocument(id)
         power.lastChange = PowerAccess.Change(label: label) { [weak self] in
             guard let self else { return }
-            if self.selectedDocumentID == id { self.writerFlush?() }
+            if self.selectedDocumentID == id { self.flushEdits() }
             self.updateDocument(id, markdown: old)
             self.saveDocument(id)
         }
@@ -197,12 +197,12 @@ extension AppModel {
 
     /// Changes a presentation's slides from the power access (undoable from the panel).
     func powerChangeDeck(_ id: WriterDocument.ID, label: String, _ change: (inout PresentationDeck) -> Bool) {
-        if selectedDocumentID == id { writerFlush?() }
+        if selectedDocumentID == id { flushEdits() }
         guard let old = document(id)?.deck else { return }
         guard modifyDeck(id, change) else { return }
         power.lastChange = PowerAccess.Change(label: label) { [weak self] in
             guard let self else { return }
-            if self.selectedDocumentID == id { self.writerFlush?() }
+            if self.selectedDocumentID == id { self.flushEdits() }
             self.modifyDeck(id) { deck in
                 deck = old
                 return true

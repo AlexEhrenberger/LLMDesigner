@@ -338,7 +338,7 @@ final class KeyMonitorView: NSView {
 final class PresentationWindowController: NSObject, NSWindowDelegate {
     private let window: PresentationWindow
     private weak var player: PresentationPlayer?
-    private var previousOptions: NSApplication.PresentationOptions = []
+    private var menuBar = MenuBarHiding()
 
     init(player: PresentationPlayer, app: AppModel) {
         self.player = player
@@ -365,10 +365,12 @@ final class PresentationWindowController: NSObject, NSWindowDelegate {
 
     func show() {
         let screen = Self.targetScreen()
-        // On the screen with the menu bar, the menu bar and the Dock go away for the presentation.
+        // On the screen with the menu bar, the menu bar and the Dock go away for the presentation; on another
+        // screen they stay (or come back, if the window moved there).
         if screen == NSScreen.screens.first {
-            previousOptions = NSApp.presentationOptions
-            NSApp.presentationOptions = [.hideDock, .hideMenuBar]
+            NSApp.presentationOptions = menuBar.hide(current: NSApp.presentationOptions)
+        } else if let previous = menuBar.restore() {
+            NSApp.presentationOptions = previous
         }
         window.setFrame(screen.frame, display: true)
         window.makeKeyAndOrderFront(nil)
@@ -379,12 +381,31 @@ final class PresentationWindowController: NSObject, NSWindowDelegate {
     func close() {
         window.delegate = nil
         window.orderOut(nil)
-        NSApp.presentationOptions = previousOptions
+        if let previous = menuBar.restore() { NSApp.presentationOptions = previous }
         MainWindow.window?.makeKeyAndOrderFront(nil)
     }
 
     func windowDidResignKey(_ notification: Notification) {
         // Clicking into the main window on the same screen ends nothing; the presentation simply stays behind.
+    }
+}
+
+/// The app's presentation options while the full screen hides the menu bar and the Dock. What was there before is
+/// kept once, at the first hiding: showing the window again (a second "Vorführen", an agent) must not take the
+/// hidden state for the one to go back to.
+struct MenuBarHiding {
+    private(set) var saved: NSApplication.PresentationOptions?
+
+    /// The options to set; `current` is remembered unless it already was.
+    mutating func hide(current: NSApplication.PresentationOptions) -> NSApplication.PresentationOptions {
+        if saved == nil { saved = current }
+        return [.hideDock, .hideMenuBar]
+    }
+
+    /// The options from before, once; nil when nothing was hidden.
+    mutating func restore() -> NSApplication.PresentationOptions? {
+        defer { saved = nil }
+        return saved
     }
 }
 

@@ -163,7 +163,7 @@ struct SkillImportAction: LLMDAction {
     )
     static func preflight(_ args: Args, context: ActionContext) throws -> ActionPreflight {
         var check = ActionPreflight(readsUntrusted: true, target: args.file)
-        if context.channel == .chat || context.channel == .mcp {
+        if context.channel.asksBeforeReadingFiles {
             check.needsConsent = "Eine Datei von dieser Stelle der Festplatte würde gelesen und ihr Inhalt für den Aufrufer sichtbar."
         }
         return check
@@ -317,7 +317,7 @@ struct PersonaAvatarSetAction: LLMDAction {
     )
     static func preflight(_ args: Args, context: ActionContext) throws -> ActionPreflight {
         var check = ActionPreflight(target: args.file)
-        if context.channel == .chat || context.channel == .mcp {
+        if context.channel.asksBeforeReadingFiles {
             check.needsConsent = "Ein Bild von dieser Stelle der Festplatte käme in die Bibliothek und wäre danach für den Aufrufer sichtbar."
         }
         return check
@@ -368,7 +368,7 @@ struct PersonaFilesAddAction: LLMDAction {
     )
     static func preflight(_ args: Args, context: ActionContext) throws -> ActionPreflight {
         var check = ActionPreflight(target: try context.app.actionPersona(args.persona ?? "").displayName)
-        if context.channel != .ui, context.channel != .cli { check.needsConsent = "Dateien von dieser Stelle der Festplatte kämen in die Bibliothek." }
+        if context.channel.asksBeforeReadingFiles { check.needsConsent = "Dateien von dieser Stelle der Festplatte kämen in die Bibliothek." }
         return check
     }
     static func run(_ args: Args, context: ActionContext) async throws -> Output {

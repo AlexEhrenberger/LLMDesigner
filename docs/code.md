@@ -78,7 +78,7 @@ flowchart LR
 | `Sources/llmd/` | Terminal-Werkzeug und MCP-Adapter (`MCP/`) |
 | `UI/RootView.swift` | Seitenleisten, Arbeitsfläche, Einklappen bei schmalen Fenstern |
 | `UI/Writer/` | `WriterScreen`, `WriterEditor` (Representable + Controller), `WriterTextView+*` (Editor nach Themen), Sheets |
-| `UI/Presenter/` | `PresenterScreen`, `SlideImageEditor` (Bilder/Textfelder/Textbereich verschieben), `SlideViews`, `SlidePrinter` (PDF) |
+| `UI/Presenter/` | `PresenterScreen` mit `PresenterToolbar` (Titelleiste, Werkzeugleiste), `PresenterSlideStrip` (Folienliste) und `PresenterCards` (KI-Karte, gelöschte Folie, Moderatorenkarte); `SlideImageEditor` (Bilder/Textfelder/Textbereich verschieben), `SlideViews` (mit `DrawingCache`: Miniaturen ein Bild je Folie, Folienbilder, beide mit Obergrenze), `SlidePrinter` (PDF) |
 | `UI/StudioChrome.swift` | Titelleiste, Tabs, Karten, Listenzeilen, leerer Zustand der neueren Studios |
 | `UI/Data/` | `DataStudioScreen` (Blöcke, Felder, Tabellenansicht, Kürzel), `DataTemplateViews` (Vorlagen, Masterfolie mit Vorschau, Erstellen-Blatt), `DataValueDisplay` (Werte in Textfeldern) |
 | `UI/Writer/WriterTextView+DataFields.swift` | Datenfeld als Textobjekt, Zelle, Auswahl (⌥⌘D, „/daten“) |
