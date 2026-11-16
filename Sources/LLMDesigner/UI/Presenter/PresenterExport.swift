@@ -8,8 +8,30 @@ struct PresenterExportMenu: View {
     @State private var showsHandout = false
 
     var body: some View {
+        if let progress = app.presentationExportProgress[document.id] {
+            // While the slides are drawn: how far it got, and a way to stop.
+            HStack(spacing: 6) {
+                ProgressView(value: Double(progress.done), total: Double(max(progress.total, 1)))
+                    .progressViewStyle(.circular)
+                    .controlSize(.mini)
+                Text("PDF \(min(progress.done + 1, progress.total)) von \(progress.total)")
+                    .font(.system(size: 12, weight: .medium).monospacedDigit())
+                    .foregroundStyle(Theme.textSecondary)
+                IconButton(systemName: "xmark", help: "PDF-Export abbrechen", size: 10, frameSize: 20) {
+                    app.cancelPresentationExport(document.id)
+                }
+            }
+            .padding(.horizontal, 7)
+            .frame(height: Theme.titleBarControlSize)
+        } else {
+            menu
+        }
+    }
+
+    /// Disabled while the save dialog of an export is open.
+    private var menu: some View {
         let isExporting = app.exportingIDs.contains(document.id)
-        Menu {
+        return Menu {
             Section("Präsentation exportieren") {
                 Button("Folien als PDF …", systemImage: "doc.richtext") { app.exportPresentationPDF(document.id) }
                 Button("Drucken … (⌘P)", systemImage: "printer") { app.printPresentation(document.id) }
@@ -18,16 +40,8 @@ struct PresenterExportMenu: View {
                 Button("Als Handout in Writer Studio …", systemImage: StudioApplication.writer.symbol) { showsHandout = true }
             }
         } label: {
-            HStack(spacing: 5) {
-                if isExporting {
-                    ProgressView().controlSize(.mini)
-                    Text("Erstelle PDF …")
-                        .font(.system(size: 12, weight: .medium))
-                } else {
-                    Image(systemName: "square.and.arrow.up")
-                        .font(.system(size: 12.5, weight: .medium))
-                }
-            }
+            Image(systemName: "square.and.arrow.up")
+                .font(.system(size: 12.5, weight: .medium))
             .foregroundStyle(hovering ? Theme.textPrimary : Theme.textSecondary)
             .padding(.horizontal, 7)
             .frame(height: Theme.titleBarControlSize)

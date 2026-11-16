@@ -140,7 +140,7 @@ extension AppModel {
         // Dictation and reading belong to the open document.
         if dictationIntoDocument { Task { await stopDictation() } }
         stopReadingDocument()
-        writerFlush?()
+        flushEdits()
         if document(id)?.isPresentation == true {
             presentationPlayer.stop()
             presentationPlayer.exitFullScreen()
@@ -241,7 +241,7 @@ extension AppModel {
     /// Asks the model for the document's topics (the dynamic table of contents). Returns the running task.
     @discardableResult
     func refreshDocumentOutline(_ id: WriterDocument.ID) -> Task<Void, Never>? {
-        writerFlush?()
+        flushEdits()
         if let running = documentOutlineTasks[id] { return running }
         guard let client, let model = currentModelId, let snapshot = document(id) else {
             documentOutlineErrors[id] = "Kein Modell gewählt. Wähle eines unten links in der Seitenleiste."
@@ -345,7 +345,7 @@ extension AppModel {
     }
 
     func savePendingDocuments() {
-        writerFlush?()
+        flushEdits()
         for id in Array(documentSaveTasks.keys) { saveDocument(id) }
     }
 }
@@ -396,7 +396,7 @@ enum WriterExportFormat: CaseIterable, Identifiable {
 extension AppModel {
     /// Saves the open document as PDF (typeset with LaTeX), as LaTeX source or as Markdown.
     func exportDocument(as format: WriterExportFormat) {
-        writerFlush?()
+        flushEdits()
         guard let document = selectedDocument, !exportingIDs.contains(document.id) else { return }
         let paper = pdfPaperSize
         let engine = LaTeXEngine.locate()

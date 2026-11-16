@@ -44,6 +44,9 @@ struct SlideBackgroundPicker: View {
             }
             .frame(width: 452, height: 600)
             .background(Theme.surface)
+            // Opening the menu reads the designs' folder anew (see LIESMICH.md), also within the second the
+            // library keeps it.
+            .onAppear { SlideDesignLibrary.shared.reloadIfNeeded(force: true) }
         }
     }
 

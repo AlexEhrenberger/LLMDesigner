@@ -115,10 +115,19 @@ final class SlideDesignLibrary {
     @ObservationIgnored private var loadedFolder: URL?
     @ObservationIgnored private var loadedStamp: Date?
     @ObservationIgnored private var loadedBuiltIn: URL?
+    @ObservationIgnored private var lastLook: Date?
+    @ObservationIgnored private var loadedLibrary: URL?
+    @ObservationIgnored private var loadedOverride: String?
 
-    /// Where the app's own designs are: next to its other resources (see scripts/build-app.sh).
+    /// How often the folders are looked at again. Every slide view asks for its design several times, forty
+    /// thumbnails some two hundred times a drawing; a design saved in an editor still shows within a second.
+    static let lookInterval: TimeInterval = 1
+
+    /// Where the app's own designs are: next to its other resources (see scripts/build-app.sh). `getenv` rather than
+    /// `ProcessInfo.environment`, which copies the whole environment on every call.
     nonisolated static var builtInFolder: URL? {
-        if let path = ProcessInfo.processInfo.environment["LLMD_SLIDE_DESIGNS"] { return URL(fileURLWithPath: path) }
+        // `isDirectory` given: otherwise the URL asks the disk what the path is.
+        if let path = getenv("LLMD_SLIDE_DESIGNS") { return URL(fileURLWithPath: String(cString: path), isDirectory: true) }
         return Bundle.main.resourceURL?.appendingPathComponent("SlideDesigns", isDirectory: true)
     }
 
@@ -138,12 +147,22 @@ final class SlideDesignLibrary {
         return designs
     }
 
-    func reloadIfNeeded() {
-        let folder = Self.userFolder
-        let stamp = (try? FileManager.default.attributesOfItem(atPath: folder.path)[.modificationDate]) as? Date
+    /// `force`: at once (a design was just written), not only after `lookInterval`.
+    func reloadIfNeeded(force: Bool = false) {
+        let now = Date()
+        // The quick way out, taken by nearly every call: the same library, the same app folder, looked at just now.
         // The app's own folder only moves in tests, which point it at the repository.
+        let library = AppLibrary.current.url
+        let override = getenv("LLMD_SLIDE_DESIGNS").map { String(cString: $0) }
+        if !force, !designs.isEmpty, library == loadedLibrary, override == loadedOverride,
+           let lastLook, now.timeIntervalSince(lastLook) < Self.lookInterval { return }
+        lastLook = now
+        loadedLibrary = library
+        loadedOverride = override
+        let folder = Self.userFolder
         let builtIn = Self.builtInFolder
-        guard designs.isEmpty || loadedFolder != folder || loadedStamp != stamp || loadedBuiltIn != builtIn else { return }
+        let stamp = Self.stamp(of: folder)
+        guard force || designs.isEmpty || loadedFolder != folder || loadedStamp != stamp || loadedBuiltIn != builtIn else { return }
         loadedFolder = folder
         loadedStamp = stamp
         loadedBuiltIn = builtIn
@@ -153,6 +172,18 @@ final class SlideDesignLibrary {
         result.removeAll { design in own.contains { $0.id == design.id } }
         result += own
         if result != designs { designs = result }
+    }
+
+    /// The newest change in the library's folder: a design added, removed, or saved in place (which leaves the
+    /// folder's own date alone).
+    private static func stamp(of folder: URL) -> Date? {
+        let manager = FileManager.default
+        func modified(_ url: URL) -> Date? { (try? manager.attributesOfItem(atPath: url.path)[.modificationDate]) as? Date }
+        guard var newest = modified(folder), let names = try? manager.contentsOfDirectory(atPath: folder.path) else { return nil }
+        for name in names where name.hasSuffix(".css") {
+            if let date = modified(folder.appendingPathComponent(name)), date > newest { newest = date }
+        }
+        return newest
     }
 
     /// Makes the library's folder (with the instructions and an example to start from) and shows it in the Finder.
@@ -169,6 +200,7 @@ final class SlideDesignLibrary {
         }
         NSWorkspace.shared.activateFileViewerSelecting([folder])
         loadedStamp = nil
+        lastLook = nil
     }
 
     private static func load(from folder: URL?, isBuiltIn: Bool) -> [SlideDesign] {

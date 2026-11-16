@@ -38,7 +38,7 @@ extension AppModel {
 
     /// Opens the sheet for the document in Writer Studio, or without a source (the sheet then asks).
     func showDeckFromDocument(_ document: WriterDocument? = nil) {
-        writerFlush?()
+        flushEdits()
         let source = document.flatMap { self.document($0.id) } ?? selectedDocument.flatMap { $0.isPresentation ? nil : $0 }
         deckSourceRequest = DeckSourceRequest(material: source.map(deckMaterial(from:)))
     }

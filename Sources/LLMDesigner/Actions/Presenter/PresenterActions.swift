@@ -528,7 +528,9 @@ struct PresenterDesignsListAction: LLMDAction {
         output: .freeObject(), example: "llmd presenter designs list --background hell", groups: ["presenter.core"]
     )
     static func run(_ args: Args, context: ActionContext) async throws -> Output {
-        Output(designs: SlideDesignLibrary.shared.all
+        // What lies in the folder now, also a file put there a moment ago.
+        SlideDesignLibrary.shared.reloadIfNeeded(force: true)
+        return Output(designs: SlideDesignLibrary.shared.all
             .filter { args.background == nil || $0.backgroundBrightness == args.background }
             .map { Item(id: $0.id, name: $0.name, summary: $0.summary, background: $0.backgroundBrightness, animated: $0.isAnimated, builtIn: $0.isBuiltIn) })
     }

@@ -85,6 +85,6 @@ struct ActionContext {
 
     /// The editor's pending text in the model, so an action sees what the person sees.
     func flushEditor() {
-        app.writerFlush?()
+        app.flushEdits()
     }
 }

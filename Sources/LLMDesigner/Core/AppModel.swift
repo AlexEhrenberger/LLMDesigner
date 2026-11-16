@@ -571,8 +571,30 @@ final class AppModel {
     @ObservationIgnored var documentSaveTasks: [WriterDocument.ID: Task<Void, Never>] = [:]
     /// Documents whose last save failed, with the reason; it stays until a save succeeds.
     var documentSaveErrors: [WriterDocument.ID: String] = [:]
-    /// Set by the open editor: hands over edits it hasn't reported yet.
+    /// Set by the open editor: hands over edits it hasn't reported yet (see `flushEdits`).
     @ObservationIgnored var writerFlush: (() -> Void)?
+    /// The same for the speaker card below a slide, which hands over what is typed on it after a pause.
+    @ObservationIgnored private var notesFlush: (() -> Void)?
+    @ObservationIgnored private weak var notesFlushOwner: AnyObject?
+
+    /// Hands over what the open editor and the speaker card haven't reported yet. Everything that reads or changes
+    /// a document or a presentation from elsewhere (an action, the model, an export) calls it first.
+    func flushEdits() {
+        writerFlush?()
+        notesFlush?()
+    }
+
+    func registerNotesFlush(_ owner: AnyObject, _ flush: @escaping () -> Void) {
+        notesFlushOwner = owner
+        notesFlush = flush
+    }
+
+    func unregisterNotesFlush(_ owner: AnyObject) {
+        guard notesFlushOwner === owner else { return }
+        notesFlushOwner = nil
+        notesFlush = nil
+    }
+
     /// The find bar of the open document or presentation (⌘F).
     @ObservationIgnored weak var documentFind: DocumentFind?
     /// The document the running dictation writes into instead of the composer.
@@ -676,6 +698,9 @@ final class AppModel {
     /// The sheet that makes a presentation from a document (see `DeckFromDocumentSheet`).
     var deckSourceRequest: DeckSourceRequest?
     @ObservationIgnored var deckGenerationTask: Task<Void, Never>?
+    /// A presentation's PDF being drawn, slide by slide (see `exportPresentationPDF`).
+    var presentationExportProgress: [WriterDocument.ID: SlideExportProgress] = [:]
+    @ObservationIgnored var presentationExportTasks: [WriterDocument.ID: Task<Void, Never>] = [:]
     /// The model writing out a handout made from a presentation (see AppModel+PresenterExport.swift).
     var handoutGeneration: HandoutGeneration?
     @ObservationIgnored var handoutTask: Task<Void, Never>?
@@ -775,7 +800,7 @@ final class AppModel {
         learning.saveAll()
         podcastPlayer.stop()
         stopAllPodcasts()
-        writerFlush?()
+        flushEdits()
         // The person chose the version git wrote; what the editor still held must not overwrite it.
         if !discardOnClose.isEmpty { discardPendingSaves(discardOnClose) }
         git.stop()

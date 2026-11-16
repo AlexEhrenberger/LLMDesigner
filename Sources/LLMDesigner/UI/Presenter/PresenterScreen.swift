@@ -469,7 +469,7 @@ private struct PresentButton: View {
     }
 
     private func start(fromStart: Bool, presenting: Bool) {
-        app.writerFlush?()
+        app.flushEdits()
         let player = app.presentationPlayer
         player.app = app
         player.prepare(document.id, at: fromStart ? document.deck?.slides.first?.id : app.currentSlideID(in: document))
@@ -691,7 +691,7 @@ private struct FreeElementMenu: View {
             textView.replaceCharacters(in: range, with: "")
             textView.didChangeText()
         }
-        app.writerFlush?()
+        app.flushEdits()
         let lines = markdown.components(separatedBy: "\n").count
         let height = min(300, max(60, CGFloat(lines) * 26 + 20))
         let field = SlideImage(text: markdown, frame: SlideImage.defaultTextFrame(width: 320, height: height, offset: offset))
@@ -856,16 +856,28 @@ private struct SlideStrip: View {
     let find: DocumentFind
     @State private var dropTarget: Int?
 
+    /// The content slides that belong to a chapter (a chapter slide comes before them), found in one pass rather
+    /// than once per row.
+    private var indentedSlides: Set<PresentationSlide.ID> {
+        var result = Set<PresentationSlide.ID>()
+        var inChapter = false
+        for slide in deck.slides {
+            if slide.role == .chapter { inChapter = true } else if inChapter, slide.role == .content { result.insert(slide.id) }
+        }
+        return result
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             ScrollViewReader { proxy in
                 ScrollView {
+                    let indented = indentedSlides
                     LazyVStack(spacing: 4) {
                         ForEach(Array(deck.slides.enumerated()), id: \.element.id) { index, slide in
                             SlideStripRow(
                                 document: document, deck: deck, slide: slide, number: index + 1,
                                 isSelected: slide.id == currentSlideID, showsDropMark: dropTarget == index,
-                                foundCount: find.count(on: slide.id)
+                                isIndented: indented.contains(slide.id), foundCount: find.count(on: slide.id)
                             )
                             .id(slide.id)
                             .draggable(SlideDrag(slideID: slide.id)) {
@@ -934,6 +946,8 @@ private struct SlideStripRow: View {
     let number: Int
     let isSelected: Bool
     let showsDropMark: Bool
+    /// A content slide of a chapter, set in a little.
+    let isIndented: Bool
     /// Places the find bar found on this slide and its card.
     var foundCount = 0
     @State private var hovering = false
@@ -982,7 +996,7 @@ private struct SlideStripRow: View {
                 }
         }
         .padding(.vertical, 4)
-        .padding(.leading, slide.role == .content && deck.chapter(of: slide.id) != nil ? 4 : 0)
+        .padding(.leading, isIndented ? 4 : 0)
         .overlay(alignment: .top) {
             if showsDropMark {
                 Capsule().fill(Theme.accent).frame(height: 3).offset(y: -3).padding(.leading, 22)
@@ -1236,7 +1250,7 @@ private struct SpeakerNotesCard: View {
                 }
             }
             ZStack(alignment: .topLeading) {
-                SpeakerNotesEditor(text: slide.notes, slideID: slide.id, isEditable: !isWriting, find: find) { notes in
+                SpeakerNotesEditor(app: app, text: slide.notes, slideID: slide.id, isEditable: !isWriting, find: find) { notes in
                     app.setSlideNotes(document.id, slide.id, notes)
                 }
                 .opacity(isWriting ? 0.6 : 1)
@@ -1268,7 +1282,8 @@ private struct SpeakerNotesCard: View {
 }
 
 /// The speaker card's text: a plain text view, so the find bar can mark its places.
-private struct SpeakerNotesEditor: NSViewRepresentable {
+struct SpeakerNotesEditor: NSViewRepresentable {
+    let app: AppModel
     let text: String
     let slideID: PresentationSlide.ID
     let isEditable: Bool
@@ -1301,17 +1316,21 @@ private struct SpeakerNotesEditor: NSViewRepresentable {
         scrollView.documentView = textView
         context.coordinator.textView = textView
         context.coordinator.onChange = onChange
+        context.coordinator.register(in: app)
         show(text, of: slideID, in: textView, context: context)
         return scrollView
     }
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         let coordinator = context.coordinator
+        // Typing not yet handed over belongs to the slide it was typed on.
+        if coordinator.slideID != slideID { coordinator.flush() }
         coordinator.onChange = onChange
         guard let textView = coordinator.textView else { return }
         textView.isEditable = isEditable
-        // Another slide, or the card was written elsewhere (the model); never while letters are being composed.
-        if coordinator.slideID != slideID || (textView.string != text && !textView.hasMarkedText()) {
+        // Another slide, or the card was written elsewhere (the model); never over typing not yet handed over, never
+        // while letters are being composed.
+        if coordinator.slideID != slideID || (!coordinator.hasPendingEdits && textView.string != text && !textView.hasMarkedText()) {
             show(text, of: slideID, in: textView, context: context)
         }
     }
@@ -1332,18 +1351,57 @@ private struct SpeakerNotesEditor: NSViewRepresentable {
     }
 
     static func dismantleNSView(_ scrollView: NSScrollView, coordinator: Coordinator) {
+        coordinator.flush()
+        coordinator.unregister()
         coordinator.textView?.removeUndoActions()
     }
 
+    /// Hands what is typed over to the presentation after a pause, as the slide's editor does: every change of the
+    /// presentation redraws the whole screen, slide list and panel included, which is too much for every letter.
     @MainActor
     final class Coordinator: NSObject, NSTextViewDelegate {
+        static let pause: Duration = .milliseconds(350)
+
         weak var textView: NSTextView?
         var slideID: PresentationSlide.ID?
         var onChange: ((String) -> Void)?
+        private weak var app: AppModel?
+        private var pending: Task<Void, Never>?
+        /// Where the typing goes: the slide's it was typed on, kept from the first letter.
+        private var pendingWrite: ((String) -> Void)?
+
+        var hasPendingEdits: Bool { pendingWrite != nil }
+
+        /// `app.flushEdits()` (called before anything else reads or changes the presentation) hands over this card too.
+        func register(in app: AppModel) {
+            self.app = app
+            app.registerNotesFlush(self) { [weak self] in self?.flush() }
+        }
+
+        func unregister() {
+            app?.unregisterNotesFlush(self)
+        }
 
         func textDidChange(_ notification: Notification) {
-            guard let textView else { return }
-            onChange?(textView.string)
+            if pendingWrite == nil { pendingWrite = onChange }
+            pending?.cancel()
+            pending = Task { @MainActor [weak self] in
+                try? await Task.sleep(for: Self.pause)
+                guard !Task.isCancelled else { return }
+                self?.flush()
+            }
+        }
+
+        func textDidEndEditing(_ notification: Notification) {
+            flush()
+        }
+
+        func flush() {
+            pending?.cancel()
+            pending = nil
+            guard let write = pendingWrite, let textView else { return }
+            pendingWrite = nil
+            write(textView.string)
         }
     }
 }

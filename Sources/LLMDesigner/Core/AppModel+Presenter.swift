@@ -59,14 +59,14 @@ extension AppModel {
 
     func selectSlide(_ id: PresentationSlide.ID) {
         guard selectedSlideID != id else { return }
-        writerFlush?()
+        flushEdits()
         endSlideFieldEditing()
         selectedSlideID = id
     }
 
     /// Back from a text field (or the text area's frame) to the slide's own text.
     func endSlideFieldEditing() {
-        if editingSlideFieldID != nil { writerFlush?() }
+        if editingSlideFieldID != nil { flushEdits() }
         editingSlideFieldID = nil
         editingSlideTextArea = false
     }
@@ -74,7 +74,7 @@ extension AppModel {
     /// Puts a text field on the slide and opens it for writing.
     func addSlideField(_ id: WriterDocument.ID, _ slideID: PresentationSlide.ID, _ field: SlideImage, undoManager: UndoManager?, actionName: String) {
         guard let slide = document(id)?.deck?.slide(slideID) else { return }
-        writerFlush?()
+        flushEdits()
         setSlideImages(id, slideID, slide.images + [field], undoManager: undoManager, actionName: actionName)
         selectedSlideImageID = field.id
         editingSlideTextArea = false
@@ -128,7 +128,7 @@ extension AppModel {
     /// The presentation's slides as they were at some point, as one step that ⌘Z takes back.
     func restoreDeck(_ id: WriterDocument.ID, _ deck: PresentationDeck, undoManager: UndoManager?, actionName: String) {
         guard let old = document(id)?.deck, old != deck else { return }
-        writerFlush?()
+        flushEdits()
         modifyDeck(id) { current in
             current = deck
             return true
@@ -177,7 +177,7 @@ extension AppModel {
     /// where its title goes: a page for pictures and free text fields.
     @discardableResult
     func addSlide(to id: WriterDocument.ID, after slideID: PresentationSlide.ID?, role: SlideRole = .content, markdown: String = "", blank: Bool = false) -> PresentationSlide.ID? {
-        writerFlush?()
+        flushEdits()
         var slide = PresentationSlide(role: role, markdown: markdown)
         slide.hidesPlaceholder = blank
         let added = modifyDeck(id) { deck in
@@ -205,7 +205,7 @@ extension AppModel {
     }
 
     func duplicateSlide(_ id: WriterDocument.ID, _ slideID: PresentationSlide.ID) {
-        writerFlush?()
+        flushEdits()
         var copy: PresentationSlide?
         modifyDeck(id) { deck in
             guard let index = deck.index(of: slideID) else { return false }
@@ -220,7 +220,7 @@ extension AppModel {
 
     /// Removes a slide; for a few seconds it can be brought back. The last slide stays.
     func deleteSlide(_ id: WriterDocument.ID, _ slideID: PresentationSlide.ID) {
-        writerFlush?()
+        flushEdits()
         var removed: DeletedSlide?
         var next: PresentationSlide.ID?
         modifyDeck(id) { deck in
@@ -244,7 +244,7 @@ extension AppModel {
     func restoreDeletedSlide() {
         guard let deleted = deletedSlide else { return }
         deletedSlide = nil
-        writerFlush?()
+        flushEdits()
         modifyDeck(deleted.documentID) { deck in
             guard deck.index(of: deleted.slide.id) == nil else { return false }
             deck.slides.insert(deleted.slide, at: min(deleted.index, deck.slides.count))
@@ -255,7 +255,7 @@ extension AppModel {
 
     /// Moves a slide so that it stands at `destination` (an index of the list before the move, as in `onMove`).
     func moveSlide(_ id: WriterDocument.ID, _ slideID: PresentationSlide.ID, to destination: Int) {
-        writerFlush?()
+        flushEdits()
         modifyDeck(id) { deck in
             guard let index = deck.index(of: slideID) else { return false }
             let target = destination > index ? destination - 1 : destination
@@ -267,7 +267,7 @@ extension AppModel {
     }
 
     func setSlideRole(_ id: WriterDocument.ID, _ slideID: PresentationSlide.ID, _ role: SlideRole) {
-        writerFlush?()
+        flushEdits()
         modifyDeck(id) { deck in
             guard let index = deck.index(of: slideID), deck.slides[index].role != role else { return false }
             deck.slides[index].role = role
@@ -385,7 +385,7 @@ extension AppModel {
     /// one after the other, so stopping it stops all of them. `first` puts them before the cards that wait (the
     /// presentation needs this one now).
     func writeSpeakerNotes(_ id: WriterDocument.ID, slides slideIDs: [PresentationSlide.ID], first: Bool = false) {
-        writerFlush?()
+        flushEdits()
         let waiting = slideIDs.filter { !notesWriting.contains($0) }
         for slideID in waiting { notesErrors[slideID] = nil }
         notesWriting.formUnion(waiting)
@@ -506,7 +506,7 @@ extension AppModel {
 
     /// A slide that lists the chapters (or, without chapters, the slides' titles), after `slideID`.
     func insertAgendaSlide(_ id: WriterDocument.ID, after slideID: PresentationSlide.ID?) {
-        writerFlush?()
+        flushEdits()
         guard let deck = document(id)?.deck else { return }
         let chapters = deck.slides.filter { $0.role == .chapter }.map(\.title).filter { !$0.isEmpty }
         let items = chapters.isEmpty

@@ -50,7 +50,7 @@ extension AppModel {
 
     /// Speaker notes for every slide: those still missing, or all of them anew (also when none is missing).
     func writeAllSpeakerNotes(_ id: WriterDocument.ID, anew: Bool) {
-        writerFlush?()
+        flushEdits()
         guard let deck = document(id)?.deck else { return }
         let missing = deck.slides.filter { $0.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.map(\.id)
         writeSpeakerNotes(id, slides: anew || missing.isEmpty ? deck.slides.map(\.id) : missing)
@@ -58,7 +58,7 @@ extension AppModel {
 
     /// The model presents from the first slide in full screen; it writes the notes it needs on the way.
     func presentWithAI(_ id: WriterDocument.ID) {
-        writerFlush?()
+        flushEdits()
         guard let first = document(id)?.deck?.slides.first?.id else { return }
         let player = presentationPlayer
         player.app = self
@@ -75,7 +75,7 @@ extension AppModel {
     /// its end. "Rückgängig" brings back the slides from before.
     func generatePresentation(_ id: WriterDocument.ID, instruction: String, withNotes: Bool, presents: Bool) {
         guard deckGeneration?.isRunning != true else { return }
-        writerFlush?()
+        flushEdits()
         guard let document = document(id), let before = document.deck else { return }
         guard let client, let model = currentModelId else {
             deckGeneration = DeckGeneration(documentID: id, phase: .failed("Kein Modell gewählt. Wähle eines unten links in der Seitenleiste."), before: before)
@@ -195,7 +195,7 @@ extension AppModel {
     func undoDeckGeneration(undoManager: UndoManager? = nil) {
         guard let generation = deckGeneration, !generation.isRunning else { return }
         // Typing not yet handed over belongs to the slides that stay.
-        writerFlush?()
+        flushEdits()
         guard let current = document(generation.documentID)?.deck else { return }
         let created = Set(generation.created)
         cancelSpeakerNotes(for: created)

@@ -382,7 +382,7 @@ struct WriterEditor: NSViewRepresentable {
         // A dynamic table of contents put into the text: the model makes the topics if there are none yet.
         textView.onDynamicTOCNeeded = { [weak app, weak coordinator] in
             guard let app, let id = coordinator?.documentID, let document = app.document(id) else { return }
-            app.writerFlush?()
+            app.flushEdits()
             if document.outline == nil || DocumentOutlineBuilder.isOutdated(document) { app.refreshDocumentOutline(id) }
         }
         textView.onBookmarkAdded = { [weak controller] id in controller?.bookmarkAdded(id) }

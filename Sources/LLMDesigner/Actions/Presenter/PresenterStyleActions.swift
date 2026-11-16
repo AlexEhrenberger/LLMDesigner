@@ -75,6 +75,7 @@ struct PresenterBackgroundSetAction: LLMDAction {
         let background: SlideBackground
         switch args.kind {
         case "design":
+            SlideDesignLibrary.shared.reloadIfNeeded(force: true)
             guard let id = args.design, SlideDesignLibrary.shared.design(id) != nil else { throw RPCError.notFound("Das Design „\(args.design ?? "")“ gibt es nicht. presenter.designs.list zeigt sie.") }
             background = .design(id)
         case "color":
@@ -210,8 +211,14 @@ struct PresenterDesignCreateAction: LLMDAction {
         let hasHeader = args.css.contains("@name")
         let text = (hasHeader ? "" : "/*\n * @name \(args.name.replacingOccurrences(of: "*/", with: ""))\n */\n") + args.css
         try text.write(to: url, atomically: true, encoding: .utf8)
-        SlideDesignLibrary.shared.reloadIfNeeded()
-        context.undoGroup.add(UndoStep(label: "Design anlegen", undo: { try? FileManager.default.trashItem(at: url, resultingItemURL: nil) }, redo: { try? text.write(to: url, atomically: true, encoding: .utf8) }))
+        SlideDesignLibrary.shared.reloadIfNeeded(force: true)
+        context.undoGroup.add(UndoStep(label: "Design anlegen", undo: {
+            try? FileManager.default.trashItem(at: url, resultingItemURL: nil)
+            SlideDesignLibrary.shared.reloadIfNeeded(force: true)
+        }, redo: {
+            try? text.write(to: url, atomically: true, encoding: .utf8)
+            SlideDesignLibrary.shared.reloadIfNeeded(force: true)
+        }))
         return Output(id: id)
     }
 }

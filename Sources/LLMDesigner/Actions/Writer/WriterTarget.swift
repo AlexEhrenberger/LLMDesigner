@@ -66,7 +66,7 @@ struct WriterTarget {
     /// here before it writes; without this the editor, still holding keys typed meanwhile, would not take the
     /// action's change and would write its own text over it at the next pause. Cheap when nothing is pending.
     var document: WriterDocument? {
-        app.writerFlush?()
+        app.flushEdits()
         return app.document(documentID)
     }
 

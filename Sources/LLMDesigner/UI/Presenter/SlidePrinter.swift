@@ -27,6 +27,11 @@ enum SlidePrinter {
         return result.dataRepresentation()
     }
 
+    /// After a series of `png` calls: the pictures they shared are let go (the PDF does this itself).
+    static func releaseImages() {
+        PrintImages.reset()
+    }
+
     /// One slide as a PNG, `scale` times the canvas.
     static func png(slide: PresentationSlide, in deck: PresentationDeck, family: WriterFont, citations: CitationLibrary?, scale: CGFloat = 2) async -> Data? {
         let view = await view(for: slide, in: deck, family: family, citations: citations)

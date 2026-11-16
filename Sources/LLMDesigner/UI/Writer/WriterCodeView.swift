@@ -351,7 +351,7 @@ private struct MarkdownSourceEditor: View {
     }
 
     private func load() {
-        app.writerFlush?()
+        app.flushEdits()
         let markdown = app.document(document.id)?.markdown ?? document.markdown
         text = markdown
         known = markdown
