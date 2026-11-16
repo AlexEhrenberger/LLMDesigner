@@ -21,6 +21,9 @@ enum GitSetup {
     /SidebarStacks.json
     .DS_Store
 
+    # AgentSteps: Protokolle der Läufe ändern sich bei jedem Schritt
+    /AgentSteps/Protokolle/
+
     # lässt sich neu erzeugen
     /Podcasts/*/Schnipsel/
     /Auftr*ge/*/vorher/

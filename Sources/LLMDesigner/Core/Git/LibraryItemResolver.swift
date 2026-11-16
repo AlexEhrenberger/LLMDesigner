@@ -3,7 +3,7 @@ import Foundation
 /// What a file in the library belongs to, so lists show "Hausarbeit Statistik" instead of `Documents/3BC4….md`.
 enum LibraryItemKind: String, Sendable, CaseIterable, Comparable {
     case document, presentation, source, world, note, project, podcast, dataBlock, template, research, course
-    case learning, skills, designs, library, other
+    case learning, agentTask, skills, designs, library, other
 
     var label: String {
         switch self {
@@ -19,6 +19,7 @@ enum LibraryItemKind: String, Sendable, CaseIterable, Comparable {
         case .research: "Recherche"
         case .course: "Kurs"
         case .learning: "Lernen"
+        case .agentTask: "Agenten-Aufgabe"
         case .skills: "Skills"
         case .designs: "Folien-Designs"
         case .library: "Bibliothek"
@@ -39,6 +40,7 @@ enum LibraryItemKind: String, Sendable, CaseIterable, Comparable {
         case .dataBlock, .template: "Data Studio"
         case .research: "Rechercherista"
         case .course, .learning: "Learning Studio"
+        case .agentTask: "AgentSteps"
         case .skills: "Skills"
         case .library, .other: "Bibliothek"
         }
@@ -56,6 +58,7 @@ enum LibraryItemKind: String, Sendable, CaseIterable, Comparable {
         case .dataBlock, .template: StudioApplication.data.symbol
         case .research: StudioApplication.research.symbol
         case .course, .learning: StudioApplication.learning.symbol
+        case .agentTask: StudioApplication.agents.symbol
         case .skills: "sparkles"
         case .library: "books.vertical"
         case .other: "doc"
@@ -133,6 +136,8 @@ struct LibraryItemResolver {
         case "Lernen":
             if let id = uuid(second) { return (.course, id, "Lernen/\(id)/kurs.json") }
             return (.learning, "Lernen", "Lernen/lernen.json")
+        case "AgentSteps":
+            if second == "Aufgaben", let id = uuid(parts.count > 2 ? parts[2] : nil) { return (.agentTask, id, path) }
         case "Skills.json":
             return (.skills, "Skills", path)
         case "Präsentationen", "Pra\u{0308}sentationen":

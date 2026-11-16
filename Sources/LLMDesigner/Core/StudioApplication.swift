@@ -3,7 +3,7 @@ import Foundation
 /// Applications next to the chat where the model helps with a piece of work. Only the menu exists so far;
 /// Writer Studio comes first. Coding Studio follows later.
 enum StudioApplication: String, CaseIterable, Identifiable {
-    case writer, citation, presenter, stories, notes, projects, podcast, data, research, learning, git
+    case writer, citation, presenter, stories, notes, projects, podcast, data, research, learning, git, agents
 
     var id: String { rawValue }
 
@@ -20,6 +20,7 @@ enum StudioApplication: String, CaseIterable, Identifiable {
         case .research: "Rechercherista"
         case .learning: "Learning Studio"
         case .git: "Git Studio"
+        case .agents: "AgentSteps"
         }
     }
 
@@ -36,6 +37,7 @@ enum StudioApplication: String, CaseIterable, Identifiable {
         case .research: "binoculars"
         case .learning: "leaf"
         case .git: "arrow.triangle.branch"
+        case .agents: AgentTask.symbol
         }
     }
 
@@ -51,6 +53,7 @@ enum StudioApplication: String, CaseIterable, Identifiable {
         case .research: "Rechercherista – neue Recherche"
         case .learning: "Learning Studio – Lernbäume und Karteikarten"
         case .git: "Git Studio – Versionen und Branches"
+        case .agents: "AgentSteps – Agenten, Aufgaben und Zeitpläne"
         default: title
         }
     }
@@ -71,6 +74,7 @@ enum StudioApplication: String, CaseIterable, Identifiable {
         case .research: "Gründlich recherchieren, Schritt für Schritt bis zum Bericht"
         case .learning: "Disziplinen, Kurse, Karteikarten und Lernfortschritt"
         case .git: "Commits, Branches und der Baum der Versionen"
+        case .agents: "Agentische Aufgaben planen, takten und beobachten"
         }
     }
 }

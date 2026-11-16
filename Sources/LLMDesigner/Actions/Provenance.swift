@@ -17,7 +17,8 @@ extension ActionContext {
     /// The origin of what this run writes.
     var writeProvenance: DocumentProvenance {
         if run.hasReadUntrusted || channel == .mcp { return .foreign }
-        return channel == .chat ? .internal : .own
+        // The app's own model wrote it, in a chat or a run of AgentSteps: not the person's own words.
+        return channel == .chat || channel == .agent ? .internal : .own
     }
 
     /// What a document's origin becomes after this run wrote to it: foreign stays foreign and passes on; otherwise

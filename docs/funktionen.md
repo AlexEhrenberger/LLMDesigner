@@ -285,13 +285,25 @@ Die Startseite ist ein **Garten**: Jede **Disziplin** (Psychologie, Informatik �
 - **Power-Zugriff „Lernen“**: alle Kurse mit Fälligen und eine Lernsitzung direkt neben dem Dokument; Text dorthin ziehen legt Karten an.
 - **Chat**: Mit den Werkzeugen „Learning Studio“ kennt das Modell deinen Lernfortschritt (`learning.overview`, `learning.lesson.list`, `learning.test.list`), fragt dich Karten ab (`learning.due`, auch je Lektion, dann `learning.review`), legt Karten an oder plant eine Pause.
 
+## AgentSteps
+
+Agenten, die allein arbeiten: Neu → **AgentSteps** öffnet das Dashboard. Links stehen, was gerade läuft, was auf dich wartet, die Aufgaben mit ihrem nächsten Termin und die letzten Läufe; rechts der Baukasten einer Aufgabe, die Zeitleiste eines Laufs oder der Chat für eine neue Aufgabe; unten läuft das **Agentenprotokoll** wie in einem Terminal mit.
+
+- **Neue Aufgabe im Chat:** beschreiben, was ein Agent tun soll und wann. Der Entwurf zeigt Schritte, Werkzeuge und Zeitplan; „Speichern und starten“, „Speichern“ oder „Im Baukasten bearbeiten“. „Halt an“, „weiter“ und „brich ab“ wirken auf die laufenden Agenten.
+- **Baukasten:** Ziel, Bausteine (KI-Schritt mit Auftrag und Werkzeuggruppen, oder eine Action aus dem Katalog mit Formular für ihre Parameter), Zeitplan (von Hand, einmalig, täglich, Wochentage, Abstand), Freigabe, eigener Branch, „Danach den Mac in den Ruhezustand versetzen“, Modell.
+- **Lauf:** eine Aufgabe nach der anderen. Chattest du, wartet der Agent, bis die Antwort fertig ist. Will er etwas, das eine Freigabe braucht, wartet nur dieser Lauf, und die Frage steht im Dashboard, im Power-Zugriff und als Mitteilung. Solange ein Agent arbeitet, bleibt der Mac wach.
+- **Git:** Jeder Lauf hat einen eigenen Branch und einen Commit pro Schritt; am Ende kommt alles in deinen Branch zurück. „Zurücknehmen“ macht einen Lauf mit einem Commit rückgängig.
+- **Power-Zugriff:** Oben schaltet „Tools | AgentSteps“ um. AgentSteps zeigt den laufenden Agenten mit Anhalten und Abbrechen, offene Fragen, das Protokoll und den Chat für neue Aufgaben.
+
+Einzelheiten: [AgentSteps](plan/AgentSteps.md).
+
 ## Terminal, MCP und Werkzeuge im Chat
 
 Die App lässt sich aus dem Terminal (`llmd`) und über MCP steuern, und der Chat kann auf Wunsch selbst in den Studios arbeiten. Heikle Schritte fragt die App nach, und jeder Schritt ist im Aktivitätsfenster und in der Antwort sichtbar. Siehe [Action-Schicht](actions.md).
 
 ## Power-Zugriff
 
-Der Blitz in der Titelleiste (⌥⌘J) verwandelt das rechte Panel in **kompakte Miniaturversionen aller Anwendungen** – neben dem, was in der Mitte offen ist. Das Panel ist dann breiter (400 pt). Den Blitz gibt es im Chat, in Writer und Presenter, in Stories, Notes, Projektseiten, PodcastStudio, Data Studio, Rechercherista und Learning Studio sowie bei Skills und Personas. Die elf Module stehen oben in zwei Reihen.
+Der Blitz in der Titelleiste (⌥⌘J) verwandelt das rechte Panel in **kompakte Miniaturversionen aller Anwendungen** – neben dem, was in der Mitte offen ist. Das Panel ist dann breiter (400 pt). Den Blitz gibt es im Chat, in Writer und Presenter, in Stories, Notes, Projektseiten, PodcastStudio, Data Studio, Rechercherista und Learning Studio sowie bei Skills und Personas. Die Module stehen oben in zwei Reihen. Darüber schaltet „Tools | AgentSteps“ auf die Agenten um (siehe [AgentSteps](#agentsteps)).
 
 | Modul | Was es zeigt | Hinein ziehen | Heraus ziehen |
 |---|---|---|---|

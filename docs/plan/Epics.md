@@ -306,7 +306,7 @@ Die Formalprüfung findet absichtlich eingebaute Fehler: eine Pille ohne Seite, 
 
 | Epic | Baustein | Status | Datum | Notizen |
 |---|---|---|---|---|
-| E1 | – | offen | | |
+| E1 | AgentSteps (statt Agentenzentrale) | gebaut auf `feature/agentsteps` | 15.11.2026 | Siehe [AgentSteps](AgentSteps.md): Aufgaben mit Zeitplan, Läufe als Datei, Fragen-Eingang statt Dialog (Kanal agent), Zurücknehmen über Git statt Schnappschüsse, Chat hat Vorrang. Offen: E1.1 Modell-Warteschlange für alle Aufrufe, E1.2 Chat- und MCP-Läufe als Lauf, Probe mit echtem Qwen 9B. |
 | E2 | – | offen | | |
 | E3 | – | offen | | |
 | E4 | – | offen | | wartet auf den Prüfungsleitfaden aus myCampus |

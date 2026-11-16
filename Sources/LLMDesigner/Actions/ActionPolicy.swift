@@ -108,7 +108,8 @@ enum ActionPolicy {
         switch (channel, kind) {
         case (.ui, _): .allow
         case (_, .read): .allow
-        case (.chat, .write): .ask
+        // A task's own setting (`AgentTaskOptions.approval`, by default "Änderungen erlauben") comes before this.
+        case (.chat, .write), (.agent, .write): .ask
         case (_, .write): .allow
         case (_, .destructive): .ask
         }

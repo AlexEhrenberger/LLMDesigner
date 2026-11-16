@@ -154,6 +154,24 @@ flowchart LR
 
 Terminal, MCP und Chat erreichen die App über dieselbe Registry, die Parameter prüft, die Sicherheitsregel anwendet und Undo-Gruppen und Protokoll führt. Details: [Action-Schicht](actions.md).
 
+## AgentSteps
+
+```mermaid
+flowchart LR
+    SCH["Zeitplan<br/>alle 20 s, nach dem Aufwachen"] --> Q["Warteschlange<br/>ein Lauf zugleich"]
+    UI["Dashboard, Power-Zugriff,<br/>llmd, Chat, MCP"] --> Q
+    Q --> R["Runner<br/>AppModel+Agents"]
+    R --> G["Git: Branch agent/…,<br/>Commit je Schritt, Merge"]
+    R --> S{"Schritt"}
+    S -->|action| REG["ActionRegistry<br/>Kanal agent"]
+    S -->|agent| M["Modellrunden<br/>AgentToolbox, schritt_fertig"]
+    M --> REG
+    REG -->|"fragen"| IN["Eingang des Laufs<br/>nur die Oberfläche antwortet"]
+    R --> W["AgentAwake<br/>wach bleiben, danach schlafen"]
+```
+
+Der Runner geht den Plan selbst durch; jeder KI-Schritt beginnt mit frischem Kontext (Ziel, ein Satz je erledigtem Schritt, eigener Auftrag), damit ein 9B-Modell nicht den Faden verliert. Vor jeder Modellrunde wartet er, solange ein Chat antwortet (`personUsesModel`). Fragen der Registry gehen über `ActionApproval.agentPresenter` in den Eingang des Laufs, statt einen Dialog zu öffnen. Weil der Ausgangsbranch sich nicht bewegt, solange die Bibliothek auf dem Branch des Laufs steht, entsteht der Merge-Commit mit `commit-tree` und `update-ref`, ohne dass eine Datei sich ändert oder die Bibliothek neu lädt. Während ein Lauf arbeitet, meldet `runningWorkDescription` „Ein Agent“: Git-Operationen, die Dateien ändern, und das Neuladen nach Änderungen von außen warten. Einzelheiten: [AgentSteps](plan/AgentSteps.md).
+
 ## Weitere lokale Dienste
 
 | Dienst | Wofür | Anbindung |
@@ -169,7 +187,7 @@ Terminal, MCP und Chat erreichen die App über dieselbe Registry, die Parameter 
 
 - UI und Modell laufen auf dem **Main Actor**. Netzwerk und Prozesse (Python, Tectonic) laufen in `Task`s; Ergebnisse kommen auf den Main Actor zurück.
 - Streams werden pro Chat verfolgt (`streamingMessageIDs`), damit mehrere Chats gleichzeitig antworten können.
-- Lange Modellaufgaben (Gedächtnis-Verdichtung, Gliederung, Moderatorenkarten) weichen, sobald der Nutzer schreibt.
+- Lange Modellaufgaben (Gedächtnis-Verdichtung, Gliederung, Moderatorenkarten) weichen, sobald der Nutzer schreibt. Läufe von AgentSteps warten vor jeder Modellrunde, solange ein Chat antwortet.
 
 ## Power-Zugriff
 

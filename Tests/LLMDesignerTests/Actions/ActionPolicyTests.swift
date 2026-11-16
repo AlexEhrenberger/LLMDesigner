@@ -20,7 +20,7 @@ struct ActionPolicyTests {
         if actionSensitive && hasA { return .ask }
         // The default levels.
         switch (channel, kind) {
-        case (.chat, .write), (_, .destructive): return .ask
+        case (.chat, .write), (.agent, .write), (_, .destructive): return .ask
         default: return .allow
         }
     }
@@ -55,7 +55,7 @@ struct ActionPolicyTests {
                 }
             }
         }
-        #expect(checked == 4 * 2 * 2 * 4 * 2 * 2)
+        #expect(checked == 5 * 2 * 2 * 4 * 2 * 2)
     }
 
     @Test func theTriangleNeverPassesOutsideTheUI() {

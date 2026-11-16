@@ -610,7 +610,7 @@ private struct GitCommitDetail: View {
                     }
                     // The lines per item and the trailers are shown as the list below and the label above.
                     let body = commit.body.split(separator: "\n", omittingEmptySubsequences: false)
-                        .filter { !$0.hasPrefix("- ") && !$0.hasPrefix("Auftrag:") && !$0.hasPrefix("Schritt:") }
+                        .filter { !$0.hasPrefix("- ") && !$0.hasPrefix("Auftrag:") && !$0.hasPrefix("Schritt:") && !$0.hasPrefix("Lauf:") }
                         .joined(separator: "\n")
                     if !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, model.selectedItems.isEmpty {
                         Text(body).font(.system(size: 12)).foregroundStyle(Theme.textSecondary).textSelection(.enabled)
