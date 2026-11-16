@@ -175,13 +175,7 @@ private enum PrintImages {
 
     /// Whether any pixel of a small copy is see-through.
     private static func hasTransparency(_ image: CGImage) -> Bool {
-        let side = 32
-        var pixels = [UInt8](repeating: 0, count: side * side * 4)
-        guard let context = CGContext(
-            data: &pixels, width: side, height: side, bitsPerComponent: 8, bytesPerRow: side * 4,
-            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ) else { return true }
-        context.draw(image, in: CGRect(x: 0, y: 0, width: side, height: side))
+        guard let pixels = PixelSample.rgba(of: image, side: 32) else { return true }
         return stride(from: 3, to: pixels.count, by: 4).contains { pixels[$0] < 250 }
     }
 }

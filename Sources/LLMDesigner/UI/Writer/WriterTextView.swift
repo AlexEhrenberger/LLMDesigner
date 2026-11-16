@@ -515,7 +515,9 @@ final class WriterTextView: NSTextView {
         outlineCache = nil
         lastOutlineSignature = outline.signature
         onOutlineChange?()
-        undoManager?.removeAllActions()
+        // Only this view's typing goes: its ranges don't fit the new text. What else the window can take back (a
+        // slide deleted, a picture moved) stays; going to another document clears it (see WriterEditor).
+        removeUndoActions()
         let end = (storage.string as NSString).length
         setSelectedRange(NSRange(location: end, length: 0))
         resetTypingAttributes()

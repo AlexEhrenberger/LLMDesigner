@@ -199,6 +199,8 @@ extension AppModel {
         guard let current = document(generation.documentID)?.deck else { return }
         let created = Set(generation.created)
         cancelSpeakerNotes(for: created)
+        // The passages the removed slides were made from go with them.
+        for slideID in created where generation.before.slide(slideID) == nil { deckSources[slideID] = nil }
         var deck = current
         deck.slides = current.slides.compactMap { slide in
             created.contains(slide.id) ? generation.before.slide(slide.id) : slide

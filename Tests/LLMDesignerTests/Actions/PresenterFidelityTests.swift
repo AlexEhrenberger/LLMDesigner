@@ -64,6 +64,11 @@ struct PresenterFidelityTests {
         #expect(!isBlue(try await overlapColor([try bluePicture(.behind), box(.behind)])))
     }
 
+    @Test func aLightPictureGetsDarkTextAndADarkOneLight() throws {
+        #expect(SlideImageTone.tone(of: try picture(red: 0.95, green: 0.95, blue: 0.9)) == .dark)
+        #expect(SlideImageTone.tone(of: try picture(red: 0.05, green: 0.05, blue: 0.1)) == .light)
+    }
+
     // MARK: What an instruction in the bar means
 
     private struct Case: CustomTestStringConvertible {

@@ -693,7 +693,8 @@ final class AppModel {
     @ObservationIgnored let presentationPlayer = PresentationPlayer()
     /// The model making a whole presentation from the assistant bar (see AppModel+PresenterGeneration.swift).
     var deckGeneration: DeckGeneration?
-    /// For slides made from a document: the passage each was made from, which the speaker card draws on.
+    /// For slides made from a document: the passage each was made from, which the speaker card draws on. Only in
+    /// memory (the file format stays as it is): after a restart the cards are written from the slides alone.
     @ObservationIgnored var deckSources: [UUID: String] = [:]
     /// The sheet that makes a presentation from a document (see `DeckFromDocumentSheet`).
     var deckSourceRequest: DeckSourceRequest?

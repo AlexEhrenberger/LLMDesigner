@@ -289,8 +289,13 @@ extension AppModel {
         deleteAnalysis(id)
         documentSaveTasks[id]?.cancel()
         documentSaveTasks[id] = nil
-        // A presentation being played (also on a second screen) stops with it.
+        // A presentation being played (also on a second screen) stops with it, and what was kept for its slides goes.
         presentationPlayer.documentGone(id)
+        for slide in document(id)?.deck?.slides ?? [] {
+            deckSources[slide.id] = nil
+            replacedNotes[slide.id] = nil
+            notesErrors[slide.id] = nil
+        }
         let pictures = document(id)?.pictureSources ?? []
         documents.removeAll { $0.id == id }
         documentStore.delete(id)
