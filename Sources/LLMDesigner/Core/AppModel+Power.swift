@@ -47,10 +47,21 @@ enum PowerModule: String, CaseIterable, Identifiable {
 
 /// The power access: in the right-hand panel a small version of every application, next to the one in the main
 /// area. Text goes back and forth by dragging; quotes and story elements can be made there.
+/// The two sides of the power access: the small studios, or AgentSteps with the agents' log and chat. AgentSteps is
+/// not one of the tools: it watches all of them.
+enum PowerTab: String, CaseIterable, Identifiable {
+    case tools, agents
+
+    var id: String { rawValue }
+    var title: String { self == .tools ? "Tools" : "AgentSteps" }
+    var symbol: String { self == .tools ? "square.grid.2x2" : AgentTask.symbol }
+}
+
 @MainActor
 @Observable
 final class PowerAccess {
     var isOn = false
+    var tab: PowerTab = .tools
     var module: PowerModule = .writer
     /// The search over the list or in the open item.
     var query = ""

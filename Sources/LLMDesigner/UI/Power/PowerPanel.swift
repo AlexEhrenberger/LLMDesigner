@@ -15,9 +15,10 @@ struct PowerPanel: View {
                 Image(systemName: "bolt.fill")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Theme.accent)
-                Text("Power-Zugriff")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Theme.textPrimary)
+                    .help("Power-Zugriff")
+                StudioTabPicker(tabs: PowerTab.allCases, selection: $power.tab, title: \.title, symbol: \.symbol) { tab in
+                    tab == .agents ? app.agents.openQuestions.count + (app.agents.activeRunID == nil ? 0 : 1) : nil
+                }
                 Spacer(minLength: 0)
                 IconButton(systemName: "list.bullet.indent", help: "Zurück zum Inhaltsverzeichnis", size: 13, frameSize: Theme.titleBarControlSize) {
                     app.togglePower()
@@ -31,6 +32,10 @@ struct PowerPanel: View {
             .padding(.bottom, Theme.topBarBottomPadding)
             .background(WindowDragArea())
 
+            if power.tab == .agents {
+                PowerAgents()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            } else {
             PowerModulePicker()
                 .padding(.horizontal, 10)
                 .padding(.bottom, 8)
@@ -60,6 +65,7 @@ struct PowerPanel: View {
 
             if let change = power.lastChange {
                 PowerUndoBar(change: change)
+            }
             }
         }
         .glassPanel()

@@ -3,7 +3,8 @@ import LLMDProtocol
 
 /// The ways an action can be reached.
 enum ActionChannel: String, Codable, Sendable, CaseIterable {
-    case ui, cli, mcp, chat
+    /// `agent` is a run of AgentSteps: the app's own model working through a task while no one may be watching.
+    case ui, cli, mcp, chat, agent
 
     var label: String {
         switch self {
@@ -11,6 +12,7 @@ enum ActionChannel: String, Codable, Sendable, CaseIterable {
         case .cli: "Terminal"
         case .mcp: "MCP"
         case .chat: "Chat"
+        case .agent: "Agent"
         }
     }
 }

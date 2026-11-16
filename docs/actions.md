@@ -16,7 +16,8 @@ flowchart LR
     CHAT["Chat mit Werkzeugen<br/>ChatActionTools"] --> REG
     SRV --> REG["ActionRegistry<br/>Schema, Regel, Undo, Protokoll"]
     REG --> POL["ActionPolicy<br/>Rule of Two"]
-    REG --> APP["ActionApproval<br/>Dialog"]
+    REG --> APP["ActionApproval<br/>Dialog oder Eingang des Laufs"]
+    AG["AgentSteps-Lauf"] --> REG
     REG --> ACT["Actions<br/>Writer, Presenter, Citation, Stories, Notes, Projekte, Podcast,<br/>Data, Rechercherista, Learning, Chat"]
     ACT --> AM["AppModel und Bibliothek"]
 ```
@@ -89,6 +90,7 @@ flowchart TB
 - **LaTeX:** Formeln, die Dateien lesen oder Befehle zusammenbauen könnten, werden als Code gesetzt (`LaTeXSafety`).
 - **Anhänge:** Ein Chat mit angehängtem Dokument gilt als fremd und sensibel zugleich (A und B): Inhalt von Dritten, Datei der Person. Websuche und Seitenaufrufe fragen dann wie bei Persona-Dateien, Actions mit Wirkung nach außen ebenso. `chat.document.read` ist über MCP gesperrt.
 - **Immer mit Rückfrage außerhalb der Oberfläche:** Mikrofon, Bildschirmfoto, Vollbild und Vortrag mit Stimme, Modellserver umstellen, Bibliothek wechseln, Anhang in einem anderen Programm öffnen. Über Chat und MCP auch jede Datei, deren Pfad der Aufrufer nennt.
+- **Agenten (AgentSteps):** Kanal „Agent“, Standard lesen erlaubt, schreiben und destruktiv fragen; jede Aufgabe stellt ein, wie viel sie ohne Rückfrage darf („Änderungen erlauben“ als Vorgabe). Fragen halten nur ihren Lauf an.
 - **Protokoll:** Fenster → „Aktivität von Terminal und Agenten“ zeigt Zeit, Kanal, Lauf, Action, A/B, Entscheidung und Ergebnis, aber keine Inhalte.
 - **Katalog:** Fenster → „Action-Katalog für Agenten“ zeigt alle Actions mit Parametern, Art, A/B, Wirkung und Aufruf.
 
@@ -169,6 +171,26 @@ llmd git tag --name Abgabe-Hausarbeit
 
 `git.merge` führt nach Absätzen, Folien und Einträgen zusammen; Konflikte warten, bis jemand sie löst, und jede Datei bleibt dabei lesbar (keine `<<<<<<<`). Für `git merge` im Terminal trägt die App `llmd git merge-file` als Merge-Treiber in `.git/config` ein.
 
+## AgentSteps
+
+Aufgaben und Läufe von [AgentSteps](plan/AgentSteps.md). Ein Lauf ruft Actions über den Kanal **Agent** auf; Fragen landen im Eingang des Laufs, beantworten kann sie nur die Person in der App. Agenten selbst können keine `agents.*`-Actions aufrufen. Was ein Chat oder MCP-Client als Aufgabe anlegt, gilt als fremd und fragt vor jeder Änderung; einen Lauf von dort zu starten, fragt immer.
+
+```bash
+llmd agents status
+llmd agents catalog
+llmd agents task create --title Morgenbericht --goal "Überblick über offene ToDos" \
+  --steps '[{"kind":"agent","title":"Sammeln","instruction":"Lies alle Notes und liste offene ToDos.","tools":["notes.core"]},
+            {"kind":"action","title":"Anlegen","action":"writer.doc.create","arguments":{"title":"Bericht {{heute}}","markdown":"{{schritt1.satz}}"}}]'
+llmd agents schedule set --task Morgenbericht --schedule '{"kind":"woechentlich","time":"07:30","weekdays":[1,2,3,4,5]}'
+llmd agents task update --task Morgenbericht --sleep-after true
+llmd agents run start --task Morgenbericht
+llmd agents run read            # der laufende oder letzte Lauf, mit Protokoll
+llmd agents run pause --id 1a2b3c4d
+llmd agents run undo --id 1a2b3c4d
+llmd agents halt --halted true
+llmd agents plan --description "Jeden Freitag um 17 Uhr einen Wochenrückblick aus meinen Notes"
+```
+
 ## MCP
 
 `llmd mcp` ist ein stdio-Server nach Spezifikation 2026-07-28 und versteht auch das ältere `initialize`.
@@ -180,7 +202,7 @@ claude mcp add llmd -- "/Pfad/LLM Designer.app/Contents/Helpers/llmd" mcp --prof
 | Profil | Inhalt |
 |---|---|
 | `core` | der kleine Satz zum Lesen, Schreiben, Präsentieren, Zitieren und Fragen |
-| `writer`, `presenter`, `citation`, `stories`, `notes`, `projects`, `podcast`, `data`, `research`, `learning`, `chat` | ein Studio |
+| `writer`, `presenter`, `citation`, `stories`, `notes`, `projects`, `podcast`, `data`, `research`, `learning`, `chat`, `agents` | ein Studio |
 | `full` | alles außer privaten Daten |
 
 Jedes Profil hat zusätzlich `llmd_search_actions` und `llmd_run_action`, damit kleine Modelle nicht alle Tools laden müssen. Dazu kommen Resources (`llmd://writer/doc/{id}`, `llmd://presenter/deck/{id}`, `llmd://citation/source/{key}`, `llmd://stories/world/{id}`, `llmd://notes/note/{id}`, `llmd://projects/project/{id}`, `llmd://podcast/podcast/{id}`), Prompts aus Skills und `subscriptions/listen`.

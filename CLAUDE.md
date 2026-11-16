@@ -18,6 +18,7 @@ Immer `scripts/test.sh` statt `swift test`: Die Command Line Tools brauchen die 
 - `docs/plan/Implementierungsplan.md`: Action-Schicht → CLI `llmd` → MCP, mit Fortschritt in Abschnitt 8
 - `docs/plan/*-Actions.md`: Action-Kataloge, `docs/plan/Sicherheitskonzept-Prompt-Injection.md`: Sicherheitsregeln
 - `docs/actions.md`: Registry, Regeln, CLI und MCP im Überblick
+- `docs/plan/AgentSteps.md`: Aufgaben, Läufe, Git je Lauf, Regeln für Agenten
 
 ## Regeln
 

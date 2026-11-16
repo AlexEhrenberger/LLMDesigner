@@ -332,6 +332,7 @@ extension AppModel {
         research.saveAll()
         learning.saveAll()
         podcasts.saveAll()
+        agents.tasks.saveAll()
     }
 
     /// Ids of records whose latest change isn't on disk yet.
@@ -346,6 +347,7 @@ extension AppModel {
         ids.formUnion(dataStudio.templates.pendingSaveIDs)
         ids.formUnion(research.records.pendingSaveIDs)
         ids.formUnion(learning.courses.pendingSaveIDs)
+        ids.formUnion(agents.tasks.pendingSaveIDs)
         return ids
     }
 
@@ -362,6 +364,7 @@ extension AppModel {
             dataStudio.templates.discardPendingSave(id)
             research.records.discardPendingSave(id)
             learning.courses.discardPendingSave(id)
+            agents.tasks.discardPendingSave(id)
         }
     }
 
@@ -391,7 +394,7 @@ extension LibraryGit {
         let id = id.uuidString
         return ["Documents/\(id).md", "Zitate/Quellen/\(id).json", "Geschichten/\(id).json", "Notizen/\(id).json",
                 "Projekte/\(id).json", "Podcasts/\(id)/podcast.json", "Daten/\(id).json", "Vorlagen/\(id)/vorlage.json",
-                "Recherchen/\(id)/recherche.json", "Lernen/\(id)/kurs.json"]
+                "Recherchen/\(id)/recherche.json", "Lernen/\(id)/kurs.json", "AgentSteps/Aufgaben/\(id).json"]
     }
 
     /// The item of a record (document, note, world …) by its id, as it is on disk now.

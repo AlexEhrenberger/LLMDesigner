@@ -525,11 +525,19 @@ final class AppModel {
     /// Git Studio is shown in the main area.
     var gitStudioOpen = false
 
+    // MARK: AgentSteps (see AppModel+Agents.swift)
+
+    /// Agentic tasks, their runs, the queue and the questions for the person.
+    let agents = AgentCenter(root: AppLibrary.current.url)
+    /// AgentSteps' dashboard is shown in the main area.
+    var agentStepsOpen = false
+
     /// What runs now and would stop if the library reloaded; nil when nothing does.
     var runningWorkDescription: String? {
         if !generationTasks.isEmpty || !streamingMessageIDs.isEmpty { return "Eine Antwort" }
         if podcastTask != nil { return "Ein Podcast" }
         if research.records.records.contains(where: { $0.phase.isRunning }) { return "Eine Recherche" }
+        if agents.activeRunID != nil { return "Ein Agent" }
         return nil
     }
     /// The voices of the Qwen TTS service.
@@ -734,6 +742,7 @@ final class AppModel {
         podcasts.loadIfNeeded()
         git.app = self
         git.start()
+        startAgents()
     }
 
     // MARK: Closing
@@ -741,6 +750,7 @@ final class AppModel {
     /// Before another library opens: writes what is still waiting to be saved and stops everything that runs
     /// (answers, outlines, memory work, voice, polling), so nothing of this library goes on in the next one.
     func close() async {
+        await stopAgents()
         if !discardOnClose.isEmpty { discardPendingSaves(discardOnClose) }
         if conversation != nil { endConversation() }
         if isDictating { await stopDictation() }

@@ -104,7 +104,7 @@ struct ActionSettings: View {
                     }
                 }
             }
-            ForEach([ActionChannel.cli, .mcp, .chat], id: \.self) { channel in
+            ForEach([ActionChannel.cli, .mcp, .chat, .agent], id: \.self) { channel in
                 LabeledContent(channel.label) {
                     HStack(spacing: 8) {
                         ForEach(ActionKind.allCases, id: \.self) { kind in

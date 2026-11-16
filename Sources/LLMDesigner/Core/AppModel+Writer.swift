@@ -32,6 +32,7 @@ extension AppModel {
         if researchStudioOpen { return .research }
         if learningStudioOpen { return .learning }
         if gitStudioOpen { return .git }
+        if agentStepsOpen { return .agents }
         guard let document = selectedDocument else { return nil }
         return document.isPresentation ? .presenter : .writer
     }
@@ -78,6 +79,7 @@ extension AppModel {
         case .research: openResearchStudio(new: true)
         case .learning: openLearningStudio()
         case .git: openGitStudio()
+        case .agents: openAgentSteps()
         }
     }
 
@@ -132,6 +134,7 @@ extension AppModel {
         if researchStudioOpen { closeResearchStudio() }
         if learningStudioOpen { closeLearningStudio() }
         if gitStudioOpen { gitStudioOpen = false }
+        if agentStepsOpen { agentStepsOpen = false }
         guard let id = selectedDocumentID else { return }
         lastClosedDocumentID = id
         // Dictation and reading belong to the open document.

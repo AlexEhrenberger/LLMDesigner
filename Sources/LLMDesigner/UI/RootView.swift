@@ -100,6 +100,9 @@ struct RootView: View {
                     } else if app.gitStudioOpen {
                         GitStudioScreen()
                             .transition(.opacity)
+                    } else if app.agentStepsOpen {
+                        AgentStepsScreen()
+                            .transition(.opacity)
                     } else if app.selectedPresentation != nil {
                         // Opens at once, like a document: no fade so the slide can be worked on right away.
                         PresenterScreen()
@@ -130,6 +133,7 @@ struct RootView: View {
             .animation(.easeInOut(duration: 0.25), value: app.researchStudioOpen)
             .animation(.easeInOut(duration: 0.25), value: app.learningStudioOpen)
             .animation(.easeInOut(duration: 0.25), value: app.gitStudioOpen)
+            .animation(.easeInOut(duration: 0.25), value: app.agentStepsOpen)
             if showsChatPower, app.isPanelDocked {
                 PowerPanel()
                     .frame(width: Theme.powerWidth)
@@ -184,7 +188,7 @@ struct RootView: View {
     }
 
     private var openedKey: String {
-        "\(app.selectedChatID?.uuidString ?? "")|\(app.selectedDocumentID?.uuidString ?? "")|\(app.sidebarMode)|\(app.citationStudioOpen)|\(app.storiesStudioOpen)|\(app.notesStudioOpen)|\(app.openProjectID?.uuidString ?? "")|\(app.podcastStudioOpen)|\(app.selectedPodcastID?.uuidString ?? "")|\(app.dataStudioOpen)|\(app.researchStudioOpen)|\(app.learningStudioOpen)|\(app.gitStudioOpen)"
+        "\(app.selectedChatID?.uuidString ?? "")|\(app.selectedDocumentID?.uuidString ?? "")|\(app.sidebarMode)|\(app.citationStudioOpen)|\(app.storiesStudioOpen)|\(app.notesStudioOpen)|\(app.openProjectID?.uuidString ?? "")|\(app.podcastStudioOpen)|\(app.selectedPodcastID?.uuidString ?? "")|\(app.dataStudioOpen)|\(app.researchStudioOpen)|\(app.learningStudioOpen)|\(app.gitStudioOpen)|\(app.agentStepsOpen)"
     }
 
     /// The room the content needs before a sidebar may stand beside it: the studios have a sheet and a toolbar to show.

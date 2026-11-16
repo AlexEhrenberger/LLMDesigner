@@ -41,6 +41,7 @@ final class ActionRegistry {
         registry.registerPodcastActions()
         registry.registerChatActions()
         registry.registerGitActions()
+        registry.registerAgentActions()
         return registry
     }
 
@@ -190,8 +191,8 @@ final class ActionRegistry {
                 throw RPCError.denied(reason)
             case .ask(let reason):
                 let request = ApprovalRequest(action: id, summary: descriptor.summary, channel: state.channel, target: preflight.target,
-                                              detail: ActionApproval.abridged(preflight.detail), reason: reason, fullText: preflight.review)
-                guard await approval.presenter(request) else {
+                                              detail: ActionApproval.abridged(preflight.detail), reason: reason, fullText: preflight.review, run: state.id)
+                guard await approval.answer(request) else {
                     logEntry.decision = "abgelehnt"
                     throw RPCError.denied("Nicht freigegeben: \(reason)")
                 }

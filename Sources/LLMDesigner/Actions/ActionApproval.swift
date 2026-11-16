@@ -12,6 +12,8 @@ struct ApprovalRequest: Sendable, Equatable {
     var reason: String
     /// The whole text, when agreeing means having read it.
     var fullText: String?
+    /// The run the call belongs to; an agent's question waits in that run's inbox.
+    var run: String? = nil
 }
 
 /// Approval levels per channel and kind of action (in the library's settings), and the dialog.
@@ -23,6 +25,17 @@ final class ActionApproval {
 
     /// Answers a request. Replaced in tests; with no one there to answer, "ask" means no.
     var presenter: @MainActor (ApprovalRequest) async -> Bool = ActionApproval.presentAlert
+    /// Answers a run of AgentSteps: the question goes to the run's inbox and only that run waits, instead of a dialog
+    /// that would stop the whole app at night. Without it, an agent's "ask" is a no.
+    var agentPresenter: (@MainActor (ApprovalRequest) async -> Bool)?
+
+    func answer(_ request: ApprovalRequest) async -> Bool {
+        if request.channel == .agent {
+            guard let agentPresenter else { return false }
+            return await agentPresenter(request)
+        }
+        return await presenter(request)
+    }
 
     func level(channel: ActionChannel, kind: ActionKind, settings: LibrarySettings) -> ActionPolicy.Level {
         let stored = settings.string(forKey: Self.settingsKey).flatMap { try? JSONDecoder().decode([String: ActionPolicy.Level].self, from: Data($0.utf8)) }
