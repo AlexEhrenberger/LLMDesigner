@@ -133,24 +133,16 @@ final class PresentationPlayer {
             var notes = slide.notes.trimmingCharacters(in: .whitespacesAndNewlines)
             if notes.isEmpty {
                 phase = .writing
+                // The card goes to the front of those the model writes (one queue, so stopping it stops this too).
+                app.writeSpeakerNotes(documentID, slides: [slide.id], first: true)
                 notes = await notesWhenWritten(slide.id, in: documentID) ?? ""
                 guard isPresenting, !Task.isCancelled else { return }
                 if notes.isEmpty {
-                    if let message = app.notesErrors[slide.id] {
-                        error = message
-                    } else {
-                        do {
-                            notes = try await app.generateNotes(documentID, slide.id)
-                        } catch {
-                            if !Task.isCancelled { self.error = "Die Moderatorenkarte ließ sich nicht schreiben: \(error.localizedDescription)" }
-                        }
-                    }
-                    guard isPresenting, !Task.isCancelled else { return }
-                    if notes.isEmpty {
-                        isPresenting = false
-                        phase = .idle
-                        return
-                    }
+                    error = app.notesErrors[slide.id].map { "Die Moderatorenkarte ließ sich nicht schreiben: \($0)" }
+                        ?? "Die Moderatorenkarte ließ sich nicht schreiben."
+                    isPresenting = false
+                    phase = .idle
+                    return
                 }
             }
             prepareNotes(after: index, in: documentID)

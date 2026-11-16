@@ -265,7 +265,7 @@ struct PresenterNotesCancelAction: LLMDAction {
 struct PresenterAIUndoGenerationAction: LLMDAction {
     typealias Output = OKOutput
     static let descriptor = ActionDescriptor(
-        id: "presenter.ai.undoGeneration", summary: "Bringt die Folien von vor der Folienerzeugung zurück", kind: .write, security: .localWrite, output: .freeObject()
+        id: "presenter.ai.undoGeneration", summary: "Nimmt die Folien der letzten Folienerzeugung wieder heraus; eigene Folien und Änderungen daneben bleiben", kind: .write, security: .localWrite, output: .freeObject()
     )
     static func run(_ args: NoArgs, context: ActionContext) async throws -> Output {
         let app = context.app

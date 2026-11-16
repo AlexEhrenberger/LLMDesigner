@@ -154,7 +154,9 @@ Präsentationen sind Dokumente einer eigenen Art: jede Folie hat Text (derselbe 
 - Auch der **Textbereich der Folie** selbst lässt sich verschieben und in der Größe ändern („Frei platzieren → Textbereich der Folie verschieben“).
 - „Markierung als Textfeld herauslösen“ nimmt markierten Text aus der Folie und legt ihn als freies Feld ab.
 - Die KI erstellt ganze Präsentationen aus einer Anweisung, schreibt Moderatorenkarten und trägt vor (Vollbild auf dem zweiten Bildschirm, Vorlesen, automatisches Weiterschalten).
-- **Text passt auf die Folie**: Läuft der Text über, zeigt der Editor einen Hinweis. Agenten erfahren es im Ergebnis jeder Folien-Action (`fit`), `presenter.slides.checkFit` prüft eine ganze Präsentation, `splitOverflow` bzw. `presenter.slide.split` verteilen die Punkte auf Folgefolien „(Forts.)“. Die eigene Folienerzeugung teilt überlaufende Folien selbst.
+- **Was du schreibst, bleibt**: Während die KI Folien erstellt, kannst du weiterarbeiten. Eine Folie, auf der du schon schreibst, füllt sie nicht mehr; hast du die leere Präsentation inzwischen begonnen, kommen ihre Folien hinten dazu. „Rückgängig“ nimmt nur die Folien der KI heraus, deine eigenen bleiben, und ⌘Z holt die der KI zurück.
+- **Moderatorenkarten** schreibt die KI der Reihe nach; „Abbrechen“ stoppt alle, auch die wartenden. Beim Vortrag kommt die gerade nötige Karte zuerst. Eine Karte, die du währenddessen änderst, überschreibt sie nicht. Schreibt sie eine vorhandene Karte neu, holt **Vorherige Karte** (oder ⌘Z) die alte zurück; das Menü der Karte tut es für alle Folien.
+- **Text passt auf die Folie**: Läuft der Text über, zeigt der Editor einen Hinweis. Agenten erfahren es im Ergebnis jeder Folien-Action (`fit`), `presenter.slides.checkFit` prüft eine ganze Präsentation, `splitOverflow` bzw. `presenter.slide.split` verteilen die Punkte auf Folgefolien „(Forts.)“; was vor der Liste steht, bleibt auf der ersten Folie, was danach kommt, wandert auf die letzte, Unterpunkte bleiben bei ihrem Punkt und die Folgefolien behalten den Hintergrund. Die eigene Folienerzeugung teilt überlaufende Folien selbst.
 - Export als PDF (Text bleibt Text) und Handout.
 
 ```mermaid

@@ -653,7 +653,15 @@ final class AppModel {
     /// Slides whose speaker notes the model is writing, and why it failed.
     var notesWriting: Set<PresentationSlide.ID> = []
     var notesErrors: [PresentationSlide.ID: String] = [:]
+    /// The one worker that writes the waiting cards one after the other (see `writeSpeakerNotes`).
     @ObservationIgnored var notesTask: Task<Void, Never>?
+    /// The cards still to write, in order, and the one being written.
+    @ObservationIgnored var notesQueue: [NotesJob] = []
+    @ObservationIgnored var notesRunning: NotesJob?
+    /// Counts the workers: one that was cancelled sees it is no longer the current one and changes nothing.
+    @ObservationIgnored var notesWorker = 0
+    /// The card a slide had before the model wrote it anew, for "Vorherige Karte".
+    var replacedNotes: [PresentationSlide.ID: String] = [:]
     /// The speaker notes show below the slide.
     var presenterNotesVisible: Bool {
         didSet { settings.set(presenterNotesVisible, forKey: Keys.presenterNotesVisible) }

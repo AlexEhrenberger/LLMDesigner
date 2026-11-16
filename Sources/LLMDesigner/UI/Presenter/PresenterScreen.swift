@@ -1089,7 +1089,8 @@ private struct DeckActivityCard: View {
                         app.writeSpeakerNotes(document.id, slides: missingNotes)
                     }
                 }
-                SmallActionButton(title: "Rückgängig", symbol: "arrow.uturn.backward") { app.undoDeckGeneration() }
+                SmallActionButton(title: "Rückgängig", symbol: "arrow.uturn.backward") { app.undoDeckGeneration(undoManager: MainWindow.window?.undoManager) }
+                    .help("Die Folien der KI wieder entfernen; was du selbst hinzugefügt hast, bleibt. ⌘Z holt sie zurück.")
                 IconButton(systemName: "xmark", help: "Ausblenden", size: 10.5, frameSize: 22) { app.deckGeneration = nil }
             case .failed(let message):
                 Image(systemName: "exclamationmark.triangle.fill")
@@ -1098,7 +1099,8 @@ private struct DeckActivityCard: View {
                 text("Die Präsentation ließ sich nicht erstellen", message)
                 Spacer(minLength: 8)
                 if !generation.created.isEmpty {
-                    SmallActionButton(title: "Rückgängig", symbol: "arrow.uturn.backward") { app.undoDeckGeneration() }
+                    SmallActionButton(title: "Rückgängig", symbol: "arrow.uturn.backward") { app.undoDeckGeneration(undoManager: MainWindow.window?.undoManager) }
+                        .help("Die Folien der KI wieder entfernen; was du selbst hinzugefügt hast, bleibt. ⌘Z holt sie zurück.")
                 }
                 IconButton(systemName: "xmark", help: "Ausblenden", size: 10.5, frameSize: 22) { app.deckGeneration = nil }
             }
@@ -1184,6 +1186,12 @@ private struct SpeakerNotesCard: View {
                         .foregroundStyle(Theme.warning)
                         .help(error)
                 }
+                if !isWriting, app.replacedNotes[slide.id] != nil {
+                    SmallActionButton(title: "Vorherige Karte", symbol: "arrow.uturn.backward") {
+                        app.restoreReplacedNotes(document.id, slide.id, undoManager: MainWindow.window?.undoManager)
+                    }
+                    .help("Die Karte von vorher zurückholen; ein zweiter Klick bringt die neue wieder")
+                }
                 SmallActionButton(title: slide.notes.isEmpty ? "Schreiben lassen" : "Neu schreiben", symbol: "sparkles") {
                     app.writeSpeakerNotes(document.id, slides: [slide.id])
                 }
@@ -1195,6 +1203,11 @@ private struct SpeakerNotesCard: View {
                     }
                     Button("Alle Karten neu schreiben lassen", systemImage: "arrow.clockwise") {
                         app.writeSpeakerNotes(document.id, slides: deck.slides.map(\.id))
+                    }
+                    if deck.slides.contains(where: { app.replacedNotes[$0.id] != nil }) {
+                        Button("Vorherige Karten aller Folien zurückholen", systemImage: "arrow.uturn.backward") {
+                            app.restoreAllReplacedNotes(document.id, undoManager: MainWindow.window?.undoManager)
+                        }
                     }
                     if !app.notesWriting.isEmpty {
                         Divider()
@@ -1308,12 +1321,18 @@ private struct SpeakerNotesEditor: NSViewRepresentable {
         let selection = textView.selectedRange()
         context.coordinator.slideID = slideID
         if textView.string != text {
+            // Typing steps of the old text would point at ranges that no longer fit.
+            textView.removeUndoActions()
             textView.string = text
             textView.textColor = NSColor(Theme.textPrimary)
             let length = (text as NSString).length
             textView.setSelectedRange(isSameSlide ? NSRange(location: min(selection.location, length), length: 0) : NSRange(location: 0, length: 0))
         }
         find.attachNotes(textView, slideID: slideID)
+    }
+
+    static func dismantleNSView(_ scrollView: NSScrollView, coordinator: Coordinator) {
+        coordinator.textView?.removeUndoActions()
     }
 
     @MainActor

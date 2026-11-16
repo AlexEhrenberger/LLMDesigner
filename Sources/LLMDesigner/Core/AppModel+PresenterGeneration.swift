@@ -76,7 +76,8 @@ extension AppModel {
             deckGeneration = DeckGeneration(documentID: id, phase: .failed("Kein Modell gewählt. Wähle eines unten links in der Seitenleiste."), before: before)
             return
         }
-        let isEmpty = before.slides.allSatisfy { $0.markdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        // Empty means nothing at all: a slide with only a picture or a card is the person's work.
+        let isEmpty = before.slides.allSatisfy(\.isEmpty)
         deckGeneration = DeckGeneration(documentID: id, phase: .outlining, before: before, replacedEmpty: isEmpty)
         let title = document.displayTitle
 
@@ -98,25 +99,33 @@ extension AppModel {
 
                 // The skeleton: title, chapters and slides with their titles.
                 var slides: [PresentationSlide] = []
-                var plan: [(id: PresentationSlide.ID, chapter: String, slide: PresenterPrompts.Outline.Slide)] = []
-                let titleSlide: PresentationSlide? = isEmpty ? PresentationSlide(
-                    id: before.slides.first?.id ?? UUID(),
-                    role: .title,
-                    markdown: "# \(Self.slideLine(outline.titel)) {.chapter}" + (outline.untertitel.isEmpty ? "" : "\n\n" + Self.slideLine(outline.untertitel))
-                ) : nil
+                var plan: [(id: PresentationSlide.ID, chapter: String, slide: PresenterPrompts.Outline.Slide, skeleton: String)] = []
+                let titleMarkdown = "# \(Self.slideLine(outline.titel)) {.chapter}" + (outline.untertitel.isEmpty ? "" : "\n\n" + Self.slideLine(outline.untertitel))
                 for chapter in outline.kapitel where !chapter.folien.isEmpty {
                     slides.append(PresentationSlide(role: .chapter, markdown: "# \(Self.slideLine(chapter.titel)) {.chapter}"))
                     for slide in chapter.folien {
                         let new = PresentationSlide(role: .content, markdown: "# " + Self.slideLine(slide.titel))
                         slides.append(new)
-                        plan.append((new.id, chapter.titel, slide))
+                        plan.append((new.id, chapter.titel, slide, new.markdown))
                     }
                 }
+                // The outline took a while. An empty presentation becomes the new one only if it is still empty;
+                // what the person wrote or put on a slide meanwhile stays, and the new slides follow it.
+                var titleID: PresentationSlide.ID?
                 self.modifyDeck(id) { deck in
-                    if let titleSlide { deck.slides = [titleSlide] + slides } else { deck.slides += slides }
+                    if isEmpty, deck.slides.allSatisfy(\.isEmpty), var first = deck.slides.first {
+                        first.role = .title
+                        first.markdown = titleMarkdown
+                        first.hidesPlaceholder = false
+                        deck.slides = [first] + slides
+                        titleID = first.id
+                    } else {
+                        deck.slides += slides
+                    }
                     return true
                 }
-                var created = (titleSlide.map { [$0.id] } ?? []) + slides.map(\.id)
+                self.deckGeneration?.replacedEmpty = titleID != nil
+                var created = (titleID.map { [$0] } ?? []) + slides.map(\.id)
                 self.deckGeneration?.created = created
                 if self.selectedDocumentID == id { self.selectedSlideID = created.first }
 
@@ -136,11 +145,13 @@ extension AppModel {
                     let points = (content?.punkte ?? []).map(Self.slidePoint).filter { !$0.isEmpty }
                     guard !points.isEmpty else { continue }
                     let markdown = "# " + Self.slideLine(item.slide.titel) + "\n\n" + points.map { "- " + $0 }.joined(separator: "\n")
-                    self.modifyDeck(id) { deck in
-                        guard let index = deck.index(of: item.id) else { return false }
+                    // A slide the person wrote on meanwhile is theirs: the model leaves it.
+                    let filled = self.modifyDeck(id) { deck in
+                        guard let index = deck.index(of: item.id), deck.slides[index].markdown == item.skeleton else { return false }
                         deck.slides[index].markdown = markdown
                         return true
                     }
+                    guard filled else { continue }
                     // Points that run over the slide go onto a slide "(Forts.)" right after it.
                     if let current = self.document(id), let deck = current.deck, let filled = deck.slide(item.id) {
                         let parts = SlideFit.split(filled, in: deck, family: current.font)
@@ -174,17 +185,22 @@ extension AppModel {
         deckGenerationTask?.cancel()
     }
 
-    /// The slides from before the model made the presentation.
-    func undoDeckGeneration() {
+    /// Takes the model's slides out again. The slides it made go; the title slide of an empty presentation gets its
+    /// old state back. What the person added or changed besides stays, and ⌘Z brings the model's slides back.
+    func undoDeckGeneration(undoManager: UndoManager? = nil) {
         guard let generation = deckGeneration, !generation.isRunning else { return }
+        // Typing not yet handed over belongs to the slides that stay.
+        writerFlush?()
+        guard let current = document(generation.documentID)?.deck else { return }
         let created = Set(generation.created)
-        notesTask?.cancel()
-        notesWriting.subtract(created)
-        modifyDeck(generation.documentID) { deck in
-            deck = generation.before
-            return true
+        cancelSpeakerNotes(for: created)
+        var deck = current
+        deck.slides = current.slides.compactMap { slide in
+            created.contains(slide.id) ? generation.before.slide(slide.id) : slide
         }
-        if selectedDocumentID == generation.documentID { selectedSlideID = generation.before.slides.first?.id }
+        if deck.slides.isEmpty { deck.slides = generation.before.slides.isEmpty ? PresentationDeck.new().slides : generation.before.slides }
+        restoreDeck(generation.documentID, deck, undoManager: undoManager, actionName: "Folien der KI entfernen")
+        if selectedDocumentID == generation.documentID { selectedSlideID = deck.slides.first?.id }
         deckGeneration = nil
     }
 

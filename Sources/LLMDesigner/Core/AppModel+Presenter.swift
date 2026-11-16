@@ -7,6 +7,12 @@ struct DeletedSlide: Equatable {
     let index: Int
 }
 
+/// A speaker card the model is to write.
+struct NotesJob: Equatable {
+    let documentID: WriterDocument.ID
+    let slideID: PresentationSlide.ID
+}
+
 /// What the background sheet asks Draw Things for.
 struct SlideBackgroundRequest {
     var description: String
@@ -118,6 +124,21 @@ extension AppModel {
     }
 
     // MARK: Changing the slides
+
+    /// The presentation's slides as they were at some point, as one step that ⌘Z takes back.
+    func restoreDeck(_ id: WriterDocument.ID, _ deck: PresentationDeck, undoManager: UndoManager?, actionName: String) {
+        guard let old = document(id)?.deck, old != deck else { return }
+        writerFlush?()
+        modifyDeck(id) { current in
+            current = deck
+            return true
+        }
+        if selectedDocumentID == id, let selectedSlideID, deck.index(of: selectedSlideID) == nil { self.selectedSlideID = deck.slides.first?.id }
+        undoManager?.registerUndo(withTarget: self) { app in
+            app.restoreDeck(id, old, undoManager: undoManager, actionName: actionName)
+        }
+        undoManager?.setActionName(actionName)
+    }
 
     /// Changes the presentation's slides; `change` says whether anything changed. Saved after a pause.
     @discardableResult
@@ -360,36 +381,73 @@ extension AppModel {
 
     // MARK: Speaker notes
 
-    /// Lets the model write the speaker notes of these slides, one after the other.
-    func writeSpeakerNotes(_ id: WriterDocument.ID, slides slideIDs: [PresentationSlide.ID]) {
+    /// Lets the model write the speaker notes of these slides. They wait in one queue that a single worker writes
+    /// one after the other, so stopping it stops all of them. `first` puts them before the cards that wait (the
+    /// presentation needs this one now).
+    func writeSpeakerNotes(_ id: WriterDocument.ID, slides slideIDs: [PresentationSlide.ID], first: Bool = false) {
         writerFlush?()
         let waiting = slideIDs.filter { !notesWriting.contains($0) }
-        guard !waiting.isEmpty else { return }
-        notesWriting.formUnion(waiting)
         for slideID in waiting { notesErrors[slideID] = nil }
-        let previous = notesTask
+        notesWriting.formUnion(waiting)
+        if first {
+            let queued = Set(notesQueue.map(\.slideID)).intersection(slideIDs)
+            notesQueue.removeAll { queued.contains($0.slideID) }
+            let front = slideIDs.filter { queued.contains($0) || waiting.contains($0) }
+            notesQueue.insert(contentsOf: front.map { NotesJob(documentID: id, slideID: $0) }, at: 0)
+        } else {
+            notesQueue += waiting.map { NotesJob(documentID: id, slideID: $0) }
+        }
+        startNotesWorker()
+    }
+
+    private func startNotesWorker() {
+        guard notesTask == nil, !notesQueue.isEmpty else { return }
+        notesWorker += 1
+        let number = notesWorker
         notesTask = Task { [weak self] in
-            await previous?.value
-            for slideID in waiting {
-                guard let self, !Task.isCancelled else { break }
+            while true {
+                guard let self, self.notesWorker == number, !Task.isCancelled, !self.notesQueue.isEmpty else { break }
+                let job = self.notesQueue.removeFirst()
+                self.notesRunning = job
                 do {
-                    _ = try await self.generateNotes(id, slideID)
+                    _ = try await self.generateNotes(job.documentID, job.slideID)
                 } catch {
-                    if !Task.isCancelled { self.notesErrors[slideID] = error.localizedDescription }
+                    if !Task.isCancelled, self.notesWorker == number { self.notesErrors[job.slideID] = error.localizedDescription }
                 }
-                self.notesWriting.remove(slideID)
+                // A worker that was stopped meanwhile leaves the state to the one after it.
+                guard self.notesWorker == number else { return }
+                self.notesRunning = nil
+                self.notesWriting.remove(job.slideID)
             }
-            if Task.isCancelled { self?.notesWriting.subtract(waiting) }
+            guard let self, self.notesWorker == number else { return }
+            self.notesTask = nil
         }
     }
 
+    /// Stops the model writing cards: the one it writes and all that wait.
     func cancelSpeakerNotes() {
+        notesWorker += 1
         notesTask?.cancel()
         notesTask = nil
+        notesQueue = []
+        notesRunning = nil
         notesWriting = []
     }
 
-    /// Writes one slide's speaker notes and keeps them with the slide.
+    /// Takes these slides' cards out (their slides are gone); the other cards are still written.
+    func cancelSpeakerNotes(for slides: Set<PresentationSlide.ID>) {
+        notesQueue.removeAll { slides.contains($0.slideID) }
+        notesWriting.subtract(slides)
+        guard let running = notesRunning, slides.contains(running.slideID) else { return }
+        notesWorker += 1
+        notesTask?.cancel()
+        notesTask = nil
+        notesRunning = nil
+        startNotesWorker()
+    }
+
+    /// Writes one slide's speaker notes and keeps them with the slide. A card that someone changed while the model
+    /// wrote (by hand, or an agent) is theirs: it stays, and is what this returns.
     func generateNotes(_ id: WriterDocument.ID, _ slideID: PresentationSlide.ID) async throws -> String {
         guard let client, let model = currentModelId else {
             throw LLMError.server("Kein Modell gewählt. Wähle eines unten links in der Seitenleiste.")
@@ -397,17 +455,51 @@ extension AppModel {
         guard let document = document(id), let deck = document.deck, let index = deck.index(of: slideID) else {
             throw CancellationError()
         }
+        let before = deck.slides[index].notes
         let answer = try await client.complete(
             model: model,
             messages: PresenterPrompts.notesMessages(deck: deck, title: document.displayTitle, slideIndex: index, source: deckSources[slideID]),
             temperature: 0.7,
             maxTokens: 1500
         )
+        // Stopped while the answer came: nothing is written.
+        try Task.checkCancellation()
         var notes = PresenterPrompts.cleanNotes(answer)
         if index > 0 { notes = PresenterPrompts.removingCopies(of: deck.slides[index - 1].notes, from: notes) }
         guard !notes.isEmpty else { throw LLMError.server("Das Modell hat keinen Text geliefert.") }
-        setSlideNotes(id, slideID, notes)
+        guard let current = self.document(id)?.deck?.slide(slideID) else { throw CancellationError() }
+        guard current.notes == before else { return current.notes }
+        replaceNotes(id, slideID, notes, undoManager: MainWindow.window?.undoManager)
         return notes
+    }
+
+    /// A card from elsewhere than typing (the model, "Vorherige Karte"): a card that was there is kept for
+    /// "Vorherige Karte", and ⌘Z takes it back.
+    func replaceNotes(_ id: WriterDocument.ID, _ slideID: PresentationSlide.ID, _ notes: String, undoManager: UndoManager?) {
+        guard let old = document(id)?.deck?.slide(slideID)?.notes, old != notes else { return }
+        setSlideNotes(id, slideID, notes)
+        replacedNotes[slideID] = old.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : old
+        undoManager?.registerUndo(withTarget: self) { app in
+            app.replaceNotes(id, slideID, old, undoManager: undoManager)
+        }
+        undoManager?.setActionName("Moderatorenkarte")
+    }
+
+    /// Puts back the card the model replaced; a second time brings the model's card back.
+    func restoreReplacedNotes(_ id: WriterDocument.ID, _ slideID: PresentationSlide.ID, undoManager: UndoManager?) {
+        guard let previous = replacedNotes[slideID] else { return }
+        replaceNotes(id, slideID, previous, undoManager: undoManager)
+    }
+
+    /// Every card of the presentation that the model replaced, put back.
+    func restoreAllReplacedNotes(_ id: WriterDocument.ID, undoManager: UndoManager?) {
+        guard let deck = document(id)?.deck else { return }
+        undoManager?.beginUndoGrouping()
+        for slide in deck.slides where replacedNotes[slide.id] != nil && !notesWriting.contains(slide.id) {
+            restoreReplacedNotes(id, slide.id, undoManager: undoManager)
+        }
+        undoManager?.endUndoGrouping()
+        undoManager?.setActionName("Vorherige Moderatorenkarten")
     }
 
     // MARK: Agenda
