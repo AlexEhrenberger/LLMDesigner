@@ -1,9 +1,21 @@
 import SwiftUI
 
+/// The two areas of Learning Studio's landing page.
+enum LearningArea: String, CaseIterable, Identifiable {
+    case garden, study
+
+    var id: String { rawValue }
+    var title: String { self == .garden ? "Garten" : "Studium" }
+    var symbol: String { self == .garden ? "leaf" : "graduationcap" }
+}
+
 /// What Learning Studio shows.
 @MainActor
 @Observable
 final class LearningStudioModel {
+    /// The garden or the study program (when this library shows it).
+    var area: LearningArea = .garden
+    var studyTab: StudyTab = .modules
     var disciplineID: UUID?
     var courseID: UUID? {
         didSet { if courseID != oldValue { lessonID = nil; expandedLesson = nil; reviewLesson = nil } }
@@ -45,6 +57,8 @@ struct LearningStudioScreen: View {
             StudioTopBar(symbol: StudioApplication.learning.symbol, title: "Learning Studio", detail: detail, close: { app.closeLearningStudio() }) {
                 if let courseID = model.courseID, let course = library.course(courseID) {
                     breadcrumb(course)
+                } else if library.settings.showsStudy {
+                    StudioTabPicker(tabs: LearningArea.allCases, selection: $model.area, title: \.title, symbol: \.symbol)
                 }
             } trailing: {
                 Button {
@@ -69,7 +83,7 @@ struct LearningStudioScreen: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help("Lernalgorithmus und Tagesgrenzen")
+                .help("Lernalgorithmus, Tagesgrenzen und Studium")
                 .popover(isPresented: $model.showsSettings) { LearningSettingsView() }
                 IconMenu(systemName: "plus", help: "Neue Disziplin oder neuer Kurs", frameSize: Theme.titleBarControlSize) {
                     Button("Neue Disziplin", systemImage: "leaf") {
@@ -95,6 +109,8 @@ struct LearningStudioScreen: View {
                 if let courseID = model.courseID, library.course(courseID) != nil {
                     LearningCoursePage(courseID: courseID, model: model)
                         .id(courseID)
+                } else if model.area == .study, library.settings.showsStudy {
+                    LearningStudyPage(model: model)
                 } else {
                     LearningGarden(model: model)
                 }
@@ -121,7 +137,8 @@ struct LearningStudioScreen: View {
             Button {
                 withAnimation(.snappy(duration: 0.25)) { model.courseID = nil }
             } label: {
-                Label("Garten", systemImage: "chevron.left")
+                // Back to where the course was opened: the garden or the study's modules.
+                Label(model.area == .study && app.learning.settings.showsStudy ? "Studium" : "Garten", systemImage: "chevron.left")
                     .font(.system(size: 12, weight: .medium))
             }
             .buttonStyle(.borderless)
@@ -144,6 +161,11 @@ struct LearningStudioScreen: View {
 
     private func take(_ command: LearningStudioCommand?) {
         guard let command else { return }
+        if let study = command.study {
+            model.courseID = nil
+            model.area = .study
+            model.studyTab = study
+        }
         if let discipline = command.discipline { model.disciplineID = discipline; model.courseID = nil }
         if let course = command.course {
             model.courseID = course
@@ -413,9 +435,18 @@ private struct LearningGarden: View {
 struct CourseCard: View {
     @Environment(AppModel.self) private var app
     let courseID: UUID
+    /// An extra line under the counts, e.g. a study module's code, ECTS, exam and planned month.
+    var caption: String?
     let open: () -> Void
     let learn: () -> Void
     @State private var hovering = false
+
+    init(courseID: UUID, caption: String? = nil, open: @escaping () -> Void, learn: @escaping () -> Void) {
+        self.courseID = courseID
+        self.caption = caption
+        self.open = open
+        self.learn = learn
+    }
 
     var body: some View {
         if let course = app.learning.course(courseID) {
@@ -429,6 +460,9 @@ struct CourseCard: View {
                         VStack(alignment: .leading, spacing: 3) {
                             Text(course.displayName).font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.textPrimary).lineLimit(2)
                             Text("\(stats.total) Karten · \(course.materials.count) Material").font(.system(size: 11.5)).foregroundStyle(Theme.textTertiary)
+                            if let caption {
+                                Text(caption).font(.system(size: 11)).foregroundStyle(Theme.textTertiary).lineLimit(2)
+                            }
                         }
                         Spacer(minLength: 0)
                         if course.finished {
@@ -537,6 +571,10 @@ private struct LearningSettingsView: View {
                 StudioField(placeholder: "10", text: $relearn).onSubmit { apply() }
             }
             Text("Wiederholungen pro Tag begrenzen auch den Rückstau nach einer Pause, ohne dass Karten verloren gehen.")
+                .font(.system(size: 11)).foregroundStyle(Theme.textTertiary).fixedSize(horizontal: false, vertical: true)
+            Divider()
+            Toggle("Studium in dieser Bibliothek anzeigen", isOn: Binding(get: { settings.showsStudy }, set: { app.setStudyShown($0) }))
+            Text(StudyTexts.settingFooter)
                 .font(.system(size: 11)).foregroundStyle(Theme.textTertiary).fixedSize(horizontal: false, vertical: true)
         }
         .font(.system(size: 12.5))

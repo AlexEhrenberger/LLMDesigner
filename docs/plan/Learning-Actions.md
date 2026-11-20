@@ -30,10 +30,10 @@ Learning Studio: Disziplinen, Kurse, Karten, Lernen, Pausen, Material, Modell-Hi
 | `learning.stats` | Statistik eines Kurses: Karten je Stand, Behaltensrate, Antworten der letzten 30 Tage, Fälligkeiten der nächsten 14 | read | `learningRead` |
 | `learning.pause` | Plant eine Lernpause (Urlaub) für alles, eine Disziplin oder einen Kurs; danach rücken die Karten um die Pausenlänge weiter | write | `.localWrite` |
 | `learning.resume` | Beendet alle laufenden Lernpausen jetzt; die Karten rücken um die Pausenlänge weiter | write | `.localWrite` |
-| `learning.settings` | Zeigt oder ändert den Lernalgorithmus (fsrs, sm2), die Behaltensrate und die Tagesgrenzen | write | `.localWrite` |
+| `learning.settings` | Zeigt oder ändert den Lernalgorithmus (fsrs, sm2), die Behaltensrate, die Tagesgrenzen und ob die Bibliothek das Studium zeigt (`showsStudy`; beim ersten Mal werden die Pflichtmodule angelegt) | write | `.localWrite` |
 | `learning.material.add` | Hinterlegt Material: einen Link (YouTube wird erkannt), eigenen Text oder eine Quelle aus Citation Studio (Citekey) | write | `.localWrite` |
 | `learning.link.add` | Verknüpft ein Dokument, eine Präsentation, ein Note, einen Chat, ein Projekt oder einen Teil einer Romanwelt mit einem Kurs | write | `.localWrite` |
 | `learning.ai.cards` | Lässt das lokale Modell Karteikarten aus Material des Kurses (oder dem ganzen Kurs) erstellen | write | `ActionSecurity(readsUntrusted: true` |
 | `learning.ai.sheet` | Lässt das lokale Modell einen Lernzettel (Writer-Dokument) aus Material des Kurses schreiben; er wird mit dem Kurs verknüpft | write | `ActionSecurity(readsUntrusted: true` |
-| `learning.studio.open` | Öffnet Learning Studio: den Garten, einen Kurs oder eine Lektion (Inhaltsanalyse, Dokumente, Ressourcen, Test), auf Wunsch gleich zum Lernen | read | `.plainRead` |
+| `learning.studio.open` | Öffnet Learning Studio: den Garten, einen Kurs oder eine Lektion (Inhaltsanalyse, Dokumente, Ressourcen, Test), auf Wunsch gleich zum Lernen, oder das Studium (`study`: `module`, `stundenplan`, `monatsplan`) | read | `.plainRead` |
 | `learning.studio.close` | Schließt Learning Studio | read | `.plainRead` |

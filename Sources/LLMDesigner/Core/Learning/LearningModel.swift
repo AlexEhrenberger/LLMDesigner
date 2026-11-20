@@ -957,11 +957,14 @@ struct LearningSettings: Hashable, Sendable {
     var easyBonus = 1.3
     /// SM-2: stretches (> 1) or shortens every interval.
     var intervalModifier = 1.0
+    /// Learning Studio shows the study program in its own tab (a library for work leaves it off).
+    var showsStudy = false
 }
 
 extension LearningSettings: Codable {
     private enum CodingKeys: String, CodingKey {
         case algorithmus, behaltensrate, neueProTag, wiederholungenProTag, maxIntervall, lernschritte, neulernschritte, startfaktor, leichtBonus, intervallFaktor
+        case studiumAnzeigen
     }
 
     init(from decoder: Decoder) throws {
@@ -976,6 +979,7 @@ extension LearningSettings: Codable {
         startingEase = c.soft(.startfaktor, 2.5)
         easyBonus = c.soft(.leichtBonus, 1.3)
         intervalModifier = c.soft(.intervallFaktor, 1.0)
+        showsStudy = c.soft(.studiumAnzeigen, false)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -990,6 +994,7 @@ extension LearningSettings: Codable {
         try c.encode(startingEase, forKey: .startfaktor)
         try c.encode(easyBonus, forKey: .leichtBonus)
         try c.encode(intervalModifier, forKey: .intervallFaktor)
+        if showsStudy { try c.encode(true, forKey: .studiumAnzeigen) }
     }
 }
 
@@ -1065,8 +1070,10 @@ struct LearningState: Codable, Hashable, Sendable {
     var disciplines: [LearningDiscipline] = []
     var settings = LearningSettings()
     var pauses: [LearningPause] = []
+    /// The study program with its plan; it stays when the tab is hidden.
+    var study: LearningStudy?
 
-    private enum CodingKeys: String, CodingKey { case format, disziplinen, einstellungen, pausen }
+    private enum CodingKeys: String, CodingKey { case format, disziplinen, einstellungen, pausen, studium }
 
     init() {}
 
@@ -1075,6 +1082,7 @@ struct LearningState: Codable, Hashable, Sendable {
         disciplines = c.soft(.disziplinen, [LearningDiscipline]())
         settings = c.soft(.einstellungen, LearningSettings())
         pauses = c.soft(.pausen, [LearningPause]())
+        study = c.soft(.studium, LearningStudy?.none)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -1083,5 +1091,6 @@ struct LearningState: Codable, Hashable, Sendable {
         try c.encode(disciplines, forKey: .disziplinen)
         try c.encode(settings, forKey: .einstellungen)
         try c.encode(pauses, forKey: .pausen)
+        try c.encodeIfPresent(study, forKey: .studium)
     }
 }

@@ -61,6 +61,16 @@ struct SettingsView: View {
             }
 
             Section {
+                Toggle("Studium im Learning Studio anzeigen", isOn: Binding(get: { app.learning.settings.showsStudy }, set: { app.setStudyShown($0) }))
+            } header: {
+                Text("Learning Studio")
+            } footer: {
+                Text(StudyTexts.settingFooter)
+                    .foregroundStyle(Theme.textTertiary)
+            }
+            .onAppear { app.learning.loadIfNeeded() }
+
+            Section {
                 Picker("Quelle", selection: $app.provider) {
                     ForEach(LLMProvider.allCases) { provider in
                         Text(provider.label).tag(provider)

@@ -672,12 +672,14 @@ struct LearningSettingsAction: LLMDAction {
         var newPerDay: Int?
         var reviewsPerDay: Int?
         var maxInterval: Double?
+        var showsStudy: Bool?
     }
     static let descriptor = ActionDescriptor(
-        id: "learning.settings", summary: "Zeigt oder ändert den Lernalgorithmus (fsrs, sm2), die Behaltensrate und die Tagesgrenzen", kind: .write, security: .localWrite,
+        id: "learning.settings", summary: "Zeigt oder ändert den Lernalgorithmus (fsrs, sm2), die Behaltensrate, die Tagesgrenzen und ob die Bibliothek das Studium zeigt", kind: .write, security: .localWrite,
         input: .object(["algorithm": .choice(LearningSettings.Algorithm.allCases.map(\.rawValue), "Algorithmus"), "retention": .number("Behaltensrate", minimum: 0.7, maximum: 0.99),
                         "newPerDay": .integer("Neue Karten pro Tag und Kurs", minimum: 0, maximum: 500), "reviewsPerDay": .integer("Wiederholungen pro Tag", minimum: 1, maximum: 5_000),
-                        "maxInterval": .number("Längstes Intervall in Tagen", minimum: 1, maximum: 36_500)]),
+                        "maxInterval": .number("Längstes Intervall in Tagen", minimum: 1, maximum: 36_500),
+                        "showsStudy": .boolean("Tab „Studium“ zeigen; beim ersten Mal werden die Pflichtmodule als Kurse angelegt")]),
         output: .freeObject()
     )
     static func run(_ args: Args, context: ActionContext) async throws -> LearningSettings {
@@ -692,7 +694,9 @@ struct LearningSettingsAction: LLMDAction {
             if let value = args.reviewsPerDay { state.settings.reviewsPerDay = value }
             if let value = args.maxInterval { state.settings.maxInterval = value }
         }
-        context.undoGroup.add(UndoStep(label: "Lerneinstellungen", undo: { [weak library] in library?.changeState { $0 = before } }, redo: {}))
+        // Setting the study up makes courses: undo hides it again and leaves them, like the switch in the settings.
+        if let shows = args.showsStudy { context.app.setStudyShown(shows) }
+        context.undoGroup.add(UndoStep(label: "Lerneinstellungen", undo: { [weak library] in library?.changeState { $0.settings = before.settings } }, redo: {}))
         return library.settings
     }
 }
@@ -824,12 +828,14 @@ struct LearningStudioOpenAction: LLMDAction {
         var lesson: String?
         var show: String?
         var review: Bool?
+        var study: String?
     }
     static let descriptor = ActionDescriptor(
-        id: "learning.studio.open", summary: "Öffnet Learning Studio: den Garten, einen Kurs oder eine Lektion (Inhaltsanalyse, Dokumente, Ressourcen, Test), auf Wunsch gleich zum Lernen",
+        id: "learning.studio.open", summary: "Öffnet Learning Studio: den Garten, einen Kurs oder eine Lektion (Inhaltsanalyse, Dokumente, Ressourcen, Test), auf Wunsch gleich zum Lernen, oder das Studium (Module, Stundenplan, Monatsplan)",
         kind: .read, security: .plainRead,
         input: .object(["course": courseProperty, "lesson": lessonProperty, "show": .choice(LessonTab.allCases.map(\.rawValue), "Was von der Lektion"),
-                        "review": .boolean("Gleich die fälligen Karten lernen")]), output: .freeObject(), groups: ["learning.core"]
+                        "review": .boolean("Gleich die fälligen Karten lernen"),
+                        "study": .choice(StudyTab.allCases.map(\.actionName), "Was vom Studium (nur ohne course)")]), output: .freeObject(), groups: ["learning.core"]
     )
     static func run(_ args: Args, context: ActionContext) async throws -> OKOutput {
         let app = context.app
@@ -837,7 +843,13 @@ struct LearningStudioOpenAction: LLMDAction {
         if args.lesson != nil, course == nil { throw RPCError.invalidParams("lesson braucht course.") }
         let lesson = try args.lesson.flatMap { reference in try course?.actionLesson(reference).id }
         let tab = try ProjectArgs.choice(args.show, LessonTab.allCases, raw: \.rawValue, "show")
-        app.openLearningStudio(LearningStudioCommand(course: course?.id, lesson: lesson, lessonTab: tab, review: args.review == true))
+        let study = try ProjectArgs.choice(args.study, StudyTab.allCases, raw: \.actionName, "study")
+        if study != nil {
+            if course != nil { throw RPCError.invalidParams("study geht nur ohne course.") }
+            app.learning.loadIfNeeded()
+            guard app.learning.settings.showsStudy else { throw RPCError.invalidParams("Das Studium ist in dieser Bibliothek ausgeschaltet (Einstellungen → Learning Studio).") }
+        }
+        app.openLearningStudio(LearningStudioCommand(course: course?.id, lesson: lesson, lessonTab: tab, review: args.review == true, study: study))
         return OKOutput(id: (lesson ?? course?.id)?.uuidString)
     }
 }
