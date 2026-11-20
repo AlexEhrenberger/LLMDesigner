@@ -21,6 +21,8 @@ scripts/build-app.sh release --open
 
 Das Skript baut das Swift Package, erzeugt beim ersten Mal das App-Icon und legt `build/LLM Designer.app` an.
 
+Ab den Command Line Tools 27.2 ist `@State` im Standard-SDK ein Macro, dessen Plugin nur Xcode mitbringt. Ohne Xcode bauen `scripts/build-app.sh` und `scripts/test.sh` dann gegen das neueste mitgelieferte SDK ohne dieses Macro (z. B. 26.5) und melden das. Ein gesetztes `SDKROOT` hat Vorrang.
+
 ## Bibliotheken
 
 Alles, was LLM Designer speichert, liegt in einer **Bibliothek**: Chats, Dokumente mit Bildern und Plots, Personas mit ihrem Gedächtnis, Skills, Ordner, Anhänge und alle Einstellungen (auch Endpoint und Modell). Bibliotheken sind voneinander getrennt – eine sieht nichts von der anderen.
@@ -202,6 +204,14 @@ Nach jeder Antwort schlägt das Modell drei Folgefragen vor; ein Klick stellt di
 
 - **Diktat** (⌘D oder Mikrofon im Eingabefeld, macOS 26): `SpeechAnalyzer` auf dem Gerät, Systemsprache. Der erkannte Text landet im Eingabefeld, noch unsichere Wörter stehen grau daneben. Senden beendet das Diktat und schickt alles ab. Beim ersten Mal fragt macOS nach dem Mikrofon; weil die App nur ad hoc signiert ist, kann das nach einem Neubau erneut passieren.
 - **Vorlesen** (Lautsprecher unter jeder Antwort oder Rechtsklick): mit **Qwen TTS** (lokaler Dienst aus dem Projekt Auda, `http://127.0.0.1:8790`, Modell klein oder groß, 9 Stimmen) oder der **macOS-Stimme**. Code und Emojis werden übersprungen, Formeln in Worten gelesen („x hoch 2“, „a durch b“). Ist Qwen nicht erreichbar, liest die macOS-Stimme.
+- **Qwen TTS ohne Auda**: `scripts/qwen-tts-server.py` bietet dieselbe Schnittstelle auf Basis von mlx-audio (MLX-Fassungen der CustomVoice-Modelle in 8 Bit, immer nur ein Modell geladen). Einmal einrichten mit Miniforge in `~/miniforge3`:
+
+  ```bash
+  ~/miniforge3/bin/conda create -y -n qwen-tts python=3.12
+  ~/miniforge3/envs/qwen-tts/bin/pip install -U mlx-audio
+  ```
+
+  Starten mit `~/miniforge3/envs/qwen-tts/bin/python -I scripts/qwen-tts-server.py` (`--preload large` lädt gleich das große Modell). Beim ersten Start lädt es das Modell von Hugging Face (klein etwa 2 GB, groß etwa 3 GB).
 - Einstellungen → Sprache: Diktiermodus, Vorlese-Engine, Qwen-Stimme, Tempo, Pause im Gesprächsmodus.
 
 ## Gesprächsmodus
