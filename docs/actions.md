@@ -89,7 +89,7 @@ flowchart TB
 - **Web-Ansichten:** laden nichts aus dem Netz (`WKContentRuleList`). Folien-Designs sind reines CSS: ihre Seiten führen kein JavaScript aus, und „</“ im CSS kann den `<style>`-Block nicht schließen.
 - **LaTeX:** Formeln, die Dateien lesen oder Befehle zusammenbauen könnten, werden als Code gesetzt (`LaTeXSafety`).
 - **Anhänge:** Ein Chat mit angehängtem Dokument gilt als fremd und sensibel zugleich (A und B): Inhalt von Dritten, Datei der Person. Websuche und Seitenaufrufe fragen dann wie bei Persona-Dateien, Actions mit Wirkung nach außen ebenso. `chat.document.read` ist über MCP gesperrt.
-- **Immer mit Rückfrage außerhalb der Oberfläche:** Mikrofon, Bildschirmfoto, Vollbild und Vortrag mit Stimme, Modellserver umstellen, Bibliothek wechseln, Anhang in einem anderen Programm öffnen. Über Chat, MCP und Agenten auch jede Datei, deren Pfad der Aufrufer nennt (`ActionChannel.asksBeforeReadingFiles`): Bilder, Dokumente, PDFs, Videos, Skills und Persona-Dateien kommen erst nach dem Ja in die Bibliothek oder vor das Modell, auch wenn die Aufgabe eines Agenten sonst „Änderungen erlauben“ hat.
+- **Immer mit Rückfrage außerhalb der Oberfläche:** Mikrofon, Bildschirmfoto, Vollbild und Vortrag mit Stimme, Modellserver umstellen, Bibliothek wechseln, Anhang in einem anderen Programm öffnen. Über Chat, MCP und Agenten auch jede Datei, deren Pfad der Aufrufer nennt (`ActionChannel.asksBeforeReadingFiles`): Bilder, Dokumente, PDFs, Videos, Skills, Persona-Dateien und CSV-Exporte der Bank kommen erst nach dem Ja in die Bibliothek oder vor das Modell, auch wenn die Aufgabe eines Agenten sonst „Änderungen erlauben“ hat.
 - **Agenten (AgentSteps):** Kanal „Agent“, Standard lesen erlaubt, schreiben und destruktiv fragen; jede Aufgabe stellt ein, wie viel sie ohne Rückfrage darf („Änderungen erlauben“ als Vorgabe). Fragen halten nur ihren Lauf an.
 - **Protokoll:** Fenster → „Aktivität von Terminal und Agenten“ zeigt Zeit, Kanal, Lauf, Action, A/B, Entscheidung und Ergebnis, aber keine Inhalte.
 - **Katalog:** Fenster → „Action-Katalog für Agenten“ zeigt alle Actions mit Parametern, Art, A/B, Wirkung und Aufruf.
@@ -151,7 +151,7 @@ llmd learning pause --until 2026-12-28 --reason Urlaub
 
 ## FinanceStudio
 
-Kontostand, Buchungen und Planung. Alles mit Beträgen ist **privat** und über MCP gesperrt; Buchungen zu lesen (`finance.transaction.list`, `finance.groups.list`, `finance.recurring.list`) gilt zusätzlich als fremd, weil Empfänger und Zweck von Banken und Händlern stammen, und fragt deshalb außerhalb der Oberfläche nach. `finance.overview` und `finance.plan.read` nennen nur Zahlen. Ein Import über Chat oder MCP mit einer Datei fragt immer. Katalog: [Finance-Actions](plan/Finance-Actions.md).
+Kontostand, Buchungen und Planung. Alles mit Beträgen ist **privat** und über MCP gesperrt; Buchungen zu lesen (`finance.transaction.list`, `finance.groups.list`, `finance.recurring.list`) gilt zusätzlich als fremd, weil Empfänger und Zweck von Banken und Händlern stammen, und fragt deshalb außerhalb der Oberfläche nach. `finance.overview` und `finance.plan.read` nennen nur Zahlen. Ein Import mit einer Datei fragt über Chat, MCP und bei Agenten immer. Katalog: [Finance-Actions](plan/Finance-Actions.md).
 
 ```bash
 llmd finance import csv --file ~/Downloads/Umsaetze.csv

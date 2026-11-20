@@ -15,7 +15,7 @@ Beträge gehen als Zahl in Euro hinein (`--amount -54.20`), Ausgaben negativ; in
 | `finance.transaction.add` | Trägt eine Buchung von Hand ein | write | `.localWrite` |
 | `finance.transaction.update` | Ändert eine Buchung; `category ""` nimmt die eigene Kategorie weg | write | `.localWrite` |
 | `finance.transaction.delete` | Löscht Buchungen (rückgängig machbar, solange die App läuft) | destructive | `.destructive` |
-| `finance.import.csv` | Liest den CSV-Export der Bank (`file` oder `text`), übernimmt nur neue Buchungen und den Saldo der Datei | write | A, B, lokal; eine Datei, die Chat oder MCP nennen, fragt immer |
+| `finance.import.csv` | Liest den CSV-Export der Bank (`file` oder `text`), übernimmt nur neue Buchungen und den Saldo der Datei | write | A, B, lokal; eine Datei, die Chat, MCP oder ein Agent nennen, fragt immer |
 | `finance.groups.list` | Gruppen ähnlicher Posten mit Anzahl, Summe, Kategorie und Rhythmus | read | `financeForeignRead` (A, B) |
 | `finance.recurring.list` | Wiederkehrende Zahlungen und Eingänge mit Rhythmus, üblichem Betrag, nächstem Termin, ob sie in der Planung stehen | read | `financeForeignRead` (A, B) |
 | `finance.category.list` | Kategorien mit Art (`ausgabe`, `einnahme`, `umbuchung`) und Stichworten | read | `.plainRead` |

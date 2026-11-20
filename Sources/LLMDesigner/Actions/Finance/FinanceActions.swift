@@ -555,8 +555,8 @@ struct FinanceImportCSVAction: LLMDAction {
     )
     static func preflight(_ args: Args, context: ActionContext) throws -> ActionPreflight {
         var check = ActionPreflight(target: args.file ?? "CSV-Text")
-        // Only the person names an arbitrary file: a chat or an MCP client could otherwise read any file into the app.
-        if args.file != nil, context.channel == .chat || context.channel == .mcp {
+        // Only the person names an arbitrary file: a chat, an agent or an MCP client could otherwise read any file into the app.
+        if args.file != nil, context.channel.asksBeforeReadingFiles {
             check.needsConsent = "Eine Datei von dieser Stelle der Festplatte würde gelesen und als Buchungen übernommen."
         }
         return check
