@@ -11,6 +11,8 @@ struct LearningStudioCommand: Equatable {
     var lessonTab: LessonTab?
     /// Go straight to learning the due cards.
     var review = false
+    /// The study tab and what of it to show.
+    var study: StudyTab?
 }
 
 /// The tabs of a course page.
@@ -73,6 +75,38 @@ enum LessonTab: String, CaseIterable, Identifiable {
         case .documents: "doc.on.doc"
         case .resources: "link"
         case .test: "checkmark.seal"
+        }
+    }
+}
+
+/// What the study tab shows.
+enum StudyTab: String, CaseIterable, Identifiable {
+    case modules, week, months
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .modules: "Module"
+        case .week: "Stundenplan"
+        case .months: "Monatsplan"
+        }
+    }
+
+    /// The name in `learning.studio.open`.
+    var actionName: String {
+        switch self {
+        case .modules: "module"
+        case .week: "stundenplan"
+        case .months: "monatsplan"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .modules: "square.grid.2x2"
+        case .week: "calendar.day.timeline.left"
+        case .months: "calendar"
         }
     }
 }

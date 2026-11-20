@@ -436,11 +436,29 @@ Eine **Recherche** liegt in `Recherchen/<id>/recherche.json` (`{"format": 1, "re
 {
   "disziplinen" : [ { "baum" : "kirsche", "erstellt" : "…", "farbe" : "pink", "id" : "…", "name" : "Psychologie", "symbol" : "leaf" } ],
   "einstellungen" : { "algorithmus" : "fsrs", "behaltensrate" : 0.9, "intervallFaktor" : 1, "leichtBonus" : 1.3, "lernschritte" : [ 1, 10 ],
-                      "maxIntervall" : 365, "neueProTag" : 20, "neulernschritte" : [ 10 ], "startfaktor" : 2.5, "wiederholungenProTag" : 200 },
+                      "maxIntervall" : 365, "neueProTag" : 20, "neulernschritte" : [ 10 ], "startfaktor" : 2.5, "wiederholungenProTag" : 200,
+                      "studiumAnzeigen" : true },
   "format" : 1,
-  "pausen" : [ { "angewandt" : false, "beginn" : "…", "bereich" : "alles", "ende" : "…", "grund" : "Urlaub", "id" : "…" } ]
+  "pausen" : [ { "angewandt" : false, "beginn" : "…", "bereich" : "alles", "ende" : "…", "grund" : "Urlaub", "id" : "…" } ],
+  "studium" : {
+    "angelegt" : "…", "beginn" : "2026-10", "disziplin" : "…", "format" : 1, "modell" : "vollzeit", "programm" : "iu-baaki-180", "wahlpflichtD" : "module",
+    "module" : [ { "code" : "DLBDSEAIS01-01_D", "kurs" : "…", "monat" : "2026-10" } ],
+    "stundenplan" : [ { "bis" : "20:00", "id" : "…", "kurs" : "…", "tag" : 1, "titel" : "Lernen", "von" : "18:30" } ]
+  }
 }
 ```
+
+`studiumAnzeigen` fehlt, solange die Bibliothek das Studium nicht zeigt. **`studium`** ist der Studiengang im Tab „Studium“ und bleibt erhalten, wenn er ausgeblendet wird:
+
+| Schlüssel | Inhalt |
+|---|---|
+| `programm` | der eingebaute Katalog (`iu-baaki-180`: IU, Angewandte Künstliche Intelligenz B.Sc., 180 ECTS); Module, Prüfungsformen und Lektionen stehen im Code (`StudyCatalogIU.swift`), nicht in der Bibliothek |
+| `disziplin` | die Disziplin, in der die Kurse der Module liegen |
+| `beginn` | erster Monat des Studiums, `yyyy-MM` |
+| `modell` | `vollzeit` (36 Monate), `teilzeit1` (48) oder `teilzeit2` (72) |
+| `wahlpflichtD` | `module` oder `praktikum`; fehlt, solange nicht entschieden |
+| `module` | die belegten Module: `code` aus dem Studienablaufplan, `kurs` (ID des Kurses), `monat` (`yyyy-MM`, Monatsplan; fehlt: nicht eingeplant) |
+| `stundenplan` | Blöcke der Woche: `tag` 1 (Montag) bis 7, `von`/`bis` als `HH:mm`, `kurs` (fehlt: ohne Modul), `titel` |
 
 `bereich` ist `alles`, `disziplin` (mit `disziplin`) oder `kurs` (mit `kurs`); `ende` fehlt bei einer offenen Pause. Ist eine Pause vorbei, verschiebt die App alle Karten im Bereich, die ab `beginn` fällig waren, um ihre Länge und setzt `angewandt`.
 

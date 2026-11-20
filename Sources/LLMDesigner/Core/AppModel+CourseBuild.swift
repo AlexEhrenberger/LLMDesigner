@@ -64,22 +64,39 @@ extension AppModel {
         return result
     }
 
-    /// Makes the detected lessons part of the course: a lesson of the same name gets the pages and sections, others
-    /// are added in order. The learning goals are read off each lesson's first pages.
+    /// Makes the detected lessons part of the course: a lesson of the same name gets the pages and sections; else a
+    /// planned lesson at the same place that has no pages yet (a study module's lessons, set up from the module
+    /// handbook, whose titles may be worded a little differently in the script) takes the script's title and pages;
+    /// others are added in order. The learning goals are read off each lesson's first pages.
     @discardableResult
     func addDetectedLessons(_ detected: [DetectedLesson], material materialID: UUID, to courseID: UUID) async -> [UUID] {
         guard let course = learning.course(courseID), let material = course.material(materialID) else { return [] }
         let url = learning.materialURL(material, in: courseID)
         var ids: [UUID] = []
         var lessons = course.lessons
-        for found in detected where found.included {
+        let included = detected.filter(\.included)
+        let titles = Set(included.map { $0.title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() })
+        for (position, found) in included.enumerated() {
             var goals: [String] = []
             if let url {
                 let pages = await LessonText.pages(of: url, first: found.firstPage, last: min(found.lastPage, found.firstPage + 1))
                 goals = CourseOutline.goals(in: pages.map(\.text).joined(separator: "\n"))
             }
             let title = found.title.trimmingCharacters(in: .whitespacesAndNewlines)
-            var lesson = lessons.first { $0.title.localizedCaseInsensitiveCompare(title) == .orderedSame } ?? LearningLesson(title: title)
+            let planned: LearningLesson? = course.lessons.indices.contains(position) ? course.lessons[position] : nil
+            let placeholder = planned.flatMap { lesson in
+                // Only a lesson without pages, not claimed yet and not itself named by another detected lesson.
+                lesson.material == nil && lesson.firstPage == nil && !ids.contains(lesson.id) && !titles.contains(lesson.title.lowercased()) ? lesson : nil
+            }
+            var lesson: LearningLesson
+            if let same = lessons.first(where: { $0.title.localizedCaseInsensitiveCompare(title) == .orderedSame }) {
+                lesson = same
+            } else if var claimed = placeholder {
+                claimed.title = title
+                lesson = claimed
+            } else {
+                lesson = LearningLesson(title: title)
+            }
             lesson.material = materialID
             lesson.firstPage = found.firstPage
             lesson.lastPage = found.lastPage
