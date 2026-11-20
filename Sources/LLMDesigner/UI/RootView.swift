@@ -97,6 +97,9 @@ struct RootView: View {
                     } else if app.learningStudioOpen {
                         LearningStudioScreen()
                             .transition(.opacity)
+                    } else if app.financeStudioOpen {
+                        FinanceStudioScreen()
+                            .transition(.opacity)
                     } else if app.gitStudioOpen {
                         GitStudioScreen()
                             .transition(.opacity)
@@ -132,6 +135,7 @@ struct RootView: View {
             .animation(.easeInOut(duration: 0.25), value: app.dataStudioOpen)
             .animation(.easeInOut(duration: 0.25), value: app.researchStudioOpen)
             .animation(.easeInOut(duration: 0.25), value: app.learningStudioOpen)
+            .animation(.easeInOut(duration: 0.25), value: app.financeStudioOpen)
             .animation(.easeInOut(duration: 0.25), value: app.gitStudioOpen)
             .animation(.easeInOut(duration: 0.25), value: app.agentStepsOpen)
             if showsChatPower, app.isPanelDocked {
@@ -173,7 +177,7 @@ struct RootView: View {
 
     /// The power access stands beside the chat even when the chat has no contents yet, and beside the studios whose
     /// pages have no right-hand panel of their own: Stories, Notes, project pages, PodcastStudio, Data Studio,
-    /// Rechercherista and Learning Studio, and beside Skills and Personas. Writer and Presenter put it into their own panel.
+    /// Rechercherista, Learning Studio and FinanceStudio, and beside Skills and Personas. Writer and Presenter put it into their own panel.
     private var showsChatPower: Bool {
         guard app.isPanelShown, app.power.isOn else { return false }
         switch app.sidebarMode {
@@ -188,7 +192,7 @@ struct RootView: View {
     }
 
     private var openedKey: String {
-        "\(app.selectedChatID?.uuidString ?? "")|\(app.selectedDocumentID?.uuidString ?? "")|\(app.sidebarMode)|\(app.citationStudioOpen)|\(app.storiesStudioOpen)|\(app.notesStudioOpen)|\(app.openProjectID?.uuidString ?? "")|\(app.podcastStudioOpen)|\(app.selectedPodcastID?.uuidString ?? "")|\(app.dataStudioOpen)|\(app.researchStudioOpen)|\(app.learningStudioOpen)|\(app.gitStudioOpen)|\(app.agentStepsOpen)"
+        "\(app.selectedChatID?.uuidString ?? "")|\(app.selectedDocumentID?.uuidString ?? "")|\(app.sidebarMode)|\(app.citationStudioOpen)|\(app.storiesStudioOpen)|\(app.notesStudioOpen)|\(app.openProjectID?.uuidString ?? "")|\(app.podcastStudioOpen)|\(app.selectedPodcastID?.uuidString ?? "")|\(app.dataStudioOpen)|\(app.researchStudioOpen)|\(app.learningStudioOpen)|\(app.financeStudioOpen)|\(app.gitStudioOpen)|\(app.agentStepsOpen)"
     }
 
     /// The room the content needs before a sidebar may stand beside it: the studios have a sheet and a toolbar to show.

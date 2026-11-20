@@ -59,6 +59,7 @@ flowchart TB
 - **Notes** (`NoteLibrary`, `Notizen/<id>.json`) folgen demselben Muster: Entwürfe beim Tippen, Speichern nach 500 ms auf einer eigenen Queue. Sie werden beim Start gelesen, weil die Titelleisten von Writer und Presenter den Stand der Notes des offenen Dokuments zeigen. Änderungen aus der Oberfläche laufen über `NoteLibrary.change(_:_:undo:_:)`, das den Stand davor beim `UndoManager` des Fensters ablegt (⌘Z). ToDo-Zeilen sind `NoteLineEditor` (AppKit-`NSTextView`) mit Outliner-Tasten.
 - **Projekte** (`ProjectLibrary`, `Projekte/<id>.json`) folgen demselben Muster und werden beim Start gelesen, weil die Seitenleiste sie zeigt. Ein Projekt hält nur Verweise (`ProjectRef`: Chat, Dokument, Note, Romanwelt mit Teil oder Element); das Verknüpfte bleibt unverändert. Die Seite ist ein Raster aus Bausteinen (`ProjectBlock` mit `ProjectGridFrame`); `ProjectLayout.place` setzt den bewegten Baustein und schiebt, was er verdeckt, nach unten, sodass nichts überlappt. Diagrammdaten (`ProjectChartData`) rechnet der Kern aus dem Projekt, die Ansicht zeichnet sie mit Swift Charts. Jede Änderung schreibt den Verlauf des Tages fort (`recordHistory`).
 - **Podcasts** (`PodcastLibrary`, `Podcasts/<id>/`) werden beim Start gelesen, weil jeder Podcast ein Eintrag der Seitenleiste ist (`SidebarEntry.podcast`, mit Ordnern, Stapeln und Ziehen wie Chats und Dokumente). Gespeichert wird nach 500 ms auf einer eigenen Queue. Das Erzeugen läuft in einer Warteschlange im `AppModel` (`podcastQueue`, ein `Task` zur Zeit); der Fortschritt (`podcastProgress`) wird nicht gespeichert, die Phase schon.
+- **FinanceStudio** (`FinanceLibrary`, `Finanzen/finanzen.json` und `Finanzen/Buchungen/<Monat>.json`) hält Konto, Kategorien und Planung in einer Datei, die Buchungen je Monat; gespeichert werden nur geänderte Monate, nach 500 ms auf einer eigenen Queue. Gruppe, Kategorie und Saldo einer Buchung werden nie gespeichert, sondern nach jeder Änderung neu berechnet (`FinanceAnalysis`): Eine neue Regel gilt sofort für alle Buchungen. Der Saldo hängt an einem Anker (Stand am Ende eines Tages), damit spät importierte alte Buchungen ihn nicht verschieben.
 - **UI-Ansichten** lesen den `AppModel` über die SwiftUI-Umgebung (`@Environment(AppModel.self)`).
 
 ## Darstellung: SwiftUI außen, AppKit innen
@@ -195,7 +196,7 @@ Der Runner geht den Plan selbst durch; jeder KI-Schritt beginnt mit frischem Kon
 flowchart TB
     PA["PowerAccess (@Observable)<br/>isOn, module, query, offene Elemente, lastChange"]
     PP["PowerPanel"] --> PA
-    PP --> MOD["PowerChats · PowerDocuments · PowerPresentations<br/>PowerCitations · PowerStories · PowerNotes · PowerProjects · PowerPodcasts"]
+    PP --> MOD["PowerChats · PowerDocuments · PowerPresentations<br/>PowerCitations · PowerStories · PowerNotes · PowerProjects · PowerPodcasts<br/>PowerData · PowerResearch · PowerLearning · PowerFinance"]
     MOD --> PT["PowerText<br/>Blöcke, Klartext, Einfügen/Verschieben"]
     MOD --> AMP["AppModel+Power<br/>powerInsert, powerAppend, powerNewSlide,<br/>powerAddQuote, powerAddStoryElement"]
     MOD --> DS["PowerDragSource (AppKit)<br/>Writer-Markdown + Klartext + Herkunft"]

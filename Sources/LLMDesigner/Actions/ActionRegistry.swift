@@ -38,6 +38,7 @@ final class ActionRegistry {
         registry.registerDataActions()
         registry.registerResearchActions()
         registry.registerLearningActions()
+        registry.registerFinanceActions()
         registry.registerPodcastActions()
         registry.registerChatActions()
         registry.registerGitActions()

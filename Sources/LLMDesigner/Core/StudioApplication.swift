@@ -3,7 +3,7 @@ import Foundation
 /// Applications next to the chat where the model helps with a piece of work. Only the menu exists so far;
 /// Writer Studio comes first. Coding Studio follows later.
 enum StudioApplication: String, CaseIterable, Identifiable {
-    case writer, citation, presenter, stories, notes, projects, podcast, data, research, learning, git, agents
+    case writer, citation, presenter, stories, notes, projects, podcast, data, research, learning, finance, git, agents
 
     var id: String { rawValue }
 
@@ -19,6 +19,7 @@ enum StudioApplication: String, CaseIterable, Identifiable {
         case .data: "Data Studio"
         case .research: "Rechercherista"
         case .learning: "Learning Studio"
+        case .finance: "FinanceStudio"
         case .git: "Git Studio"
         case .agents: "AgentSteps"
         }
@@ -36,6 +37,7 @@ enum StudioApplication: String, CaseIterable, Identifiable {
         case .data: "tablecells"
         case .research: "binoculars"
         case .learning: "leaf"
+        case .finance: "eurosign.circle"
         case .git: "arrow.triangle.branch"
         case .agents: AgentTask.symbol
         }
@@ -52,6 +54,7 @@ enum StudioApplication: String, CaseIterable, Identifiable {
         case .data: "Data Studio – Datenblöcke und Vorlagen"
         case .research: "Rechercherista – neue Recherche"
         case .learning: "Learning Studio – Lernbäume und Karteikarten"
+        case .finance: "FinanceStudio – Kontostand, Buchungen und Planung"
         case .git: "Git Studio – Versionen und Branches"
         case .agents: "AgentSteps – Agenten, Aufgaben und Zeitpläne"
         default: title
@@ -73,6 +76,7 @@ enum StudioApplication: String, CaseIterable, Identifiable {
         case .data: "Datenblöcke für Platzhalter, Vorlagen und Masterfolien"
         case .research: "Gründlich recherchieren, Schritt für Schritt bis zum Bericht"
         case .learning: "Disziplinen, Kurse, Karteikarten und Lernfortschritt"
+        case .finance: "Kontostand, Einnahmen und Ausgaben, Fixkosten und Sparziele"
         case .git: "Commits, Branches und der Baum der Versionen"
         case .agents: "Agentische Aufgaben planen, takten und beobachten"
         }

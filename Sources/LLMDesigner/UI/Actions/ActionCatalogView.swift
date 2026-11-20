@@ -100,6 +100,7 @@ struct ActionCatalogView: View {
         case "data": "Data Studio"
         case "research": "Rechercherista"
         case "learning": "Learning Studio"
+        case "finance": "FinanceStudio"
         case "chat": "Chats"
         case "minichat": "Mini-Chat"
         case "persona": "Personas"
@@ -127,6 +128,7 @@ struct ActionCatalogView: View {
         case "data": StudioApplication.data.symbol
         case "research": StudioApplication.research.symbol
         case "learning": StudioApplication.learning.symbol
+        case "finance": StudioApplication.finance.symbol
         case "chat", "minichat": "bubble.left.and.bubble.right"
         case "persona": Persona.symbol
         case "skill": Skill.defaultSymbol
