@@ -39,6 +39,7 @@ flowchart LR
     L --> VO["Vorlagen/‹id›/<br/>vorlage.json, logo.png"]
     L --> RE["Recherchen/‹id›/<br/>recherche.json"]
     L --> LE["Lernen/<br/>lernen.json, ‹id›/kurs.json, ‹id›/Material/"]
+    L --> FI["Finanzen/<br/>finanzen.json, Buchungen/‹yyyy-MM›.json"]
     L --> PD["Präsentationen/Designs/<br/>eigene CSS-Designs"]
     L --> AG["AgentSteps/<br/>Aufgaben/‹id›.json, Protokolle/‹id›.json"]
 ```
@@ -462,6 +463,50 @@ Ein **Kurs** liegt in `Lernen/<id>/kurs.json` (`{"format": 1, "kurs": {…}}`), 
 Karten und Material haben zusätzlich `lektion` (die ID ihrer Lektion; fehlt: der ganze Kurs).
 
 Die **Lesenotizen** einer Lektion liegen in `Lernen/<kurs-id>/Lesenotizen/<lektion-id>.json` (`{"format": 1, "lektion": "…", "abschnitte": [{abschnitt, titel, stuecke, notizen}]}`): je Abschnitt in wie viele Stücke sein Text geteilt wurde und was das Modell zu jedem Stück notiert hat (Markdown). Sie stehen nicht in `kurs.json`, weil der bei jeder beantworteten Karte geschrieben wird; die Zusammenfassung, die Karten und die Testfragen entstehen aus ihnen.
+
+## FinanceStudio
+
+`Finanzen/finanzen.json` hält alles außer den Buchungen. Beträge sind überall **ganze Cent** (`cent`), damit Summen tausender Buchungen auf den Cent stimmen; Tage sind `yyyy-MM-dd` ohne Uhrzeit.
+
+```json
+{
+  "format" : 1,
+  "kategorien" : [ { "art" : "ausgabe", "farbe" : "green", "kuerzel" : "lebensmittel", "name" : "Lebensmittel", "stichworte" : [ "rewe", "edeka" ], "symbol" : "cart" } ],
+  "konto" : { "bank" : "Beispielbank", "iban" : "DE00…", "inhaber" : "Mara Beispiel", "name" : "Girokonto",
+              "saldo" : { "cent" : 481237, "datum" : "2026-11-20" }, "waehrung" : "EUR" },
+  "planung" : {
+    "einkommen" : [ { "cent" : 320000, "gruppe" : "beispiel", "id" : "…", "intervall" : "monatlich", "name" : "Gehalt", "tag" : 27 } ],
+    "fixkosten" : [ { "cent" : 95000, "gruppe" : "wohnbau", "id" : "…", "intervall" : "monatlich", "kategorie" : "wohnen", "name" : "Miete", "tag" : 1 } ],
+    "projekte" : [ { "angespart" : 60000, "cent" : 350000, "erstellt" : "…", "id" : "…", "name" : "Mac mini M5 Pro", "prioritaet" : 1, "zieldatum" : "2027-04-01" } ],
+    "sparziele" : [ { "angespart" : 180000, "erstellt" : "…", "farbe" : "blue", "id" : "…", "monatlich" : 25000, "name" : "Notgroschen", "symbol" : "target", "ziel" : 600000 } ],
+    "variableEinrechnen" : true
+  },
+  "zuordnungen" : [ { "gruppe" : "rewe", "kategorie" : "lebensmittel", "quelle" : "person" } ]
+}
+```
+
+- `konto.saldo` ist der Kontostand **am Ende** von `datum`, wie die Bank ihn zeigte (von Hand abgeglichen oder aus der Saldo-Spalte einer CSV). Jeder andere Tag folgt daraus und aus den Buchungen, vor- und rückwärts; ohne `saldo` ist der Stand die Summe aller Buchungen.
+- `kategorien` fehlt, solange die mitgelieferten gelten. `art` ist `ausgabe`, `einnahme` oder `umbuchung` (zählt weder als Einnahme noch als Ausgabe). Eine Kategorie nimmt nur Buchungen ihres Vorzeichens. `stichworte` sind klein und ohne Umlaute; kurze (`dm`, `o2`) passen nur als ganzes Wort.
+- `zuordnungen` legen eine Kategorie für alle Buchungen einer **Gruppe** fest; `quelle` ist `person` oder `ki` (vom Modell vorgeschlagen; die Person gewinnt). Die Gruppe ist der Schlüssel, den die App aus dem Empfänger bildet (ohne Rechtsform, Filialnummer und Füllwörter, bei PayPal und ähnlichen aus dem Verwendungszweck): „REWE Markt GmbH“ und „REWE City 0815“ sind beide `rewe`.
+- `intervall` ist `woechentlich`, `monatlich`, `vierteljaehrlich`, `halbjaehrlich` oder `jaehrlich`; `tag` der Tag im Monat. `gruppe` verbindet einen Eintrag mit seinen Buchungen: Sie zählen dann nicht zu den übrigen Ausgaben. `prioritaet` ist 1 (hoch), 2 (mittel) oder 3 (niedrig); ein gekauftes Projekt hat `erledigt: true`.
+- `verbergen: true` zeigt Beträge als Punkte.
+
+Die **Buchungen** liegen je Monat in `Finanzen/Buchungen/<yyyy-MM>.json`, damit ein Import alter Monate und Git nur die betroffenen Dateien ändern:
+
+```json
+{
+  "buchungen" : [
+    { "art" : "LASTSCHRIFT", "cent" : -1399, "datum" : "2026-11-03", "erstellt" : "…", "gegenpartei" : "Netflix International B.V.",
+      "iban" : "…", "id" : "…", "importiert" : "…", "quelle" : "csv", "zweck" : "Abo" }
+  ],
+  "format" : 1,
+  "monat" : "2026-11"
+}
+```
+
+`kategorie` steht nur an einer Buchung, der die Person selbst eine gegeben hat; sonst kommt sie aus der Gruppe oder den Stichworten und wird nie gespeichert, damit eine neue Regel sofort für alle gilt. `quelle` ist `manuell` oder `csv`. Zwei Buchungen mit gleichem Tag, Betrag, Empfänger und Anfang des Zwecks gelten beim Import als dieselbe, so oft sie schon da sind: Ein überlappender Export fügt nur Neues hinzu, zwei gleiche Kaffees an einem Tag bleiben zwei.
+
+Der **CSV-Import** erkennt Kodierung (UTF-8 oder Windows-1252), Trennzeichen, Zeilen vor der Kopfzeile und die Spalten an ihren Namen: Buchungstag/Datum (sonst Wertstellung), Betrag/Umsatz oder Soll und Haben (auch mit S/H-Spalte), Empfänger, Zahlungspflichtige*r (bei Eingängen), Verwendungszweck, Buchungstext, IBAN, Saldo, Währung. Dezimalkomma oder -punkt entscheidet die Mehrheit der Beträge.
 
 ## AgentSteps
 

@@ -3,6 +3,7 @@
 # Usage: scripts/build-app.sh [release|debug] [--open]
 set -euo pipefail
 cd "$(dirname "$0")/.."
+source scripts/toolchain.sh
 
 CONFIG="${1:-release}"
 APP="build/LLM Designer.app"

@@ -2,7 +2,7 @@ import SwiftUI
 
 /// The applications the power access reaches from the right-hand panel.
 enum PowerModule: String, CaseIterable, Identifiable {
-    case chats, writer, presenter, citation, stories, notes, projects, podcasts, data, research, learning, skills, personas, git
+    case chats, writer, presenter, citation, stories, notes, projects, podcasts, data, research, learning, finance, skills, personas, git
 
     var id: String { rawValue }
 
@@ -19,6 +19,7 @@ enum PowerModule: String, CaseIterable, Identifiable {
         case .data: "Data"
         case .research: "Recherche"
         case .learning: "Lernen"
+        case .finance: "Finanzen"
         case .skills: "Skills"
         case .personas: "Personas"
         case .git: "Git"
@@ -38,6 +39,7 @@ enum PowerModule: String, CaseIterable, Identifiable {
         case .data: StudioApplication.data.symbol
         case .research: StudioApplication.research.symbol
         case .learning: StudioApplication.learning.symbol
+        case .finance: StudioApplication.finance.symbol
         case .skills: Skill.defaultSymbol
         case .personas: Persona.symbol
         case .git: "arrow.triangle.branch"
@@ -102,6 +104,7 @@ final class PowerAccess {
         case .data: dataBlockID != nil
         case .research: researchID != nil
         case .learning: courseID != nil
+        case .finance: false
         case .skills: skillID != nil
         case .personas: personaID != nil
         case .git: false
@@ -121,6 +124,7 @@ final class PowerAccess {
         case .data: dataBlockID = nil
         case .research: researchID = nil
         case .learning: courseID = nil
+        case .finance: break
         case .skills: skillID = nil
         case .personas: personaID = nil
         case .git: break

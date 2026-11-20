@@ -444,6 +444,6 @@ struct TemplateUseRequest: Identifiable {
 }
 
 extension AppModel {
-    /// One of the newer studios (Data, Rechercherista, Learning) holds the main area.
-    var newStudioOpen: Bool { dataStudioOpen || researchStudioOpen || learningStudioOpen }
+    /// One of the newer studios (Data, Rechercherista, Learning, Finance) holds the main area.
+    var newStudioOpen: Bool { dataStudioOpen || researchStudioOpen || learningStudioOpen || financeStudioOpen }
 }

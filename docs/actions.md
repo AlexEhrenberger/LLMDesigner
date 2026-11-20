@@ -18,7 +18,7 @@ flowchart LR
     REG --> POL["ActionPolicy<br/>Rule of Two"]
     REG --> APP["ActionApproval<br/>Dialog oder Eingang des Laufs"]
     AG["AgentSteps-Lauf"] --> REG
-    REG --> ACT["Actions<br/>Writer, Presenter, Citation, Stories, Notes, Projekte, Podcast,<br/>Data, Rechercherista, Learning, Chat"]
+    REG --> ACT["Actions<br/>Writer, Presenter, Citation, Stories, Notes, Projekte, Podcast,<br/>Data, Rechercherista, Learning, Finance, Chat"]
     ACT --> AM["AppModel und Bibliothek"]
 ```
 
@@ -149,6 +149,18 @@ llmd learning lesson list --course "Statistik 2"
 llmd learning pause --until 2026-12-28 --reason Urlaub
 ```
 
+## FinanceStudio
+
+Kontostand, Buchungen und Planung. Alles mit Beträgen ist **privat** und über MCP gesperrt; Buchungen zu lesen (`finance.transaction.list`, `finance.groups.list`, `finance.recurring.list`) gilt zusätzlich als fremd, weil Empfänger und Zweck von Banken und Händlern stammen, und fragt deshalb außerhalb der Oberfläche nach. `finance.overview` und `finance.plan.read` nennen nur Zahlen. Ein Import über Chat oder MCP mit einer Datei fragt immer. Katalog: [Finance-Actions](plan/Finance-Actions.md).
+
+```bash
+llmd finance import csv --file ~/Downloads/Umsaetze.csv
+llmd finance overview --period monat
+llmd finance groups list --period jahr --direction ausgaben
+llmd finance project add --name "Mac mini M5 Pro" --amount 3500 --priority hoch
+llmd finance statement export --from 2026-10-01 --to 2026-10-31
+```
+
 ## Git
 
 Ist Git für die Bibliothek eingeschaltet (Power-Zugriff → Git oder `llmd git enable`), nennen alle Git-Actions Dinge mit Titel statt Pfad. `git.commit` nimmt alles oder nur die genannten Dinge, `git.restore` committet vorher den jetzigen Stand. `git.push` wirkt nach außen und fragt deshalb immer nach; den Remote setzt nur die Oberfläche, nie ein Agent. Git läuft ohne Hooks und prüft die Konfiguration der Bibliothek, bevor es etwas tut. Konzept: [Git-Modul](plan/Git-Modul.md).
@@ -202,7 +214,7 @@ claude mcp add llmd -- "/Pfad/LLM Designer.app/Contents/Helpers/llmd" mcp --prof
 | Profil | Inhalt |
 |---|---|
 | `core` | der kleine Satz zum Lesen, Schreiben, Präsentieren, Zitieren und Fragen |
-| `writer`, `presenter`, `citation`, `stories`, `notes`, `projects`, `podcast`, `data`, `research`, `learning`, `chat`, `agents` | ein Studio |
+| `writer`, `presenter`, `citation`, `stories`, `notes`, `projects`, `podcast`, `data`, `research`, `learning`, `finance`, `chat`, `agents` | ein Studio (bei `finance` nur, was keine Kontodaten liest) |
 | `full` | alles außer privaten Daten |
 
 Jedes Profil hat zusätzlich `llmd_search_actions` und `llmd_run_action`, damit kleine Modelle nicht alle Tools laden müssen. Dazu kommen Resources (`llmd://writer/doc/{id}`, `llmd://presenter/deck/{id}`, `llmd://citation/source/{key}`, `llmd://stories/world/{id}`, `llmd://notes/note/{id}`, `llmd://projects/project/{id}`, `llmd://podcast/podcast/{id}`), Prompts aus Skills und `subscriptions/listen`.

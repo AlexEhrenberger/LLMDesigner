@@ -870,6 +870,7 @@ extension AppModel {
         case "projects": if projects.project(id) != nil { openProjectID = id }
         case "research": openResearchStudio(new: false)
         case "learning": openLearningStudio()
+        case "finance": openFinanceStudio()
         case "citation": openCitationStudio(showing: id)
         default: break
         }

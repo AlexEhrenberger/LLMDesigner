@@ -116,26 +116,20 @@ struct LearningLessonActionTests {
             NSGraphicsContext.restoreGraphicsState()
             context.endPDFPage()
         }
-        context.closePDF()
-        let document = try #require(PDFDocument(data: data as Data))
-        let root = PDFOutline()
-        for (index, mark) in marks.enumerated() {
-            let item = PDFOutline()
-            item.label = mark.title
-            let page = try #require(document.page(at: mark.page))
-            item.destination = PDFDestination(page: page, at: .zero)
-            for (childIndex, child) in mark.children.enumerated() {
-                let sub = PDFOutline()
-                sub.label = child.0
-                let childPage = try #require(document.page(at: child.1))
-                sub.destination = PDFDestination(page: childPage, at: .zero)
-                item.insertChild(sub, at: childIndex)
-            }
-            root.insertChild(item, at: index)
+        // The bookmarks go in through Core Graphics: on macOS 27 PDFKit drops an `outlineRoot` set in code when it
+        // writes the file, while it still reads bookmarks that others wrote, which is what the app depends on.
+        func entry(_ title: String, page: Int, children: [[String: Any]] = []) -> [String: Any] {
+            var entry: [String: Any] = [kCGPDFOutlineTitle as String: title, kCGPDFOutlineDestination as String: page + 1]
+            if !children.isEmpty { entry[kCGPDFOutlineChildren as String] = children }
+            return entry
         }
-        document.outlineRoot = root
+        let outline = marks.map { mark in entry(mark.title, page: mark.page, children: mark.children.map { entry($0.0, page: $0.1) }) }
+        CGPDFContextSetOutline(context, [kCGPDFOutlineChildren as String: outline] as CFDictionary)
+        context.closePDF()
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("Wetterkunde-\(UUID().uuidString.prefix(6)).pdf")
-        #expect(document.write(to: url))
+        try (data as Data).write(to: url)
+        let written = try #require(PDFDocument(url: url))
+        #expect(written.outlineRoot?.numberOfChildren == marks.count, "die Lesezeichen müssen die Datei überleben")
         return url
     }
 

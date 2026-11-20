@@ -230,7 +230,7 @@ struct LibraryViewState {
     var chat: UUID?
     var document: UUID?
     var project: UUID?
-    var citation, stories, notes, podcast, data, research, learning: Bool
+    var citation, stories, notes, podcast, data, research, learning, finance: Bool
 
     init(_ app: AppModel) {
         chat = app.selectedChatID
@@ -243,6 +243,7 @@ struct LibraryViewState {
         data = app.dataStudioOpen
         research = app.researchStudioOpen
         learning = app.learningStudioOpen
+        finance = app.financeStudioOpen
     }
 
     func restore(in app: AppModel) {
@@ -256,5 +257,6 @@ struct LibraryViewState {
         app.dataStudioOpen = data
         app.researchStudioOpen = research
         app.learningStudioOpen = learning
+        app.financeStudioOpen = finance
     }
 }

@@ -31,6 +31,7 @@ extension AppModel {
         if dataStudioOpen { return .data }
         if researchStudioOpen { return .research }
         if learningStudioOpen { return .learning }
+        if financeStudioOpen { return .finance }
         if gitStudioOpen { return .git }
         if agentStepsOpen { return .agents }
         guard let document = selectedDocument else { return nil }
@@ -78,6 +79,7 @@ extension AppModel {
         case .data: openDataStudio()
         case .research: openResearchStudio(new: true)
         case .learning: openLearningStudio()
+        case .finance: openFinanceStudio()
         case .git: openGitStudio()
         case .agents: openAgentSteps()
         }
@@ -133,6 +135,7 @@ extension AppModel {
         if dataStudioOpen { closeDataStudio() }
         if researchStudioOpen { closeResearchStudio() }
         if learningStudioOpen { closeLearningStudio() }
+        if financeStudioOpen { closeFinanceStudio() }
         if gitStudioOpen { gitStudioOpen = false }
         if agentStepsOpen { agentStepsOpen = false }
         guard let id = selectedDocumentID else { return }

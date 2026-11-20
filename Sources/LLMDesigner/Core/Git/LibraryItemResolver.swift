@@ -3,7 +3,7 @@ import Foundation
 /// What a file in the library belongs to, so lists show "Hausarbeit Statistik" instead of `Documents/3BC4….md`.
 enum LibraryItemKind: String, Sendable, CaseIterable, Comparable {
     case document, presentation, source, world, note, project, podcast, dataBlock, template, research, course
-    case learning, agentTask, skills, designs, library, other
+    case learning, finance, agentTask, skills, designs, library, other
 
     var label: String {
         switch self {
@@ -19,6 +19,7 @@ enum LibraryItemKind: String, Sendable, CaseIterable, Comparable {
         case .research: "Recherche"
         case .course: "Kurs"
         case .learning: "Lernen"
+        case .finance: "Finanzen"
         case .agentTask: "Agenten-Aufgabe"
         case .skills: "Skills"
         case .designs: "Folien-Designs"
@@ -40,6 +41,7 @@ enum LibraryItemKind: String, Sendable, CaseIterable, Comparable {
         case .dataBlock, .template: "Data Studio"
         case .research: "Rechercherista"
         case .course, .learning: "Learning Studio"
+        case .finance: "FinanceStudio"
         case .agentTask: "AgentSteps"
         case .skills: "Skills"
         case .library, .other: "Bibliothek"
@@ -58,6 +60,7 @@ enum LibraryItemKind: String, Sendable, CaseIterable, Comparable {
         case .dataBlock, .template: StudioApplication.data.symbol
         case .research: StudioApplication.research.symbol
         case .course, .learning: StudioApplication.learning.symbol
+        case .finance: StudioApplication.finance.symbol
         case .agentTask: StudioApplication.agents.symbol
         case .skills: "sparkles"
         case .library: "books.vertical"
@@ -136,6 +139,10 @@ struct LibraryItemResolver {
         case "Lernen":
             if let id = uuid(second) { return (.course, id, "Lernen/\(id)/kurs.json") }
             return (.learning, "Lernen", "Lernen/lernen.json")
+        case "Finanzen":
+            // One item per month of bookings, so a commit says which months changed.
+            if second == "Buchungen", parts.count > 2 { return (.finance, path, path) }
+            return (.finance, "Finanzen", "Finanzen/finanzen.json")
         case "AgentSteps":
             if second == "Aufgaben", let id = uuid(parts.count > 2 ? parts[2] : nil) { return (.agentTask, id, path) }
         case "Skills.json":
@@ -178,6 +185,9 @@ struct LibraryItemResolver {
         switch kind {
         case .skills: fallback = "Skills"
         case .learning: fallback = "Lerneinstellungen"
+        case .finance:
+            let month = (path as NSString).lastPathComponent.replacingOccurrences(of: ".json", with: "")
+            fallback = place.key == "Finanzen" ? "Konto und Planung" : "Buchungen \(FinanceDay(month + "-01")?.monthTitle ?? month)"
         case .designs: fallback = "Eigene Folien-Designs"
         case .library, .other: fallback = path
         default:

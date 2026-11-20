@@ -485,6 +485,9 @@ final class AppModel {
     /// Learning Studio takes the main area (see AppModel+Learning.swift).
     var learningStudioOpen = false
     var learningStudioCommand: LearningStudioCommand?
+    /// FinanceStudio takes the main area (see AppModel+Finance.swift).
+    var financeStudioOpen = false
+    var financeStudioCommand: FinanceStudioCommand?
     /// The project shown in the main area (see AppModel+Projects.swift).
     var openProjectID: UUID?
     /// Its page or its board of tasks.
@@ -618,6 +621,8 @@ final class AppModel {
     @ObservationIgnored let research = ResearchLibrary()
     /// Learning Studio: disciplines, courses, flash cards and their schedule.
     @ObservationIgnored let learning = LearningLibrary()
+    /// FinanceStudio: the account's bookings, categories and the plan of income, fixed costs, projects and goals.
+    @ObservationIgnored let finance = FinanceLibrary()
     /// Learning Studio's automatic course creation from a PDF, lesson by lesson (see AppModel+CourseBuild.swift).
     @ObservationIgnored let courseBuild = CourseBuildCenter()
     /// Lesson tests: questions being written, answers being graded (see AppModel+LessonTest.swift).
@@ -764,6 +769,7 @@ final class AppModel {
         dataStudio.saveAll()
         research.saveAll()
         learning.saveAll()
+        finance.saveAll()
         podcastPlayer.stop()
         stopAllPodcasts()
         writerFlush?()

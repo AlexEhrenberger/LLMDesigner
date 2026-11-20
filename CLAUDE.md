@@ -10,7 +10,7 @@ scripts/test.sh                       # alle Tests (Swift Testing, ~1 min)
 scripts/test.sh --filter ActionPolicyTests
 ```
 
-Immer `scripts/test.sh` statt `swift test`: Die Command Line Tools brauchen die Suchpfade für Swift Testing.
+Immer `scripts/test.sh` statt `swift test` und `scripts/build-app.sh` statt `swift build`: Die Command Line Tools brauchen die Suchpfade für Swift Testing, und ohne Xcode wählt `scripts/toolchain.sh` ein SDK, in dem `@State` noch kein Macro ist (ab SDK 27.2 fehlt sonst das Plugin `SwiftUIMacros`). Wer `swift build` direkt aufruft, setzt dafür `SDKROOT` selbst.
 
 ## Dokumentation
 

@@ -331,6 +331,7 @@ extension AppModel {
         dataStudio.saveAll()
         research.saveAll()
         learning.saveAll()
+        finance.saveAll()
         podcasts.saveAll()
         agents.tasks.saveAll()
     }
