@@ -140,7 +140,7 @@ private struct LiveDesignView: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeNSView(context: Context) -> WKWebView {
-        let view = PassthroughWebView(frame: .zero)
+        let view = PassthroughWebView(frame: .zero, configuration: SlideDesign.webConfiguration())
         view.setValue(false, forKey: "drawsBackground")
         view.navigationDelegate = context.coordinator
         context.coordinator.onLoad = onLoad
@@ -230,25 +230,94 @@ private struct ImageBackground: View {
     }
 }
 
-/// Background pictures, read once.
+/// Keeps what was drawn or read, up to a cost in bytes; the least recently used goes first. Several keys can share a
+/// slot (a slide), and a new key in a slot replaces the old one: a slide being typed on keeps one picture, not one per
+/// pause.
+@MainActor
+struct DrawingCache {
+    let costLimit: Int
+    private var entries: [String: (image: NSImage, cost: Int)] = [:]
+    /// Least recently used first.
+    private var order: [String] = []
+    private var slots: [AnyHashable: String] = [:]
+    private(set) var totalCost = 0
+
+    init(costLimit: Int) {
+        self.costLimit = costLimit
+    }
+
+    var count: Int { entries.count }
+
+    mutating func image(_ key: String) -> NSImage? {
+        guard let entry = entries[key] else { return nil }
+        if order.last != key, let index = order.firstIndex(of: key) {
+            order.remove(at: index)
+            order.append(key)
+        }
+        return entry.image
+    }
+
+    mutating func insert(_ image: NSImage, for key: String, cost: Int, slot: AnyHashable? = nil) {
+        if let slot {
+            // The slot's earlier picture goes, unless another slot still shows the same.
+            if let old = slots[slot], old != key, !slots.contains(where: { $0.key != slot && $0.value == old }) { remove(old) }
+            slots[slot] = key
+        }
+        remove(key)
+        entries[key] = (image, cost)
+        order.append(key)
+        totalCost += cost
+        while totalCost > costLimit, let oldest = order.first, oldest != key { remove(oldest) }
+    }
+
+    mutating func removeAll() {
+        entries = [:]
+        order = []
+        slots = [:]
+        totalCost = 0
+    }
+
+    private mutating func remove(_ key: String) {
+        guard let entry = entries.removeValue(forKey: key) else { return }
+        totalCost -= entry.cost
+        order.removeAll { $0 == key }
+        for (slot, value) in slots where value == key { slots[slot] = nil }
+    }
+
+    /// What a picture costs in memory once drawn: four bytes a pixel.
+    static func cost(of image: NSImage) -> Int {
+        let pixels = image.representations.map { $0.pixelsWide * $0.pixelsHigh }.max() ?? 0
+        return max(1, pixels > 0 ? pixels * 4 : Int(image.size.width * image.size.height * 4))
+    }
+}
+
+/// Background and free pictures, read once and kept up to about 384 MB. The key holds the library: another library can
+/// have a picture of the same name.
 @MainActor
 enum SlideImageCache {
-    private static var images: [String: NSImage] = [:]
+    private static var cache = DrawingCache(costLimit: 384 * 1_048_576)
+
+    static var count: Int { cache.count }
+    static var totalCost: Int { cache.totalCost }
+
+    private static func key(_ source: String) -> String { AppLibrary.current.url.path + "|" + source }
 
     static func image(_ source: String) -> NSImage? {
-        if let image = images[source] { return image }
+        let key = key(source)
+        if let image = cache.image(key) { return image }
         guard let url = WriterImageStore.url(for: source), let image = NSImage(contentsOf: url) else { return nil }
-        images[source] = image
+        cache.insert(image, for: key, cost: DrawingCache.cost(of: image))
         return image
     }
 
     /// The picture with its cut applied; the file stays whole, so a cut can always be undone or changed.
     static func image(_ source: String, crop: SlideCrop?) -> NSImage? {
         guard let crop, !crop.isEmpty else { return image(source) }
-        let key = "\(source)|\(crop.left)|\(crop.top)|\(crop.right)|\(crop.bottom)"
-        if let image = images[key] { return image }
+        let key = key(source) + "|\(crop.left)|\(crop.top)|\(crop.right)|\(crop.bottom)"
+        if let image = cache.image(key) { return image }
         guard let whole = image(source), let cut = cropped(whole, crop) else { return image(source) }
-        images[key] = cut
+        // While a cut is dragged, each step is a picture of its own; the slot keeps only the latest of them.
+        cache.insert(cut, for: key, cost: DrawingCache.cost(of: cut), slot: "cut|" + self.key(source))
         return cut
     }
 
@@ -363,17 +432,22 @@ struct SlideStageView: View {
 
 // MARK: Thumbnails
 
-/// A slide's text drawn as a picture (for the slide list and the background menu), kept until the slide changes.
+/// A slide's text drawn as a picture (for the slide list and the background menu), kept until the slide changes:
+/// one picture per slide (`slot`), up to about 128 MB in all. Typing on a slide used to leave a picture per pause.
 @MainActor
 enum SlideThumbnailRenderer {
-    private static var cache: [String: NSImage] = [:]
-    private static var order: [String] = []
+    private static var cache = DrawingCache(costLimit: 128 * 1_048_576)
     /// A text view kept for drawing.
     private static var textView: WriterTextView?
 
-    static func image(markdown: String, family: WriterFont, palette: WriterPalette, layout: WriterTextView.SlideLayout, citations: CitationLibrary?, scale: CGFloat = 0.6) -> NSImage? {
+    static var count: Int { cache.count }
+    static var totalCost: Int { cache.totalCost }
+
+    /// `scale` 0.5: 720 × 405 pixels, twice what the slide list shows and enough for the next slide in the presenter view.
+    static func image(markdown: String, family: WriterFont, palette: WriterPalette, layout: WriterTextView.SlideLayout, citations: CitationLibrary?,
+                      scale: CGFloat = 0.5, slot: AnyHashable? = nil) -> NSImage? {
         let key = "\(layout.centersVertically)|\(layout.obstacles)|\(layout.textRect)|\(family.rawValue)|\(palette.isLight)|\(palette.accent.hashValue)|\(scale)|\(markdown)"
-        if let image = cache[key] { return image }
+        if let image = cache.image(key) { return image }
         guard !markdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         let canvas = WriterTextView.SlideLayout.canvas
         let view = textView ?? WriterTextView.make()
@@ -393,11 +467,11 @@ enum SlideThumbnailRenderer {
         view.cacheDisplay(in: NSRect(origin: .zero, size: canvas), to: rep)
         let image = NSImage(size: canvas)
         image.addRepresentation(rep)
-        cache[key] = image
-        order.append(key)
-        if order.count > 240 { cache[order.removeFirst()] = nil }
+        cache.insert(image, for: key, cost: rep.pixelsWide * rep.pixelsHigh * 4, slot: slot)
         return image
     }
+
+    static func removeAll() { cache.removeAll() }
 }
 
 /// A small picture of a slide.
@@ -415,7 +489,8 @@ struct SlideThumbnail: View {
             SlideImagesLayer(images: slide.images, placements: [.behind])
             if let image = SlideThumbnailRenderer.image(
                 markdown: slide.markdown, family: family, palette: SlideLook.palette(background, role: slide.role),
-                layout: WriterTextView.SlideLayout(slide: slide), citations: app.citations
+                // One picture per slide and font (the slide list and the power panel may set it differently).
+                layout: WriterTextView.SlideLayout(slide: slide), citations: app.citations, slot: "\(slide.id.uuidString)|\(family.rawValue)"
             ) {
                 Image(nsImage: image)
                     .resizable()

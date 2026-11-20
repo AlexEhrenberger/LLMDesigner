@@ -7,6 +7,12 @@ struct DeletedSlide: Equatable {
     let index: Int
 }
 
+/// A speaker card the model is to write.
+struct NotesJob: Equatable {
+    let documentID: WriterDocument.ID
+    let slideID: PresentationSlide.ID
+}
+
 /// What the background sheet asks Draw Things for.
 struct SlideBackgroundRequest {
     var description: String
@@ -53,14 +59,14 @@ extension AppModel {
 
     func selectSlide(_ id: PresentationSlide.ID) {
         guard selectedSlideID != id else { return }
-        writerFlush?()
+        flushEdits()
         endSlideFieldEditing()
         selectedSlideID = id
     }
 
     /// Back from a text field (or the text area's frame) to the slide's own text.
     func endSlideFieldEditing() {
-        if editingSlideFieldID != nil { writerFlush?() }
+        if editingSlideFieldID != nil { flushEdits() }
         editingSlideFieldID = nil
         editingSlideTextArea = false
     }
@@ -68,7 +74,7 @@ extension AppModel {
     /// Puts a text field on the slide and opens it for writing.
     func addSlideField(_ id: WriterDocument.ID, _ slideID: PresentationSlide.ID, _ field: SlideImage, undoManager: UndoManager?, actionName: String) {
         guard let slide = document(id)?.deck?.slide(slideID) else { return }
-        writerFlush?()
+        flushEdits()
         setSlideImages(id, slideID, slide.images + [field], undoManager: undoManager, actionName: actionName)
         selectedSlideImageID = field.id
         editingSlideTextArea = false
@@ -119,6 +125,21 @@ extension AppModel {
 
     // MARK: Changing the slides
 
+    /// The presentation's slides as they were at some point, as one step that ⌘Z takes back.
+    func restoreDeck(_ id: WriterDocument.ID, _ deck: PresentationDeck, undoManager: UndoManager?, actionName: String) {
+        guard let old = document(id)?.deck, old != deck else { return }
+        flushEdits()
+        modifyDeck(id) { current in
+            current = deck
+            return true
+        }
+        if selectedDocumentID == id, let selectedSlideID, deck.index(of: selectedSlideID) == nil { self.selectedSlideID = deck.slides.first?.id }
+        undoManager?.registerUndo(withTarget: self) { app in
+            app.restoreDeck(id, old, undoManager: undoManager, actionName: actionName)
+        }
+        undoManager?.setActionName(actionName)
+    }
+
     /// Changes the presentation's slides; `change` says whether anything changed. Saved after a pause.
     @discardableResult
     func modifyDeck(_ id: WriterDocument.ID, saveAfter delay: Duration? = .milliseconds(500), _ change: (inout PresentationDeck) -> Bool) -> Bool {
@@ -155,18 +176,105 @@ extension AppModel {
     /// A new, empty slide after `slideID` (or at the end); it is opened right away. A `blank` slide shows no hint
     /// where its title goes: a page for pictures and free text fields.
     @discardableResult
-    func addSlide(to id: WriterDocument.ID, after slideID: PresentationSlide.ID?, role: SlideRole = .content, markdown: String = "", blank: Bool = false) -> PresentationSlide.ID? {
-        writerFlush?()
+    func addSlide(to id: WriterDocument.ID, after slideID: PresentationSlide.ID?, role: SlideRole = .content, markdown: String = "", blank: Bool = false,
+                  undoManager: UndoManager? = nil, actionName: String = "Neue Folie") -> PresentationSlide.ID? {
+        flushEdits()
         var slide = PresentationSlide(role: role, markdown: markdown)
         slide.hidesPlaceholder = blank
-        let added = modifyDeck(id) { deck in
-            let index = slideID.flatMap { deck.index(of: $0) }.map { $0 + 1 } ?? deck.slides.count
-            deck.slides.insert(slide, at: index)
+        let index = slideID.flatMap { document(id)?.deck?.index(of: $0) }.map { $0 + 1 } ?? document(id)?.deck?.slides.count ?? 0
+        guard insertSlide(slide, at: index, in: id, undoManager: undoManager, actionName: actionName) else { return nil }
+        return slide.id
+    }
+
+    // MARK: Taking back (⌘Z)
+    //
+    // The slides' operations register their exact opposite, not the whole presentation from before: the model may be
+    // filling slides or writing cards meanwhile, and ⌘Z must not take that away too.
+
+    /// Puts a slide at a place and opens it; ⌘Z takes it out again.
+    @discardableResult
+    func insertSlide(_ slide: PresentationSlide, at index: Int, in id: WriterDocument.ID, undoManager: UndoManager?, actionName: String) -> Bool {
+        flushEdits()
+        let inserted = modifyDeck(id) { deck in
+            guard deck.index(of: slide.id) == nil else { return false }
+            deck.slides.insert(slide, at: min(max(0, index), deck.slides.count))
             return true
         }
-        guard added else { return nil }
-        selectedSlideID = slide.id
-        return slide.id
+        guard inserted else { return false }
+        if deletedSlide?.slide.id == slide.id { deletedSlide = nil }
+        if selectedDocumentID == id { selectedSlideID = slide.id }
+        undoManager?.registerUndo(withTarget: self) { app in
+            app.removeSlide(slide.id, from: id, undoManager: undoManager, actionName: actionName)
+        }
+        undoManager?.setActionName(actionName)
+        return true
+    }
+
+    /// Takes a slide out (the last one stays); ⌘Z puts it back where it was. Returns it and its place.
+    @discardableResult
+    func removeSlide(_ slideID: PresentationSlide.ID, from id: WriterDocument.ID, undoManager: UndoManager?, actionName: String) -> DeletedSlide? {
+        flushEdits()
+        var removed: DeletedSlide?
+        var next: PresentationSlide.ID?
+        modifyDeck(id) { deck in
+            guard deck.slides.count > 1, let index = deck.index(of: slideID) else { return false }
+            removed = DeletedSlide(documentID: id, slide: deck.slides[index], index: index)
+            deck.slides.remove(at: index)
+            next = deck.slides[min(index, deck.slides.count - 1)].id
+            return true
+        }
+        guard let removed else { return nil }
+        if selectedDocumentID == id, selectedSlideID == slideID || selectedSlideID == nil { selectedSlideID = next }
+        undoManager?.registerUndo(withTarget: self) { app in
+            app.insertSlide(removed.slide, at: removed.index, in: id, undoManager: undoManager, actionName: actionName)
+        }
+        undoManager?.setActionName(actionName)
+        return removed
+    }
+
+    /// Puts a slide at an index of the list as it is afterwards; ⌘Z puts it back.
+    private func placeSlide(_ slideID: PresentationSlide.ID, at target: Int, in id: WriterDocument.ID, undoManager: UndoManager?) {
+        flushEdits()
+        var from: Int?
+        modifyDeck(id) { deck in
+            guard let index = deck.index(of: slideID), target != index, deck.slides.indices.contains(target) else { return false }
+            from = index
+            let slide = deck.slides.remove(at: index)
+            deck.slides.insert(slide, at: target)
+            return true
+        }
+        guard let from else { return }
+        undoManager?.registerUndo(withTarget: self) { app in
+            app.placeSlide(slideID, at: from, in: id, undoManager: undoManager)
+        }
+        undoManager?.setActionName("Folie verschieben")
+    }
+
+    /// Backgrounds as they were or should be: the presentation's per kind of slide and those of single slides; ⌘Z
+    /// brings back what was there.
+    private func setBackgrounds(_ id: WriterDocument.ID, roles: RoleBackgrounds?, slides: [PresentationSlide.ID: SlideBackground?],
+                                undoManager: UndoManager?, actionName: String) {
+        guard let deck = document(id)?.deck else { return }
+        let oldRoles = deck.backgrounds
+        let oldSlides = Dictionary(uniqueKeysWithValues: slides.keys.compactMap { slideID in deck.slide(slideID).map { (slideID, $0.background) } })
+        let changed = modifyDeck(id) { deck in
+            var changed = false
+            if let roles, deck.backgrounds != roles {
+                deck.backgrounds = roles
+                changed = true
+            }
+            for (slideID, background) in slides {
+                guard let index = deck.index(of: slideID), deck.slides[index].background != background else { continue }
+                deck.slides[index].background = background
+                changed = true
+            }
+            return changed
+        }
+        guard changed else { return }
+        undoManager?.registerUndo(withTarget: self) { app in
+            app.setBackgrounds(id, roles: roles == nil ? nil : oldRoles, slides: oldSlides, undoManager: undoManager, actionName: actionName)
+        }
+        undoManager?.setActionName(actionName)
     }
 
     /// Shows or hides the hint of an empty slide ("Folientitel"); undoable.
@@ -183,34 +291,17 @@ extension AppModel {
         undoManager?.setActionName(hidden ? "Platzhalter entfernen" : "Platzhalter zeigen")
     }
 
-    func duplicateSlide(_ id: WriterDocument.ID, _ slideID: PresentationSlide.ID) {
-        writerFlush?()
-        var copy: PresentationSlide?
-        modifyDeck(id) { deck in
-            guard let index = deck.index(of: slideID) else { return false }
-            var slide = deck.slides[index]
-            slide.id = UUID()
-            deck.slides.insert(slide, at: index + 1)
-            copy = slide
-            return true
-        }
-        if let copy { selectedSlideID = copy.id }
+    func duplicateSlide(_ id: WriterDocument.ID, _ slideID: PresentationSlide.ID, undoManager: UndoManager? = nil) {
+        flushEdits()
+        guard let deck = document(id)?.deck, let index = deck.index(of: slideID) else { return }
+        var copy = deck.slides[index]
+        copy.id = UUID()
+        insertSlide(copy, at: index + 1, in: id, undoManager: undoManager, actionName: "Folie duplizieren")
     }
 
-    /// Removes a slide; for a few seconds it can be brought back. The last slide stays.
-    func deleteSlide(_ id: WriterDocument.ID, _ slideID: PresentationSlide.ID) {
-        writerFlush?()
-        var removed: DeletedSlide?
-        var next: PresentationSlide.ID?
-        modifyDeck(id) { deck in
-            guard deck.slides.count > 1, let index = deck.index(of: slideID) else { return false }
-            removed = DeletedSlide(documentID: id, slide: deck.slides[index], index: index)
-            deck.slides.remove(at: index)
-            next = deck.slides[min(index, deck.slides.count - 1)].id
-            return true
-        }
-        guard let removed else { return }
-        if selectedSlideID == slideID || selectedSlideID == nil { selectedSlideID = next }
+    /// Removes a slide; for a few seconds it can be brought back, and ⌘Z brings it back too. The last slide stays.
+    func deleteSlide(_ id: WriterDocument.ID, _ slideID: PresentationSlide.ID, undoManager: UndoManager? = nil) {
+        guard let removed = removeSlide(slideID, from: id, undoManager: undoManager, actionName: "Folie löschen") else { return }
         deletedSlide = removed
         deletedSlideTask?.cancel()
         deletedSlideTask = Task { [weak self] in
@@ -220,38 +311,30 @@ extension AppModel {
         }
     }
 
-    func restoreDeletedSlide() {
+    func restoreDeletedSlide(undoManager: UndoManager? = nil) {
         guard let deleted = deletedSlide else { return }
         deletedSlide = nil
-        writerFlush?()
-        modifyDeck(deleted.documentID) { deck in
-            guard deck.index(of: deleted.slide.id) == nil else { return false }
-            deck.slides.insert(deleted.slide, at: min(deleted.index, deck.slides.count))
-            return true
-        }
-        if selectedDocumentID == deleted.documentID { selectedSlideID = deleted.slide.id }
+        insertSlide(deleted.slide, at: deleted.index, in: deleted.documentID, undoManager: undoManager, actionName: "Folie wiederherstellen")
     }
 
     /// Moves a slide so that it stands at `destination` (an index of the list before the move, as in `onMove`).
-    func moveSlide(_ id: WriterDocument.ID, _ slideID: PresentationSlide.ID, to destination: Int) {
-        writerFlush?()
-        modifyDeck(id) { deck in
-            guard let index = deck.index(of: slideID) else { return false }
-            let target = destination > index ? destination - 1 : destination
-            guard target != index, target >= 0, target < deck.slides.count else { return false }
-            let slide = deck.slides.remove(at: index)
-            deck.slides.insert(slide, at: target)
-            return true
-        }
+    func moveSlide(_ id: WriterDocument.ID, _ slideID: PresentationSlide.ID, to destination: Int, undoManager: UndoManager? = nil) {
+        guard let index = document(id)?.deck?.index(of: slideID) else { return }
+        placeSlide(slideID, at: destination > index ? destination - 1 : destination, in: id, undoManager: undoManager)
     }
 
-    func setSlideRole(_ id: WriterDocument.ID, _ slideID: PresentationSlide.ID, _ role: SlideRole) {
-        writerFlush?()
+    func setSlideRole(_ id: WriterDocument.ID, _ slideID: PresentationSlide.ID, _ role: SlideRole, undoManager: UndoManager? = nil) {
+        flushEdits()
+        guard let old = document(id)?.deck?.slide(slideID)?.role, old != role else { return }
         modifyDeck(id) { deck in
-            guard let index = deck.index(of: slideID), deck.slides[index].role != role else { return false }
+            guard let index = deck.index(of: slideID) else { return false }
             deck.slides[index].role = role
             return true
         }
+        undoManager?.registerUndo(withTarget: self) { app in
+            app.setSlideRole(id, slideID, old, undoManager: undoManager)
+        }
+        undoManager?.setActionName("Art der Folie")
     }
 
     func setSlideNotes(_ id: WriterDocument.ID, _ slideID: PresentationSlide.ID, _ notes: String) {
@@ -265,30 +348,24 @@ extension AppModel {
     // MARK: Backgrounds
 
     /// A background for one slide only; nil gives it the presentation's again.
-    func setSlideBackground(_ id: WriterDocument.ID, _ slideID: PresentationSlide.ID, _ background: SlideBackground?) {
-        modifyDeck(id) { deck in
-            guard let index = deck.index(of: slideID), deck.slides[index].background != background else { return false }
-            deck.slides[index].background = background
-            return true
-        }
+    func setSlideBackground(_ id: WriterDocument.ID, _ slideID: PresentationSlide.ID, _ background: SlideBackground?, undoManager: UndoManager? = nil) {
+        setBackgrounds(id, roles: nil, slides: [slideID: background], undoManager: undoManager, actionName: "Hintergrund der Folie")
     }
 
     /// The presentation's background for every slide of a kind; slides of that kind with their own lose it.
-    func setRoleBackground(_ id: WriterDocument.ID, _ role: SlideRole, _ background: SlideBackground) {
-        modifyDeck(id) { deck in
-            deck.backgrounds[role] = background
-            for index in deck.slides.indices where deck.slides[index].role == role { deck.slides[index].background = nil }
-            return true
-        }
+    func setRoleBackground(_ id: WriterDocument.ID, _ role: SlideRole, _ background: SlideBackground, undoManager: UndoManager? = nil) {
+        guard let deck = document(id)?.deck else { return }
+        var roles = deck.backgrounds
+        roles[role] = background
+        let own = deck.slides.filter { $0.role == role && $0.background != nil }.map { ($0.id, SlideBackground?.none) }
+        setBackgrounds(id, roles: roles, slides: Dictionary(uniqueKeysWithValues: own), undoManager: undoManager, actionName: "Hintergrund")
     }
 
     /// The same background for the whole presentation. A design keeps its own look per kind of slide.
-    func setPresentationBackground(_ id: WriterDocument.ID, _ background: SlideBackground) {
-        modifyDeck(id) { deck in
-            deck.backgrounds = .all(background)
-            for index in deck.slides.indices { deck.slides[index].background = nil }
-            return true
-        }
+    func setPresentationBackground(_ id: WriterDocument.ID, _ background: SlideBackground, undoManager: UndoManager? = nil) {
+        guard let deck = document(id)?.deck else { return }
+        let own = deck.slides.filter { $0.background != nil }.map { ($0.id, SlideBackground?.none) }
+        setBackgrounds(id, roles: .all(background), slides: Dictionary(uniqueKeysWithValues: own), undoManager: undoManager, actionName: "Hintergrund der Präsentation")
     }
 
     /// Asks for a picture on this Mac and makes it a background.
@@ -360,36 +437,73 @@ extension AppModel {
 
     // MARK: Speaker notes
 
-    /// Lets the model write the speaker notes of these slides, one after the other.
-    func writeSpeakerNotes(_ id: WriterDocument.ID, slides slideIDs: [PresentationSlide.ID]) {
-        writerFlush?()
+    /// Lets the model write the speaker notes of these slides. They wait in one queue that a single worker writes
+    /// one after the other, so stopping it stops all of them. `first` puts them before the cards that wait (the
+    /// presentation needs this one now).
+    func writeSpeakerNotes(_ id: WriterDocument.ID, slides slideIDs: [PresentationSlide.ID], first: Bool = false) {
+        flushEdits()
         let waiting = slideIDs.filter { !notesWriting.contains($0) }
-        guard !waiting.isEmpty else { return }
-        notesWriting.formUnion(waiting)
         for slideID in waiting { notesErrors[slideID] = nil }
-        let previous = notesTask
+        notesWriting.formUnion(waiting)
+        if first {
+            let queued = Set(notesQueue.map(\.slideID)).intersection(slideIDs)
+            notesQueue.removeAll { queued.contains($0.slideID) }
+            let front = slideIDs.filter { queued.contains($0) || waiting.contains($0) }
+            notesQueue.insert(contentsOf: front.map { NotesJob(documentID: id, slideID: $0) }, at: 0)
+        } else {
+            notesQueue += waiting.map { NotesJob(documentID: id, slideID: $0) }
+        }
+        startNotesWorker()
+    }
+
+    private func startNotesWorker() {
+        guard notesTask == nil, !notesQueue.isEmpty else { return }
+        notesWorker += 1
+        let number = notesWorker
         notesTask = Task { [weak self] in
-            await previous?.value
-            for slideID in waiting {
-                guard let self, !Task.isCancelled else { break }
+            while true {
+                guard let self, self.notesWorker == number, !Task.isCancelled, !self.notesQueue.isEmpty else { break }
+                let job = self.notesQueue.removeFirst()
+                self.notesRunning = job
                 do {
-                    _ = try await self.generateNotes(id, slideID)
+                    _ = try await self.generateNotes(job.documentID, job.slideID)
                 } catch {
-                    if !Task.isCancelled { self.notesErrors[slideID] = error.localizedDescription }
+                    if !Task.isCancelled, self.notesWorker == number { self.notesErrors[job.slideID] = error.localizedDescription }
                 }
-                self.notesWriting.remove(slideID)
+                // A worker that was stopped meanwhile leaves the state to the one after it.
+                guard self.notesWorker == number else { return }
+                self.notesRunning = nil
+                self.notesWriting.remove(job.slideID)
             }
-            if Task.isCancelled { self?.notesWriting.subtract(waiting) }
+            guard let self, self.notesWorker == number else { return }
+            self.notesTask = nil
         }
     }
 
+    /// Stops the model writing cards: the one it writes and all that wait.
     func cancelSpeakerNotes() {
+        notesWorker += 1
         notesTask?.cancel()
         notesTask = nil
+        notesQueue = []
+        notesRunning = nil
         notesWriting = []
     }
 
-    /// Writes one slide's speaker notes and keeps them with the slide.
+    /// Takes these slides' cards out (their slides are gone); the other cards are still written.
+    func cancelSpeakerNotes(for slides: Set<PresentationSlide.ID>) {
+        notesQueue.removeAll { slides.contains($0.slideID) }
+        notesWriting.subtract(slides)
+        guard let running = notesRunning, slides.contains(running.slideID) else { return }
+        notesWorker += 1
+        notesTask?.cancel()
+        notesTask = nil
+        notesRunning = nil
+        startNotesWorker()
+    }
+
+    /// Writes one slide's speaker notes and keeps them with the slide. A card that someone changed while the model
+    /// wrote (by hand, or an agent) is theirs: it stays, and is what this returns.
     func generateNotes(_ id: WriterDocument.ID, _ slideID: PresentationSlide.ID) async throws -> String {
         guard let client, let model = currentModelId else {
             throw LLMError.server("Kein Modell gewählt. Wähle eines unten links in der Seitenleiste.")
@@ -397,31 +511,65 @@ extension AppModel {
         guard let document = document(id), let deck = document.deck, let index = deck.index(of: slideID) else {
             throw CancellationError()
         }
+        let before = deck.slides[index].notes
         let answer = try await client.complete(
             model: model,
             messages: PresenterPrompts.notesMessages(deck: deck, title: document.displayTitle, slideIndex: index, source: deckSources[slideID]),
             temperature: 0.7,
             maxTokens: 1500
         )
+        // Stopped while the answer came: nothing is written.
+        try Task.checkCancellation()
         var notes = PresenterPrompts.cleanNotes(answer)
         if index > 0 { notes = PresenterPrompts.removingCopies(of: deck.slides[index - 1].notes, from: notes) }
         guard !notes.isEmpty else { throw LLMError.server("Das Modell hat keinen Text geliefert.") }
-        setSlideNotes(id, slideID, notes)
+        guard let current = self.document(id)?.deck?.slide(slideID) else { throw CancellationError() }
+        guard current.notes == before else { return current.notes }
+        replaceNotes(id, slideID, notes, undoManager: MainWindow.window?.undoManager)
         return notes
+    }
+
+    /// A card from elsewhere than typing (the model, "Vorherige Karte"): a card that was there is kept for
+    /// "Vorherige Karte", and ⌘Z takes it back.
+    func replaceNotes(_ id: WriterDocument.ID, _ slideID: PresentationSlide.ID, _ notes: String, undoManager: UndoManager?) {
+        guard let old = document(id)?.deck?.slide(slideID)?.notes, old != notes else { return }
+        setSlideNotes(id, slideID, notes)
+        replacedNotes[slideID] = old.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : old
+        undoManager?.registerUndo(withTarget: self) { app in
+            app.replaceNotes(id, slideID, old, undoManager: undoManager)
+        }
+        undoManager?.setActionName("Moderatorenkarte")
+    }
+
+    /// Puts back the card the model replaced; a second time brings the model's card back.
+    func restoreReplacedNotes(_ id: WriterDocument.ID, _ slideID: PresentationSlide.ID, undoManager: UndoManager?) {
+        guard let previous = replacedNotes[slideID] else { return }
+        replaceNotes(id, slideID, previous, undoManager: undoManager)
+    }
+
+    /// Every card of the presentation that the model replaced, put back.
+    func restoreAllReplacedNotes(_ id: WriterDocument.ID, undoManager: UndoManager?) {
+        guard let deck = document(id)?.deck else { return }
+        undoManager?.beginUndoGrouping()
+        for slide in deck.slides where replacedNotes[slide.id] != nil && !notesWriting.contains(slide.id) {
+            restoreReplacedNotes(id, slide.id, undoManager: undoManager)
+        }
+        undoManager?.endUndoGrouping()
+        undoManager?.setActionName("Vorherige Moderatorenkarten")
     }
 
     // MARK: Agenda
 
     /// A slide that lists the chapters (or, without chapters, the slides' titles), after `slideID`.
-    func insertAgendaSlide(_ id: WriterDocument.ID, after slideID: PresentationSlide.ID?) {
-        writerFlush?()
+    func insertAgendaSlide(_ id: WriterDocument.ID, after slideID: PresentationSlide.ID?, undoManager: UndoManager? = nil) {
+        flushEdits()
         guard let deck = document(id)?.deck else { return }
         let chapters = deck.slides.filter { $0.role == .chapter }.map(\.title).filter { !$0.isEmpty }
         let items = chapters.isEmpty
             ? deck.slides.filter { $0.role == .content }.map(\.title).filter { !$0.isEmpty }
             : chapters
         let list = items.isEmpty ? "- " : items.map { "- " + $0 }.joined(separator: "\n")
-        addSlide(to: id, after: slideID, role: .content, markdown: "# Agenda\n\n" + list)
+        addSlide(to: id, after: slideID, role: .content, markdown: "# Agenda\n\n" + list, undoManager: undoManager, actionName: "Agenda-Folie")
     }
 }
 
@@ -431,18 +579,32 @@ enum SlideImageTone {
         guard let url = WriterImageStore.url(for: source), let image = NSImage(contentsOf: url),
               let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return .light }
         let side = 16
-        var pixels = [UInt8](repeating: 0, count: side * side * 4)
-        guard let context = CGContext(
-            data: &pixels, width: side, height: side, bitsPerComponent: 8, bytesPerRow: side * 4,
-            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ) else { return .light }
-        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: side, height: side))
+        guard let pixels = PixelSample.rgba(of: cgImage, side: side) else { return .light }
         var total = 0.0
         for index in stride(from: 0, to: pixels.count, by: 4) {
             let hex = UInt32(pixels[index]) << 16 | UInt32(pixels[index + 1]) << 8 | UInt32(pixels[index + 2])
             total += SlideBackground.luminance(hex)
         }
         return SlideBackground.tone(forLuminance: total / Double(side * side))
+    }
+}
+
+/// A picture drawn small, to look at its colours.
+enum PixelSample {
+    /// `side` × `side` pixels, four bytes each (RGBA, premultiplied). The context draws into the array's own memory,
+    /// which is only certain to be there inside `withUnsafeMutableBytes` (`&pixels` would hand it over for the
+    /// context's creation only).
+    static func rgba(of image: CGImage, side: Int) -> [UInt8]? {
+        var pixels = [UInt8](repeating: 0, count: side * side * 4)
+        let drawn = pixels.withUnsafeMutableBytes { buffer -> Bool in
+            guard let context = CGContext(
+                data: buffer.baseAddress, width: side, height: side, bitsPerComponent: 8, bytesPerRow: side * 4,
+                space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ) else { return false }
+            context.draw(image, in: CGRect(x: 0, y: 0, width: side, height: side))
+            return true
+        }
+        return drawn ? pixels : nil
     }
 }
 

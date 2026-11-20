@@ -154,7 +154,7 @@ final class CompareSession {
 
     func undo() async {
         guard let app, let previous = undoStack.popLast() else { return }
-        if app.selectedDocumentID == previous.id { app.writerFlush?() }
+        if app.selectedDocumentID == previous.id { app.flushEdits() }
         if let deck = previous.deck {
             _ = app.modifyDeck(previous.id, saveAfter: nil) { $0 = deck; return true }
         } else {
@@ -169,7 +169,7 @@ final class CompareSession {
         guard let app, let id = rightDocumentID, let before = app.document(id) else { return }
         undoStack.append(before)
         canUndo = true
-        if app.selectedDocumentID == id { app.writerFlush?() }
+        if app.selectedDocumentID == id { app.flushEdits() }
         if let deck = before.deck {
             var next = PresentationDeck.parse(body)
             next.backgrounds = deck.backgrounds

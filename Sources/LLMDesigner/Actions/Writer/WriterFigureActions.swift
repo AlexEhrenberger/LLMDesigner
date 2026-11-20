@@ -170,7 +170,7 @@ struct WriterImageInsertAction: LLMDAction {
         try target.checkVersion(args.target.ifVersion)
         var check = ActionPreflight(target: args.file)
         // A model or a client names a path: rendered afterwards, that would show it any picture on this Mac.
-        if context.channel == .chat || context.channel == .mcp {
+        if context.channel.asksBeforeReadingFiles {
             check.needsConsent = "Ein Bild von dieser Stelle der Festplatte käme in die Bibliothek und wäre danach für den Aufrufer sichtbar."
         }
         return check

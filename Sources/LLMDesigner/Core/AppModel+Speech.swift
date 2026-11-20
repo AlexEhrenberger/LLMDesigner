@@ -132,7 +132,7 @@ extension AppModel {
                     self.speechReader.onProgress = nil
                     let ended = self.writerSpeechEnded
                     self.writerSpeechEnded = nil
-                    ended?()
+                    ended?(!self.speechReader.wasStopped)
                 }
             }
         }
@@ -154,9 +154,11 @@ extension AppModel {
 
     // MARK: Reading a document aloud
 
-    /// Reads text of the open document. `progress` gets the UTF-16 range of `text` being spoken.
-    func readDocumentAloud(_ text: String, progress: @escaping (NSRange) -> Void, ended: @escaping () -> Void) {
-        guard let id = selectedDocumentID else { return }
+    /// Reads text of a document: `documentID`, else the open one. `progress` gets the UTF-16 range of `text` being
+    /// spoken; `ended` comes on every way out, also when nothing can be read (callers wait for it).
+    func readDocumentAloud(_ text: String, of documentID: WriterDocument.ID? = nil, progress: @escaping (NSRange) -> Void,
+                           ended: @escaping (Bool) -> Void) {
+        guard let id = documentID ?? selectedDocumentID else { return ended(false) }
         // Ends whatever is being read, including its highlight, before the new reading takes over.
         speechReader.stop()
         if dictationIntoDocument { Task { await stopDictation() } }
@@ -170,7 +172,7 @@ extension AppModel {
             speakingDocumentID = nil
             speechReader.onProgress = nil
             writerSpeechEnded = nil
-            ended()
+            ended(true)
         }
     }
 

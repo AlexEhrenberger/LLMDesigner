@@ -74,7 +74,7 @@ struct ChatDocumentAttachAction: LLMDAction {
     )
     static func preflight(_ args: Args, context: ActionContext) throws -> ActionPreflight {
         var check = ActionPreflight(target: args.files?.first)
-        if context.channel == .chat || context.channel == .mcp {
+        if context.channel.asksBeforeReadingFiles {
             check.needsConsent = "Ein Dokument von dieser Stelle der Festplatte würde dem Modell gezeigt."
         }
         return check

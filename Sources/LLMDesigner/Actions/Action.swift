@@ -15,6 +15,17 @@ enum ActionChannel: String, Codable, Sendable, CaseIterable {
         case .agent: "Agent"
         }
     }
+
+    /// A file named by a path comes into the library (or before the model) only after the person agreed. A model
+    /// (a chat, an agent working through a task while no one may be watching) or a program behind MCP could name any
+    /// file on this Mac, and once it is in the library it can read it back. The person at the app or in the terminal
+    /// names their own files.
+    var asksBeforeReadingFiles: Bool {
+        switch self {
+        case .chat, .mcp, .agent: true
+        case .ui, .cli: false
+        }
+    }
 }
 
 /// One thing the app can do, reachable from the terminal, MCP and the chat. Actions are thin wrappers around what
@@ -74,6 +85,6 @@ struct ActionContext {
 
     /// The editor's pending text in the model, so an action sees what the person sees.
     func flushEditor() {
-        app.writerFlush?()
+        app.flushEdits()
     }
 }

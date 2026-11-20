@@ -322,7 +322,7 @@ final class LibraryGit {
 extension AppModel {
     /// Writes everything that waits for a pause, so git sees what the person sees.
     func saveEverythingForGit() {
-        writerFlush?()
+        flushEdits()
         savePendingDocuments()
         citations.saveAll()
         stories.saveAll()

@@ -69,32 +69,134 @@ enum SlideFit {
         return report(slide, in: deck, family: document.font)
     }
 
+    /// Whether the slide's own text fits (its text fields don't count: splitting can't help them).
+    static func textFits(_ slide: PresentationSlide, in deck: PresentationDeck, family: WriterFont) -> Bool {
+        let palette = SlideLook.palette(deck.background(of: slide), role: slide.role)
+        let size = measure(text: slide.markdown, layout: WriterTextView.SlideLayout(slide: slide), family: family, palette: palette)
+        return size.needed - size.room <= 1
+    }
+
     /// Splits the bullet points of a slide that runs over: as many as fit stay, the rest go to slides of their own
-    /// with the same title and "(Forts.)". A slide without points, or whose first point alone overflows, stays.
+    /// with the same title and "(Forts.)". Only the points move: what stands before the list stays on the first slide,
+    /// what follows it goes to the last, so nothing of the slide is lost. A slide without a heading or points, or
+    /// whose first point alone overflows, stays as it is.
     static func split(_ slide: PresentationSlide, in deck: PresentationDeck, family: WriterFont) -> [PresentationSlide] {
-        let lines = slide.markdown.components(separatedBy: "\n")
-        guard let heading = lines.first(where: { $0.hasPrefix("#") }) else { return [slide] }
-        let points = lines.filter { $0.hasPrefix("- ") || $0.hasPrefix("* ") }
-        guard points.count > 1, !report(slide, in: deck, family: family).fits else { return [slide] }
+        guard let parts = SlidePoints(slide.markdown), parts.points.count > 1,
+              let heading = parts.head.first(where: { $0.hasPrefix("#") }),
+              !textFits(slide, in: deck, family: family) else { return [slide] }
+        let title = continuationTitle(heading)
         var result: [PresentationSlide] = []
-        var remaining = points[...]
+        var remaining = parts.points[...]
         var current = slide
-        var title = heading
         while !remaining.isEmpty {
+            let head = result.isEmpty ? parts.head : [title]
+            func text(_ count: Int) -> String {
+                SlidePoints.compose(head: head, points: remaining.prefix(count).flatMap { $0 }, tail: count == remaining.count ? parts.tail : [])
+            }
             var take = remaining.count
-            while take > 1 {
-                current.markdown = ([title, ""] + remaining.prefix(take)).joined(separator: "\n")
-                if report(current, in: deck, family: family).fits { break }
+            while take > 0 {
+                current.markdown = text(take)
+                if textFits(current, in: deck, family: family) { break }
                 take -= 1
             }
-            current.markdown = ([title, ""] + remaining.prefix(take)).joined(separator: "\n")
+            if take == 0 {
+                guard !result.isEmpty else { return [slide] }
+                // A point that fills a slide by itself still gets one; it runs over there, but it is kept.
+                take = 1
+            }
+            current.markdown = text(take)
             result.append(current)
             remaining = remaining.dropFirst(take)
             if !remaining.isEmpty {
-                title = heading.hasSuffix("(Forts.)") ? heading : heading + " (Forts.)"
+                // The continuation looks like the slide it continues.
                 current = PresentationSlide(role: .content, markdown: "")
+                current.background = slide.background
+                current.textArea = slide.textArea
             }
         }
         return result
+    }
+
+    /// The heading of a continuation: "(Forts.)" before its attributes, without the bookmarks and ids that belong
+    /// to the first slide only.
+    static func continuationTitle(_ heading: String) -> String {
+        var line = heading.trimmingCharacters(in: .whitespaces)
+        if line.contains("id=\"") { line = WriterBookmark.strip(line) }
+        let hashes = String(line.prefix { $0 == "#" })
+        let rest = line.dropFirst(hashes.count).trimmingCharacters(in: .whitespaces)
+        let text = WriterMarkdown.headingAttributes(rest).text
+        var attributes = String(rest.dropFirst(text.count)).trimmingCharacters(in: .whitespaces)
+        if attributes.hasPrefix("{"), attributes.hasSuffix("}") {
+            let kept = attributes.dropFirst().dropLast().split(separator: " ").filter { !$0.hasPrefix("#") }
+            attributes = kept.isEmpty ? "" : "{" + kept.joined(separator: " ") + "}"
+        }
+        let title = text.hasSuffix("(Forts.)") ? text : text + " (Forts.)"
+        return hashes + " " + title + (attributes.isEmpty ? "" : " " + attributes)
+    }
+}
+
+/// A slide's text as splitting sees it: the lines before its first list, the list's top-level points (each with its
+/// sub-points and indented lines), and the lines after the list.
+struct SlidePoints: Equatable {
+    var head: [String]
+    var points: [[String]]
+    var tail: [String]
+
+    /// nil: the text has no list.
+    init?(_ markdown: String) {
+        let lines = markdown.components(separatedBy: "\n")
+        var inFence = false
+        var start: Int?
+        for (index, line) in lines.enumerated() {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") { inFence.toggle(); continue }
+            if !inFence, Self.isPoint(line) { start = index; break }
+        }
+        guard let start else { return nil }
+        var points: [[String]] = []
+        var index = start
+        var end = lines.count
+        while index < lines.count {
+            let line = lines[index]
+            if Self.isPoint(line) {
+                points.append([line])
+                index += 1
+            } else if Self.isIndented(line) {
+                points[points.count - 1].append(line)
+                index += 1
+            } else if line.trimmingCharacters(in: .whitespaces).isEmpty {
+                // Blank lines belong to the list when it goes on after them (a loose list).
+                var next = index + 1
+                while next < lines.count, lines[next].trimmingCharacters(in: .whitespaces).isEmpty { next += 1 }
+                guard next < lines.count, Self.isPoint(lines[next]) || Self.isIndented(lines[next]) else { end = index; break }
+                points[points.count - 1] += lines[index..<next]
+                index = next
+            } else {
+                end = index
+                break
+            }
+        }
+        head = Array(lines[..<start])
+        self.points = points
+        tail = Array(lines[end...])
+    }
+
+    /// A top-level list item: "- ", "* ", "+ " or "1. ", "1) " at the start of the line.
+    static func isPoint(_ line: String) -> Bool {
+        line.range(of: #"^(?:[-*+]|\d{1,3}[.)])[ \t]"#, options: .regularExpression) != nil
+    }
+
+    private static func isIndented(_ line: String) -> Bool {
+        (line.hasPrefix(" ") || line.hasPrefix("\t")) && !line.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    /// The parts as one text again, a blank line between the head, the list and the tail.
+    static func compose(head: [String], points: [String], tail: [String]) -> String {
+        func trimmed(_ lines: [String]) -> [String] {
+            let isBlank = { (line: String) in line.trimmingCharacters(in: .whitespaces).isEmpty }
+            guard let first = lines.firstIndex(where: { !isBlank($0) }), let last = lines.lastIndex(where: { !isBlank($0) }) else { return [] }
+            return Array(lines[first...last])
+        }
+        return [trimmed(head), trimmed(points), trimmed(tail)].filter { !$0.isEmpty }.map { $0.joined(separator: "\n") }.joined(separator: "\n\n")
     }
 }

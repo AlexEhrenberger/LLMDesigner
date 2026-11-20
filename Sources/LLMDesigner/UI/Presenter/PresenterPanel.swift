@@ -78,7 +78,7 @@ struct PresenterPanel: View {
                 .foregroundStyle(Theme.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
             actionButton("Agenda-Folie einfügen", systemImage: "list.bullet.rectangle") {
-                app.insertAgendaSlide(document.id, after: deck.slides.first(where: { $0.role == .title })?.id ?? currentSlideID)
+                app.insertAgendaSlide(document.id, after: deck.slides.first(where: { $0.role == .title })?.id ?? currentSlideID, undoManager: MainWindow.window?.undoManager)
             }
         }
         .padding(.horizontal, 6)

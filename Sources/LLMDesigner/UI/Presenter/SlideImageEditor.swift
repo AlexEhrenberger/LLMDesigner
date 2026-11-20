@@ -150,7 +150,7 @@ struct SlideImageEditor: View {
         app.selectedSlideImageID = image.id
         app.editingSlideTextArea = false
         if app.editingSlideFieldID != image.id {
-            app.writerFlush?()
+            app.flushEdits()
             app.editingSlideFieldID = image.id
         }
     }

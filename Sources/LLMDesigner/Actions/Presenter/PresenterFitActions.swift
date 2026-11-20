@@ -25,6 +25,8 @@ enum PresenterBackgroundWish {
     @MainActor
     static func design(named name: String?, brightness: String?) throws -> String? {
         let library = SlideDesignLibrary.shared
+        // An agent may have put a design into the folder just before.
+        library.reloadIfNeeded(force: true)
         if let name = name?.trimmingCharacters(in: .whitespaces), !name.isEmpty {
             if let design = library.design(name) ?? library.design(name.lowercased()) ?? library.all.first(where: { $0.name.localizedCaseInsensitiveCompare(name) == .orderedSame }) {
                 return design.id

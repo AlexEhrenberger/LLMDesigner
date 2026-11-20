@@ -201,7 +201,7 @@ private func merged(_ list: [UUID], add: [UUID], remove: [UUID]) -> [UUID] {
 private func mediaPreflight(_ file: String?, channel: ActionChannel) -> ActionPreflight {
     var check = ActionPreflight(target: file)
     // A model or a client names a path: shown afterwards, that would show it any picture on this Mac.
-    if channel == .chat || channel == .mcp {
+    if channel.asksBeforeReadingFiles {
         check.needsConsent = "Eine Datei von dieser Stelle der Festplatte käme in die Bibliothek und wäre danach für den Aufrufer sichtbar."
     }
     return check

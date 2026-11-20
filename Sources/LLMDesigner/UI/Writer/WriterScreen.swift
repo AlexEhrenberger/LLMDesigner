@@ -238,7 +238,7 @@ struct WriterAudioStatus: View {
                         .foregroundStyle(Theme.textPrimary)
                         .lineLimit(2)
                     Button("Erneut versuchen") {
-                        app.writerFlush?()
+                        app.flushEdits()
                         app.saveDocument(id)
                     }
                     .buttonStyle(.borderless)

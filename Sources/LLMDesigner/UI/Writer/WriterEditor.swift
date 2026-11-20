@@ -234,7 +234,7 @@ final class WriterEditorController {
         app.readDocumentAloud(
             script.text,
             progress: { [weak textView] range in textView?.highlightSpoken(script.documentRange(for: range)) },
-            ended: { [weak textView] in textView?.highlightSpoken(nil) }
+            ended: { [weak textView] _ in textView?.highlightSpoken(nil) }
         )
     }
 
@@ -382,7 +382,7 @@ struct WriterEditor: NSViewRepresentable {
         // A dynamic table of contents put into the text: the model makes the topics if there are none yet.
         textView.onDynamicTOCNeeded = { [weak app, weak coordinator] in
             guard let app, let id = coordinator?.documentID, let document = app.document(id) else { return }
-            app.writerFlush?()
+            app.flushEdits()
             if document.outline == nil || DocumentOutlineBuilder.isOutdated(document) { app.refreshDocumentOutline(id) }
         }
         textView.onBookmarkAdded = { [weak controller] id in controller?.bookmarkAdded(id) }
@@ -472,6 +472,9 @@ struct WriterEditor: NSViewRepresentable {
 
         func load(_ document: WriterDocument, slide: WriterSlideContent?, palette: WriterPalette) {
             guard let textView else { return }
+            // Another document: what ⌘Z could take back belongs to the one before. (Another slide of the same
+            // presentation keeps it; the text view drops only its own typing.)
+            if documentID != document.id { textView.undoManager?.removeAllActions() }
             documentID = document.id
             slideID = slide?.id
             ownerSlideID = slide?.slideID
